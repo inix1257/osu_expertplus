@@ -600,7 +600,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       gap: 6px;
     }
     .oep-markdown-helper--reply {
-      margin: 0 10px 6px;
+      margin: 10px 10px 10px;
       padding: 0 0 6px;
       border: none;
       border-radius: 0;
