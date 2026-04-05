@@ -85,14 +85,6 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
-      id: "userProfile.recentScoresShowFails",
-      label: "Recent scores: show failed scores",
-      description:
-        "On the profile Historical tab, the Expert+ “Recent scores” list can include failed plays. Turn off to show only passing scores. The “Show failed scores” control there uses the same setting.",
-      group: "User Profile",
-      default: true,
-    },
-    {
       id: "beatmapDetail.discussionDefaultToTotal",
       label: "Discussion opens on Total tab",
       description:
@@ -117,6 +109,11 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
   ];
+
+  /** GM keys used by UI elsewhere (not listed in the options panel). */
+  const PANEL_HIDDEN_BOOLEAN_DEFAULTS = Object.freeze({
+    "userProfile.recentScoresShowFails": true,
+  });
 
   (function migrateScoreListDetails() {
     const flag = "userProfile._oepScoreListDetailsMigrated";
@@ -168,7 +165,9 @@ OsuExpertPlus.settings = (() => {
    */
   function isEnabled(id) {
     const feature = FEATURES.find((f) => f.id === id);
-    const defaultVal = feature ? feature.default : false;
+    const defaultVal = feature
+      ? feature.default
+      : PANEL_HIDDEN_BOOLEAN_DEFAULTS[id] ?? false;
     return GM_getValue(id, defaultVal);
   }
 

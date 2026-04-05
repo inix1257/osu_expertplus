@@ -618,6 +618,26 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         cursor: not-allowed;
         opacity: 0.85;
       }
+      .${wrapClass}__panel:not(.${wrapClass}__panel--unsupported) .${wrapClass}__unsupported {
+        display: none;
+      }
+      .${wrapClass}__panel.${wrapClass}__panel--unsupported .${wrapClass}__canvas-host,
+      .${wrapClass}__panel.${wrapClass}__panel--unsupported .${wrapClass}__seek {
+        display: none;
+      }
+      .${wrapClass}__unsupported {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        aspect-ratio: 16 / 9;
+        min-height: 180px;
+        padding: 16px;
+        text-align: center;
+        color: hsl(var(--hsl-l2, 0 0% 75%));
+        font-size: 13px;
+        line-height: 1.45;
+        box-sizing: border-box;
+      }
       .${wrapClass}__engine-slot {
         position: absolute;
         inset: 0;
@@ -731,6 +751,35 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         opacity: 0.45;
         cursor: not-allowed;
       }
+      .${wrapClass}__offset-input {
+        width: 4.25em;
+        min-width: 3.25em;
+        max-width: 6em;
+        padding: 3px 6px;
+        border-radius: 4px;
+        border: 1px solid hsl(var(--hsl-b5, 333 18% 28%));
+        background: hsl(var(--hsl-b5, 333 18% 12%));
+        color: hsl(var(--hsl-l1, 0 0% 92%));
+        font: inherit;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        box-sizing: border-box;
+      }
+      .${wrapClass}__offset-input:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .${wrapClass}__offset-input:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px hsl(var(--hsl-c2, 333 60% 70%) / 0.45);
+        border-color: hsl(var(--hsl-c2, 333 60% 70%) / 0.55);
+      }
+      .${wrapClass}__offset-unit {
+        flex: 0 0 auto;
+        font-size: 11px;
+        color: hsl(var(--hsl-l2, 0 0% 75%));
+        user-select: none;
+      }
       .oep-beatmap-preview-section {
         box-sizing: border-box;
         width: 100%;
@@ -766,6 +815,68 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     let lastLoadedKey = "";
     let seekRafId = 0;
     let seekPointerActive = false;
+    /** `ruleset:beatmapId` while preview is expanded; used to detect difficulty / mode changes (SPA). */
+    let previewContextKey = "";
+    let contextPollId = 0;
+
+    function previewContextKeyFromPage() {
+      if (!pathRe.test(location.pathname)) return "";
+      const rs = (getRuleset() || "osu").toLowerCase();
+      const id = getBeatmapId();
+      return `${rs}:${id || ""}`;
+    }
+
+    function stopContextPoll() {
+      if (contextPollId) {
+        window.clearInterval(contextPollId);
+        contextPollId = 0;
+      }
+    }
+
+    function startContextPoll() {
+      stopContextPoll();
+      contextPollId = window.setInterval(() => {
+        if (!pathRe.test(location.pathname) || !expanded || busy) return;
+        const k = previewContextKeyFromPage();
+        if (previewContextKey && k !== previewContextKey) {
+          collapsePreviewAndResetEngine();
+        }
+      }, 200);
+    }
+
+    function collapsePreviewAndResetEngine() {
+      if (!expanded) return;
+      expanded = false;
+      panel.hidden = true;
+      panel.classList.remove(`${wrapClass}__panel--unsupported`);
+      const top = toggleBtn.querySelector(".btn-osu-big__text-top");
+      if (top) {
+        top.textContent = "Beatmap Preview";
+      }
+      stopContextPoll();
+      previewContextKey = "";
+      stopSeekAnimationLoop();
+      lastLoadedKey = "";
+      busy = false;
+      setPreviewControlsEnabled(false);
+      setStatus("");
+      try {
+        sharedEngine?.pause?.();
+      } catch (_) {
+        void 0;
+      }
+      destroySharedEngineHard();
+      acquireMutex = Promise.resolve();
+      revokeBeatmapCoverObjectUrl();
+    }
+
+    function onPossiblePreviewContextChange() {
+      if (!pathRe.test(location.pathname) || !expanded || busy) return;
+      const k = previewContextKeyFromPage();
+      if (previewContextKey && k !== previewContextKey) {
+        collapsePreviewAndResetEngine();
+      }
+    }
 
     /** Site preview files are short; cap so we never treat a longer buffer as full-map audio. */
     const PREVIEW_CLIP_MAX_MS = 10000;
@@ -775,6 +886,61 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     const PREVIEW_MUSIC_VOLUME_LEGACY_GM_KEY = "beatmapPreview.musicVolume";
     const PREVIEW_HITSVOL_LEGACY_GM_KEY = "beatmapPreview.hitsoundVolume";
     const PREVIEW_VOLUME_DEFAULT = 0.3;
+    const PREVIEW_OFFSET_LS_KEY = "oep.beatmapPreview.audioOffsetMs";
+    const OFFSET_MIN = -500;
+    const OFFSET_MAX = 500;
+    /** Added to the displayed offset when calling the renderer (0 ms shown → 85 ms actual). */
+    const PREVIEW_OFFSET_DISPLAY_BASE_MS = 85;
+
+    function clampOffsetMs(n) {
+      if (!Number.isFinite(n)) return 0;
+      return Math.min(OFFSET_MAX, Math.max(OFFSET_MIN, Math.round(n)));
+    }
+
+    function actualAudioOffsetMsFromDisplay(displayMs) {
+      return clampOffsetMs(displayMs) + PREVIEW_OFFSET_DISPLAY_BASE_MS;
+    }
+
+    /** @param {unknown} raw */
+    function parseOffsetTextStrict(raw) {
+      const s = String(raw ?? "")
+        .trim()
+        .replace(/\s+/g, "")
+        .replace(/ms$/i, "");
+      if (s === "" || s === "-" || s === "+") return null;
+      const n = Number(s);
+      if (!Number.isFinite(n)) return null;
+      return clampOffsetMs(n);
+    }
+
+    function formatOffsetForField(ms) {
+      return String(clampOffsetMs(ms));
+    }
+
+    function readStoredOffsetMs() {
+      const ls = pageLocalStorage();
+      if (ls) {
+        try {
+          const s = ls.getItem(PREVIEW_OFFSET_LS_KEY);
+          if (s != null && s !== "") {
+            return clampOffsetMs(Number(s));
+          }
+        } catch (_) {
+          void 0;
+        }
+      }
+      return 0;
+    }
+
+    function writeStoredOffsetMs(ms) {
+      const ls = pageLocalStorage();
+      if (!ls) return;
+      try {
+        ls.setItem(PREVIEW_OFFSET_LS_KEY, String(clampOffsetMs(ms)));
+      } catch (_) {
+        void 0;
+      }
+    }
 
     function readStoredMusicVolume() {
       const ls = pageLocalStorage();
@@ -857,6 +1023,12 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     }
 
     const statusEl = el("span", { class: `${wrapClass}__status` }, "");
+
+    const unsupportedWrap = el(
+      "div",
+      { class: `${wrapClass}__unsupported` },
+      "This gamemode is not supported yet.",
+    );
 
     const canvasHost = el("div", {
       class: `${wrapClass}__canvas-host ${wrapClass}__canvas-host--disabled`,
@@ -957,7 +1129,6 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       value: String(Math.round(readStoredMusicVolume() * 100)),
       step: "1",
       disabled: true,
-      title: "Music volume",
       "aria-label": "Gameplay preview music volume",
     });
     const musicVolumeWrap = el(
@@ -965,7 +1136,11 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       { class: `${wrapClass}__volume` },
       el(
         "span",
-        { class: `${wrapClass}__volume-icon`, "aria-hidden": "true" },
+        {
+          class: `${wrapClass}__volume-icon`,
+          "aria-hidden": "true",
+          title: "music volume",
+        },
         el(
           "span",
           { class: "fa fa-fw" },
@@ -982,7 +1157,6 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       value: String(Math.round(readStoredHitsoundVolume() * 100)),
       step: "1",
       disabled: true,
-      title: "Hitsounds volume",
       "aria-label": "Gameplay preview hitsounds volume",
     });
     const hitsoundVolumeWrap = el(
@@ -990,7 +1164,11 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       { class: `${wrapClass}__volume` },
       el(
         "span",
-        { class: `${wrapClass}__volume-icon`, "aria-hidden": "true" },
+        {
+          class: `${wrapClass}__volume-icon`,
+          "aria-hidden": "true",
+          title: "hitsound volume",
+        },
         el(
           "span",
           { class: "fa fa-fw" },
@@ -999,6 +1177,66 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       ),
       hitsoundVolumeRange,
     );
+
+    let offsetInputCommittedMs = readStoredOffsetMs();
+    const offsetInput = el("input", {
+      type: "text",
+      class: `${wrapClass}__offset-input`,
+      value: formatOffsetForField(offsetInputCommittedMs),
+      inputMode: "numeric",
+      disabled: true,
+      "aria-label": "Gameplay preview audio offset in milliseconds",
+      spellcheck: "false",
+      autocapitalize: "off",
+      autocomplete: "off",
+    });
+    const offsetUnitEl = el(
+      "span",
+      { class: `${wrapClass}__offset-unit` },
+      "ms",
+    );
+
+    function previewOffsetMsFromInput() {
+      const p = parseOffsetTextStrict(offsetInput.value);
+      if (p !== null) return p;
+      return offsetInputCommittedMs;
+    }
+
+    function commitOffsetFromInput() {
+      const p = parseOffsetTextStrict(offsetInput.value);
+      if (p === null) {
+        offsetInput.value = formatOffsetForField(offsetInputCommittedMs);
+      } else {
+        offsetInputCommittedMs = p;
+        offsetInput.value = formatOffsetForField(p);
+        writeStoredOffsetMs(offsetInputCommittedMs);
+      }
+      applyPreviewOffsetToEngine();
+      if (sharedEngine && lastLoadedKey) {
+        syncPreviewMusicToWindow(sharedEngine);
+      }
+    }
+
+    const offsetWrap = el(
+      "div",
+      { class: `${wrapClass}__volume` },
+      el(
+        "span",
+        {
+          class: `${wrapClass}__volume-icon`,
+          "aria-hidden": "true",
+          title: "offset",
+        },
+        el(
+          "span",
+          { class: "fa fa-fw" },
+          el("span", { class: "fas fa-clock", "aria-hidden": "true" }),
+        ),
+      ),
+      offsetInput,
+      offsetUnitEl,
+    );
+
     const seekRow = el(
       "div",
       { class: `${wrapClass}__seek` },
@@ -1007,12 +1245,14 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       seekRange,
       musicVolumeWrap,
       hitsoundVolumeWrap,
+      offsetWrap,
       statusEl,
     );
 
     const panel = el(
       "div",
       { class: `${wrapClass}__panel`, hidden: "" },
+      unsupportedWrap,
       canvasHost,
       seekRow,
     );
@@ -1250,7 +1490,13 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       const isPlayKey = key === " " || key === "Enter" || key === "Spacebar";
 
       if (isArrow) {
-        if (t === musicVolumeRange || t === hitsoundVolumeRange) return;
+        if (
+          t === musicVolumeRange ||
+          t === hitsoundVolumeRange ||
+          t === offsetInput
+        ) {
+          return;
+        }
         ev.preventDefault();
         seekByDeltaMs(key === "ArrowLeft" ? -1000 : 1000);
         return;
@@ -1258,6 +1504,9 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
 
       if (isPlayKey) {
         if (t instanceof HTMLButtonElement && t !== canvasHost) return;
+        if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) {
+          return;
+        }
         ev.preventDefault();
         togglePlaybackFromCanvas();
       }
@@ -1324,15 +1573,30 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       }
     }
 
+    function applyPreviewOffsetToEngine() {
+      if (!sharedEngine || typeof sharedEngine.setAudioOffsetMs !== "function") {
+        return;
+      }
+      try {
+        sharedEngine.setAudioOffsetMs(
+          actualAudioOffsetMsFromDisplay(previewOffsetMsFromInput()),
+        );
+      } catch (_) {
+        void 0;
+      }
+    }
+
     function applyPreviewVolumesToEngine() {
       applyPreviewMusicVolumeToEngine();
       applyPreviewHitsoundVolumeToEngine();
+      applyPreviewOffsetToEngine();
     }
 
     function setSeekUiEnabled(on) {
       seekRange.disabled = !on;
       musicVolumeRange.disabled = !on;
       hitsoundVolumeRange.disabled = !on;
+      offsetInput.disabled = !on;
       if (!on) {
         seekRange.max = "1";
         seekRange.value = "0";
@@ -1415,13 +1679,27 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
 
     async function loadCurrentBeatmap() {
       if (!pathRe.test(location.pathname)) return;
+      if (!expanded) return;
 
       const ruleset = (getRuleset() || "osu").toLowerCase();
       if (ruleset !== "osu") {
-        setStatus("Only osu! difficulties are supported.");
-        invalidateLoadState();
+        panel.classList.add(`${wrapClass}__panel--unsupported`);
+        lastLoadedKey = "";
+        setPreviewControlsEnabled(false);
+        setStatus("");
+        try {
+          sharedEngine?.pause?.();
+        } catch (_) {
+          void 0;
+        }
+        destroySharedEngineHard();
+        acquireMutex = Promise.resolve();
+        revokeBeatmapCoverObjectUrl();
+        busy = false;
         return;
       }
+
+      panel.classList.remove(`${wrapClass}__panel--unsupported`);
 
       const beatmapId = getBeatmapId();
       if (!beatmapId) {
@@ -1439,6 +1717,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
 
       const key = currentLoadKey();
       if (sharedEngine && lastLoadedKey === key) {
+        if (!expanded) return;
         placeSharedEngineRoot(engineSlot);
         setStatus("");
         setPreviewControlsEnabled(true);
@@ -1454,6 +1733,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
 
       try {
         const osuText = await fetchOsuFileText(beatmapId);
+        if (!expanded || !pathRe.test(location.pathname)) return;
         const eng = await ensureEngine();
         eng.pause();
         const bgAbs = absoluteUrl(bg);
@@ -1465,6 +1745,10 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
           audioUrl: previewAudio || undefined,
           backgroundUrl: bgObjectUrl || undefined,
         });
+        if (!expanded || !pathRe.test(location.pathname)) {
+          invalidateLoadState();
+          return;
+        }
         lastLoadedKey = key;
         setStatus("");
         setPreviewControlsEnabled(true);
@@ -1533,6 +1817,21 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     hitsoundVolumeRange.addEventListener("change", () => {
       writeStoredHitsoundVolume(previewHitsoundVolumeFromSlider());
     });
+    offsetInput.addEventListener("input", () => {
+      applyPreviewOffsetToEngine();
+      if (sharedEngine && lastLoadedKey) {
+        syncPreviewMusicToWindow(sharedEngine);
+      }
+    });
+    offsetInput.addEventListener("blur", () => {
+      commitOffsetFromInput();
+    });
+    offsetInput.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      e.stopPropagation();
+      commitOffsetFromInput();
+    });
 
     canvasHost.addEventListener("click", (ev) => {
       // Odd `detail` only: double-click yields play then ignore 2nd click; triple-click can play–pause–play.
@@ -1550,11 +1849,16 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         top.textContent = expanded ? "Hide beatmap preview" : "Beatmap Preview";
       }
       if (expanded) {
+        previewContextKey = previewContextKeyFromPage();
+        startContextPoll();
         startSeekAnimationLoop();
         if (!busy) {
           await loadCurrentBeatmap();
         }
       } else {
+        stopContextPoll();
+        previewContextKey = "";
+        panel.classList.remove(`${wrapClass}__panel--unsupported`);
         stopSeekAnimationLoop();
         try {
           sharedEngine?.pause?.();
@@ -1568,15 +1872,18 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       jumpToBeatmapPreviewTime();
     });
 
-    const onHashChange = () => {
-      if (!expanded || !pathRe.test(location.pathname) || busy) return;
-      loadCurrentBeatmap();
-    };
-    window.addEventListener("hashchange", onHashChange, { passive: true });
+    window.addEventListener("hashchange", onPossiblePreviewContextChange, {
+      passive: true,
+    });
+    window.addEventListener("popstate", onPossiblePreviewContextChange, {
+      passive: true,
+    });
 
     return {
       dispose: () => {
-        window.removeEventListener("hashchange", onHashChange);
+        stopContextPoll();
+        window.removeEventListener("hashchange", onPossiblePreviewContextChange);
+        window.removeEventListener("popstate", onPossiblePreviewContextChange);
         panel.removeEventListener("keydown", onPreviewPanelKeydown);
         stopSeekAnimationLoop();
         clearTransportFlashTimer();

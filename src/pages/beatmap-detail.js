@@ -139,19 +139,37 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       border-color: hsl(var(--hsl-c1, 333 89% 52%));
     }
     .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    /* Sticky bar matches osu beatmapset-info__header--sticky so title + Full description stay together. */
+    .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > .${ROOT_CLASS}__description-sticky-head {
+      display: flex;
       flex-direction: row;
       flex-wrap: wrap;
       align-items: center;
       column-gap: 10px;
       row-gap: 6px;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background-image: linear-gradient(
+        to top,
+        hsla(var(--hsl-b4), 0),
+        hsl(var(--hsl-b4)) 5px
+      );
     }
-    .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > h3.beatmapset-info__header {
+    .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row .${ROOT_CLASS}__description-sticky-head > h3.beatmapset-info__header {
       margin: 0;
       padding: 5px 0 0;
       flex: 0 1 auto;
       min-width: 0;
+      position: static;
+      top: auto;
+      z-index: auto;
+      background-image: none;
     }
-    .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > .${ROOT_CLASS}__action-btn--description-heading {
+    .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row .${ROOT_CLASS}__description-sticky-head > .${ROOT_CLASS}__action-btn--description-heading {
       flex: 0 0 auto;
       align-self: center;
       margin: 0;
@@ -160,7 +178,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       border-color: hsl(var(--hsl-b5, 333 18% 28%));
       text-shadow: none;
     }
-    .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > .${ROOT_CLASS}__action-btn--description-heading:hover {
+    .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row .${ROOT_CLASS}__description-sticky-head > .${ROOT_CLASS}__action-btn--description-heading:hover {
       background: hsl(var(--hsl-b4, 333 18% 22%));
       border-color: hsl(var(--hsl-c2, 333 60% 70%) / 0.4);
     }
@@ -559,47 +577,128 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       font-style: italic;
     }
     .oep-markdown-helper {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 4px 8px 10px;
+      margin: 0;
       padding: 0;
       border: none;
       background: transparent;
+      box-sizing: border-box;
+    }
+    .oep-markdown-helper__row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px;
+    }
+    .oep-markdown-helper--new-discussion {
+      margin: 0 0 10px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid hsl(var(--hsl-b5, 333 18% 24%));
+      background: hsl(var(--hsl-b2, 333 18% 10%) / 0.65);
+    }
+    .oep-markdown-helper--new-discussion .oep-markdown-helper__row {
+      gap: 6px;
     }
     .oep-markdown-helper--reply {
-      background: transparent !important;
-      border: none !important;
-      box-shadow: none !important;
-      margin: 4px 10px 10px;
-      padding: 0 !important;
+      margin: 0 10px 6px;
+      padding: 0 0 6px;
+      border: none;
+      border-radius: 0;
+      border-bottom: 1px solid hsl(var(--hsl-b5, 333 18% 22%) / 0.55);
+      background: transparent;
+      box-shadow: none;
+    }
+    .oep-markdown-helper--reply .oep-markdown-helper__row {
+      flex-wrap: nowrap;
+      gap: 4px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 2px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: hsl(var(--hsl-b5, 333 18% 30%)) transparent;
+    }
+    .oep-markdown-helper--reply .oep-markdown-helper__row::-webkit-scrollbar {
+      height: 4px;
+    }
+    .oep-markdown-helper--reply .oep-markdown-helper__row::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: hsl(var(--hsl-b5, 333 18% 32%));
     }
     .oep-markdown-helper__btn {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      padding: 4px 8px;
-      border-radius: 999px;
-      border: 1px solid hsl(var(--hsl-b5, 333 18% 30%));
-      background: hsl(var(--hsl-b3, 333 18% 16%));
-      color: hsl(var(--hsl-l1, 0 0% 96%));
+      justify-content: center;
+      gap: 4px;
+      padding: 5px 8px;
+      min-height: 26px;
+      border-radius: 6px;
+      border: 1px solid hsl(var(--hsl-b5, 333 18% 28%));
+      background: hsl(var(--hsl-b3, 333 18% 14%));
+      color: hsl(var(--hsl-l2, 0 0% 82%));
       font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
+      font-weight: 600;
+      letter-spacing: 0.01em;
       cursor: pointer;
       white-space: nowrap;
-      margin: 1px 2px;
-      box-shadow: inset 0 0 0 1px hsl(var(--hsl-b2, 333 18% 10%) / 0.35);
-      transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+      margin: 0;
+      box-shadow: none;
+      transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+    }
+    .oep-markdown-helper--new-discussion .oep-markdown-helper__btn {
+      padding: 5px 9px;
+      min-height: 28px;
+      border-radius: 6px;
+      border-color: hsl(var(--hsl-b5, 333 18% 26%));
+      background: hsl(var(--hsl-b3, 333 18% 16%));
+      color: hsl(var(--hsl-l1, 0 0% 94%));
+    }
+    .oep-markdown-helper--new-discussion .oep-markdown-helper__btn:hover {
+      background: hsl(var(--hsl-b4, 333 18% 20%));
+      border-color: hsl(var(--hsl-c2, 333 60% 70%) / 0.4);
+      color: hsl(var(--hsl-l1, 0 0% 98%));
+    }
+    .oep-markdown-helper--new-discussion .oep-markdown-helper__btn:focus-visible {
+      outline: 2px solid hsl(var(--hsl-c2, 333 60% 70%) / 0.65);
+      outline-offset: 2px;
+    }
+    .oep-markdown-helper--reply .oep-markdown-helper__btn {
+      flex: 0 0 auto;
+      padding: 3px 6px;
+      min-height: 24px;
+      gap: 3px;
+      border-radius: 5px;
+      font-size: 9px;
+      font-weight: 600;
+      border-color: hsl(var(--hsl-b5, 333 18% 26%) / 0.85);
+      background: hsl(var(--hsl-b3, 333 18% 13%) / 0.9);
+      color: hsl(var(--hsl-l2, 0 0% 80%));
+    }
+    .oep-markdown-helper--reply .oep-markdown-helper__btn:hover {
+      background: hsl(var(--hsl-b4, 333 18% 18%));
+      border-color: hsl(var(--hsl-c2, 333 60% 70%) / 0.35);
+      color: hsl(var(--hsl-l1, 0 0% 94%));
+    }
+    .oep-markdown-helper--reply .oep-markdown-helper__btn:focus-visible {
+      outline: 2px solid hsl(var(--hsl-c2, 333 60% 70%) / 0.55);
+      outline-offset: 1px;
     }
     .oep-markdown-helper__btn:hover {
-      background: hsl(var(--hsl-b4, 333 18% 20%));
-      border-color: hsl(var(--hsl-c2, 333 60% 70%) / 0.45);
-      box-shadow: inset 0 0 0 1px hsl(var(--hsl-c2, 333 60% 70%) / 0.2);
+      background: hsl(var(--hsl-b4, 333 18% 19%));
+      border-color: hsl(var(--hsl-c2, 333 60% 70%) / 0.38);
+      color: hsl(var(--hsl-l1, 0 0% 96%));
     }
     .oep-markdown-helper__btn i {
+      font-size: 10px;
+      opacity: 0.88;
+    }
+    .oep-markdown-helper--new-discussion .oep-markdown-helper__btn i {
       font-size: 11px;
-      opacity: 0.92;
+      opacity: 0.9;
+    }
+    .oep-markdown-helper--reply .oep-markdown-helper__btn i {
+      font-size: 9px;
+      opacity: 0.85;
     }
     .oep-discussion-voters-tooltip {
       min-width: min(216px, 70vw);
@@ -1253,10 +1352,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       width: fit-content;
       max-width: 88px;
       align-self: stretch;
-      border-top-left-radius: 0;
-      border-bottom-left-radius: 0;
-      border-top-right-radius: 20px;
-      border-bottom-right-radius: 20px;
+      border-radius: 0 4px 4px 0;
       border: 2px solid transparent;
       border-left: 0;
       padding: 4px 5px;
@@ -2636,7 +2732,14 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         noteButton instanceof HTMLElement &&
         noteButton.parentElement
       ) {
-        moveBefore(noteButton, toggleBtn);
+        const noteGroup =
+          noteButton.closest(".beatmap-discussion-post__actions-group") ||
+          noteButton.parentElement;
+        if (noteGroup instanceof HTMLElement) {
+          moveAsFirstChild(noteGroup, toggleBtn);
+        } else {
+          moveBefore(noteButton, toggleBtn);
+        }
       } else if (
         insertParent instanceof HTMLElement &&
         toggleBtn.parentElement !== insertParent
@@ -2765,6 +2868,41 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         textarea.dispatchEvent(new Event("input", { bubbles: true }));
       };
 
+      const toggleOrderedListLines = (sample = "first item\nsecond item") => {
+        const value = textarea.value || "";
+        const selStart = textarea.selectionStart ?? 0;
+        const selEnd = textarea.selectionEnd ?? 0;
+        const lineStart =
+          value.lastIndexOf("\n", Math.max(0, selStart - 1)) + 1;
+        const lineEndIdx = value.indexOf("\n", selEnd);
+        const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
+        const block = value.slice(lineStart, lineEnd);
+        const hasSelection = selEnd > selStart;
+        const blockSrc = hasSelection ? block : sample;
+        const lines = blockSrc.split("\n");
+        const numberedRe = /^\d+\.\s/;
+        const allNumbered =
+          lines.length > 0 &&
+          lines.every((line) => line === "" || numberedRe.test(line));
+        let n = 0;
+        const next = lines
+          .map((line) => {
+            if (allNumbered) {
+              if (line === "") return "";
+              return line.replace(/^\d+\.\s*/, "");
+            }
+            if (line === "") return "";
+            n += 1;
+            return `${n}. ${line}`;
+          })
+          .join("\n");
+        const replaceStart = hasSelection ? lineStart : selStart;
+        const replaceEnd = hasSelection ? lineEnd : selEnd;
+        replaceRangeUndoable(replaceStart, replaceEnd, next);
+        textarea.setSelectionRange(replaceStart, replaceStart + next.length);
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+
       const toggleCodeBlock = () => {
         const start = textarea.selectionStart ?? textarea.value.length;
         const end = textarea.selectionEnd ?? textarea.value.length;
@@ -2795,8 +2933,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       const mkBtn = (iconCls, label, onClick) => {
         const btn = el(
           "button",
-          { type: "button", class: "oep-markdown-helper__btn" },
-          el("i", { class: iconCls }),
+          {
+            type: "button",
+            class: "oep-markdown-helper__btn",
+            title: label,
+          },
+          el("i", { class: iconCls, "aria-hidden": "true" }),
           label,
         );
         btn.addEventListener("click", (e) => {
@@ -2816,29 +2958,33 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           }`,
           [HELPER_ATTR]: "1",
         },
-        mkBtn("fas fa-bold", "Bold", () => toggleWrap("**", "**", "bold")),
-        mkBtn("fas fa-italic", "Italic", () => toggleWrap("*", "*", "italic")),
-        mkBtn("fas fa-strikethrough", "Strike", () =>
-          toggleWrap("~~", "~~", "text"),
+        el(
+          "div",
+          { class: "oep-markdown-helper__row" },
+          mkBtn("fas fa-bold", "Bold", () => toggleWrap("**", "**", "bold")),
+          mkBtn("fas fa-italic", "Italic", () =>
+            toggleWrap("*", "*", "italic"),
+          ),
+          mkBtn("fas fa-strikethrough", "Strike", () =>
+            toggleWrap("~~", "~~", "text"),
+          ),
+          mkBtn("fas fa-code", "Code", () => toggleWrap("`", "`", "code")),
+          mkBtn("fas fa-link", "Link", () =>
+            insertText("[", "](https://example.com)", "title"),
+          ),
+          mkBtn("fas fa-image", "Image", () =>
+            insertText("![", "](https://example.com/image.png)", ""),
+          ),
+          mkBtn("fas fa-quote-left", "Quote", () => togglePrefixLines("> ")),
+          mkBtn("fas fa-list-ul", "List", () =>
+            togglePrefixLines("- ", "item one\nitem two"),
+          ),
+          mkBtn("fas fa-list-ol", "Numbered", () => toggleOrderedListLines()),
+          mkBtn("fas fa-heading", "Heading", () =>
+            insertText("## ", "", "Heading"),
+          ),
+          mkBtn("fas fa-file-code", "Code Block", () => toggleCodeBlock()),
         ),
-        mkBtn("fas fa-code", "Code", () => toggleWrap("`", "`", "code")),
-        mkBtn("fas fa-link", "Link", () =>
-          insertText("[", "](https://example.com)", "title"),
-        ),
-        mkBtn("fas fa-image", "Image", () =>
-          insertText("![", "](https://example.com/image.png)", "alt"),
-        ),
-        mkBtn("fas fa-quote-left", "Quote", () => togglePrefixLines("> ")),
-        mkBtn("fas fa-list-ul", "List", () =>
-          togglePrefixLines("- ", "item one\nitem two"),
-        ),
-        mkBtn("fas fa-list-ol", "Numbered", () =>
-          togglePrefixLines("1. ", "first item\nsecond item"),
-        ),
-        mkBtn("fas fa-heading", "Heading", () =>
-          insertText("## ", "", "Heading"),
-        ),
-        mkBtn("fas fa-file-code", "Code Block", () => toggleCodeBlock()),
       );
       const newDiscussionRoot = textarea.closest(".beatmap-discussion-new");
       if (newDiscussionRoot instanceof HTMLElement) {
@@ -2931,8 +3077,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           return;
         }
         helper.hidden = false;
-        toggleBtn.hidden = isReplyComposer ? !hasTextNow : false;
-        preview.hidden = !previewEnabled;
+        toggleBtn.hidden = !hasTextNow;
+        preview.hidden = !hasTextNow || !previewEnabled;
       };
 
       toggleBtn.addEventListener("click", () => {
@@ -3029,6 +3175,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         const isReplyComposer =
           root.classList.contains("beatmap-discussion-post--new-reply") ||
           root.classList.contains("beatmap-discussion-reply-box");
+        const isNewDiscussionRoot =
+          root.classList.contains("beatmap-discussion-new");
         const hasTextNow =
           ta instanceof HTMLTextAreaElement &&
           String(ta.value || "").trim().length > 0;
@@ -3038,7 +3186,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           if (helper instanceof HTMLElement) helper.remove();
           return;
         }
-        if (isReplyComposer && !hasTextNow) {
+        if ((isReplyComposer || isNewDiscussionRoot) && !hasTextNow) {
           btn.hidden = true;
           if (preview instanceof HTMLElement) preview.hidden = true;
           if (helper instanceof HTMLElement) helper.hidden = false;
@@ -6975,7 +7123,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     const bag = createCleanupBag();
 
     const cleanup = () => {
-      bag.dispose();
       try {
         modGridCleanup?.();
       } catch (_) {}
@@ -6988,6 +7135,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         descriptionInfoModal?.dispose();
       } catch (_) {}
       descriptionInfoModal = null;
+      /* After modal buttons are removed from the DOM; bag may unwrap description markup. */
+      bag.dispose();
     };
 
     await waitForStaleElementToLeave(BEATMAPSET_HEADER_STALE_SEL);
@@ -7125,9 +7274,15 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         const scrollEl = firstBox?.querySelector(
           ":scope > .beatmapset-info__scrollable",
         );
-        const descRow = scrollEl?.querySelector(
-          ":scope > .beatmapset-info__row:has(.beatmapset-info__description)",
-        );
+        // osu-web used to wrap description HTML in `.beatmapset-info__description`; current
+        // `info.tsx` uses a classless div, so fall back to the first row in the first box.
+        const descRow =
+          scrollEl?.querySelector(
+            ":scope > .beatmapset-info__row:has(.beatmapset-info__description)",
+          ) ??
+          scrollEl?.querySelector(
+            ":scope > .beatmapset-info__row:first-child:has(> h3.beatmapset-info__header)",
+          );
         const descHeading = descRow?.querySelector(
           ":scope > h3.beatmapset-info__header",
         );
@@ -7139,6 +7294,16 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           descRow.classList.add(`${ROOT_CLASS}__description-heading-row`);
           bag.add(() => {
             descRow.classList.remove(`${ROOT_CLASS}__description-heading-row`);
+            const headWrap = descRow.querySelector(
+              `:scope > .${ROOT_CLASS}__description-sticky-head`,
+            );
+            if (headWrap) {
+              const h = headWrap.querySelector(
+                ":scope > h3.beatmapset-info__header",
+              );
+              if (h) descRow.insertBefore(h, headWrap);
+              headWrap.remove();
+            }
           });
           descriptionInfoModal = attachBeatmapsetInfoModal(el, ROOT_CLASS, {
             title: "Beatmap description",
@@ -7149,7 +7314,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
             modalExtraClass: `${ROOT_CLASS}__modal--description`,
             mountButton: (btn) => {
               btn.setAttribute("data-oep-beatmapset-desc", "");
-              descHeading.insertAdjacentElement("afterend", btn);
+              const headWrap = el("div", {
+                class: `${ROOT_CLASS}__description-sticky-head`,
+              });
+              descRow.insertBefore(headWrap, descHeading);
+              headWrap.appendChild(descHeading);
+              headWrap.appendChild(btn);
             },
             buildBody: () => buildDescriptionModalBody(data, el),
           });
