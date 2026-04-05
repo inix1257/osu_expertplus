@@ -42,7 +42,7 @@ const METADATA = `\
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
 // @version      0.2.4
-// @description  Adds convenient extra features to osu.ppy.sh
+// @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
 // @supportURL   https://github.com/inix1257/osu_expertplus/issues
