@@ -1,11 +1,13 @@
+because i couldn't be bothered to make 100 PRs
+
 # Install
 
-1. Install [Tampermonkey](https://www.tampermonkey.net/).
-2. Open <big><a href="https://github.com/inix1257/osu_expertplus/raw/refs/heads/main/dist/osu-expertplus.user.js">this</a></big> to install the script.
+1. Install a userscript manager — [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) are the ones that work reliably. [Greasemonkey](https://addons.mozilla.org/firefox/addon/greasemonkey/) (Firefox) usually **won’t** play nice: v4+ uses a different async storage API than this script expects.
+2. [Download the script](https://github.com/inix1257/osu_expertplus/raw/refs/heads/main/dist/osu-expertplus.user.js) to install.
 
 # osu! Expert+
 
-A Tampermonkey userscript that adds a bunch of quality-of-life stuff to [osu.ppy.sh](https://osu.ppy.sh).
+A userscript for [osu.ppy.sh](https://osu.ppy.sh). Some QoL changes are included.
 
 ## Features
 
