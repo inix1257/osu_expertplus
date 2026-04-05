@@ -43,6 +43,7 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   // Score lists: PP from span title → 2dp; hit-stat row from API (fetchScores)
   const SCORE_LIST_DETAILS_ID = IDS.SCORE_LIST_DETAILS;
+  const RECENT_SCORES_SHOW_FAILS_ID = IDS.RECENT_SCORES_SHOW_FAILS;
   const PP_DECIMALS_ATTR = "data-oep-pp-original";
 
   function applyPpDecimals(listEl) {
@@ -453,6 +454,46 @@ OsuExpertPlus.pages.userProfile = (() => {
       flex-shrink: 0;
       display: inline-flex;
       align-items: center;
+    }
+
+    .oep-recent-fails-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.75rem;
+    }
+    .oep-recent-fails-header .title {
+      margin: 0;
+      padding: 0;
+      line-height: 1.2;
+    }
+    .oep-recent-fails-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5em;
+      margin: 0;
+      padding: 0;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      color: hsl(var(--hsl-c1));
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .oep-recent-fails-toggle .oep-recent-show-fails {
+      margin: 0;
+      width: 14px;
+      height: 14px;
+      flex: 0 0 14px;
+      border-radius: 3px;
+      cursor: pointer;
+      accent-color: hsl(var(--hsl-b6));
+    }
+    .oep-recent-fails-toggle .oep-recent-show-fails:focus-visible {
+      outline: 2px solid hsl(var(--hsl-b6));
+      outline-offset: 2px;
     }
   `;
   const playDetailStyle = manageStyle(PLAY_DETAIL_STYLE_ID, PLAY_DETAIL_CSS);
@@ -1265,6 +1306,21 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   const RECENT_FAILS_WRAP_CLASS = "oep-recent-scores-with-fails";
+  const RECENT_FAILS_EMPTY_MSG = "No scores found.";
+  const RECENT_FAILS_EMPTY_FILTERED_MSG =
+    "No passing scores in this list (fails hidden).";
+
+  /** @type {WeakMap<HTMLElement, Object[]>} */
+  const recentScoresFullCache = new WeakMap();
+
+  function apiScoreIsFail(score) {
+    return Boolean(score && typeof score === "object" && score.passed === false);
+  }
+
+  function filterScoresForRecentDisplay(scores, showFails) {
+    if (showFails) return scores.slice();
+    return scores.filter((s) => !apiScoreIsFail(s));
+  }
 
   function findRecentPlaysListRoot() {
     const page = document.querySelector(
@@ -1704,6 +1760,68 @@ OsuExpertPlus.pages.userProfile = (() => {
   let _recentFailsDebounce = null;
 
   /**
+   * @param {HTMLElement} innerList
+   * @param {Object[]} scores
+   * @param {HTMLElement|null} modTemplate
+   * @param {string} emptyMessage
+   */
+  function populateRecentScoresInnerList(
+    innerList,
+    scores,
+    modTemplate,
+    emptyMessage,
+  ) {
+    innerList.textContent = "";
+    if (!scores.length) {
+      innerList.appendChild(
+        el("p", { class: "oep-recent-fails-empty" }, emptyMessage),
+      );
+      return;
+    }
+    const tpl = modTemplate instanceof HTMLElement ? modTemplate : null;
+    const rows = scores.map((s) => buildPlayDetailRowFromApiScore(s, tpl));
+    rows.forEach((r) => innerList.appendChild(r));
+    applyHideWeightedPp(innerList);
+    if (settings.isEnabled(SCORE_LIST_DETAILS_ID)) {
+      applyPpDecimals(innerList);
+      processElements(rows, scores);
+      enrichPlayDetailRowsMaxComboFromAttributes(rows, scores).catch(() => {});
+    }
+    if (settings.isEnabled(IDS.MOD_ICONS_AS_ACRONYMS)) {
+      injectModIconsAcronymStyles();
+      applyModIconsAsAcronyms(innerList);
+    }
+    if (settings.isEnabled(MODDED_SR_ID)) {
+      if (!_srObserver) initSrObserver();
+      rows.forEach(_observeRow);
+    }
+    if (settings.isEnabled(RANKS_CARD_BG_FEATURE_ID)) {
+      injectRanksDateHighlightStyles();
+      applyRanksCardBackgrounds(innerList);
+    }
+  }
+
+  function repopulateRecentScoresWrap(wrap) {
+    if (!(wrap instanceof HTMLElement)) return;
+    const innerList = wrap.querySelector(":scope > .play-detail-list");
+    if (!(innerList instanceof HTMLElement)) return;
+    const all = recentScoresFullCache.get(wrap);
+    if (!all) return;
+    const showFails = settings.isEnabled(RECENT_SCORES_SHOW_FAILS_ID);
+    const filtered = filterScoresForRecentDisplay(all, showFails);
+    const emptyMsg =
+      !filtered.length && all.length && !showFails
+        ? RECENT_FAILS_EMPTY_FILTERED_MSG
+        : RECENT_FAILS_EMPTY_MSG;
+    populateRecentScoresInnerList(
+      innerList,
+      filtered,
+      findOsuModTemplateNode(),
+      emptyMsg,
+    );
+  }
+
+  /**
    * Mount once per (list element identity): section below official Recent plays + show more.
    * @param {string} userId
    * @param {string} mode
@@ -1725,13 +1843,30 @@ OsuExpertPlus.pages.userProfile = (() => {
     ensurePlayDetailStylesForRecent();
 
     const wrap = el("div", { class: RECENT_FAILS_WRAP_CLASS });
-    wrap.appendChild(
+    const header = el("div", { class: "oep-recent-fails-header" });
+    header.appendChild(
       el(
         "h3",
         { class: "title title--page-extra-small" },
-        "Recent scores (including fails)",
+        "Recent scores",
       ),
     );
+    const showFailsCb = document.createElement("input");
+    showFailsCb.type = "checkbox";
+    showFailsCb.className = "oep-recent-show-fails";
+    showFailsCb.checked = settings.isEnabled(RECENT_SCORES_SHOW_FAILS_ID);
+    showFailsCb.addEventListener("change", () => {
+      settings.set(RECENT_SCORES_SHOW_FAILS_ID, showFailsCb.checked);
+    });
+    header.appendChild(
+      el(
+        "label",
+        { class: "oep-recent-fails-toggle" },
+        showFailsCb,
+        "Show failed scores",
+      ),
+    );
+    wrap.appendChild(header);
     const innerList = el("div", {
       class: `play-detail-list ${SCORE_LIST_LAYOUT_CLASS}`,
     });
@@ -1759,10 +1894,13 @@ OsuExpertPlus.pages.userProfile = (() => {
     innerList.textContent = "";
     if (!scores.length) {
       innerList.appendChild(
-        el("p", { class: "oep-recent-fails-empty" }, "No scores found."),
+        el("p", { class: "oep-recent-fails-empty" }, RECENT_FAILS_EMPTY_MSG),
       );
+      removeOfficialRecentPlaysSection(listRoot);
       return;
     }
+
+    recentScoresFullCache.set(wrap, scores);
 
     let modTemplate = findOsuModTemplateNode();
     if (
@@ -1772,23 +1910,15 @@ OsuExpertPlus.pages.userProfile = (() => {
       modTemplate = await waitForOsuModTemplate(2500);
     }
     const tpl = modTemplate instanceof HTMLElement ? modTemplate : null;
-    const rows = scores.map((s) => buildPlayDetailRowFromApiScore(s, tpl));
-    rows.forEach((r) => innerList.appendChild(r));
 
-    applyHideWeightedPp(innerList);
-    if (settings.isEnabled(SCORE_LIST_DETAILS_ID)) {
-      applyPpDecimals(innerList);
-      processElements(rows, scores);
-      enrichPlayDetailRowsMaxComboFromAttributes(rows, scores).catch(() => {});
-    }
-    if (settings.isEnabled(IDS.MOD_ICONS_AS_ACRONYMS)) {
-      injectModIconsAcronymStyles();
-      applyModIconsAsAcronyms(innerList);
-    }
-    if (settings.isEnabled(MODDED_SR_ID)) {
-      if (!_srObserver) initSrObserver();
-      rows.forEach(_observeRow);
-    }
+    const showFails = settings.isEnabled(RECENT_SCORES_SHOW_FAILS_ID);
+    showFailsCb.checked = showFails;
+    const filtered = filterScoresForRecentDisplay(scores, showFails);
+    const emptyMsg =
+      !filtered.length && scores.length && !showFails
+        ? RECENT_FAILS_EMPTY_FILTERED_MSG
+        : RECENT_FAILS_EMPTY_MSG;
+    populateRecentScoresInnerList(innerList, filtered, tpl, emptyMsg);
 
     removeOfficialRecentPlaysSection(listRoot);
   }
@@ -1801,6 +1931,19 @@ OsuExpertPlus.pages.userProfile = (() => {
    */
   function startRecentScoresWithFailsObserver(userId, mode) {
     let cancelled = false;
+
+    const unsubRecentFailsShow = settings.onChange(
+      RECENT_SCORES_SHOW_FAILS_ID,
+      () => {
+        document.querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`).forEach((w) => {
+          if (!(w instanceof HTMLElement)) return;
+          const input = w.querySelector("input.oep-recent-show-fails");
+          const on = settings.isEnabled(RECENT_SCORES_SHOW_FAILS_ID);
+          if (input instanceof HTMLInputElement) input.checked = on;
+          repopulateRecentScoresWrap(w);
+        });
+      },
+    );
 
     const run = () => {
       if (cancelled) return;
@@ -1827,6 +1970,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     return () => {
       cancelled = true;
       clearTimeout(_recentFailsDebounce);
+      unsubRecentFailsShow();
       obs.disconnect();
       document
         .querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`)
@@ -2056,6 +2200,19 @@ OsuExpertPlus.pages.userProfile = (() => {
       z-index: -2;
       pointer-events: none;
     }
+    @media (min-width: 900px) {
+      ${RANKS_CARD_BG_SELECTOR}.play-detail--pin-sortable {
+        background: transparent;
+      }
+      ${RANKS_CARD_BG_SELECTOR}.play-detail--pin-sortable::before,
+      ${RANKS_CARD_BG_SELECTOR}.play-detail--pin-sortable .${RANKS_CARD_BG_IMG_CLASS} {
+        -webkit-clip-path: inset(0 0 0 var(--pin-sortable-handle-width, 20px) round 6px);
+        clip-path: inset(0 0 0 var(--pin-sortable-handle-width, 20px) round 6px);
+      }
+      ${RANKS_CARD_BG_SELECTOR}.play-detail--pin-sortable::after {
+        inset: 0 0 0 var(--pin-sortable-handle-width, 20px);
+      }
+    }
     ${RANKS_CARD_BG_SELECTOR}::after {
       content: "";
       position: absolute;
@@ -2233,6 +2390,18 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   /**
+   * @param {Element} root  Top ranks page, or a `.play-detail-list` element
+   * @returns {HTMLElement[]}
+   */
+  function queryPlayDetailScoreRows(root) {
+    if (!(root instanceof HTMLElement)) return [];
+    if (root.classList.contains("play-detail-list")) {
+      return Array.from(root.querySelectorAll(":scope > .play-detail"));
+    }
+    return Array.from(root.querySelectorAll(".play-detail-list .play-detail"));
+  }
+
+  /**
    * @param {Element} rowEl
    * @returns {string|null}
    */
@@ -2291,9 +2460,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       );
     }
 
-    topRanksRoot
-      .querySelectorAll(".play-detail-list .play-detail")
-      .forEach((rowEl) => {
+    queryPlayDetailScoreRows(topRanksRoot).forEach((rowEl) => {
         const beatmapsetId = getRanksRowBeatmapsetId(rowEl);
         if (!beatmapsetId) {
           ranksCardBgObserver?.unobserve(rowEl);
@@ -2541,6 +2708,13 @@ OsuExpertPlus.pages.userProfile = (() => {
           .querySelectorAll(`.${RANKS_DATE_HIGHLIGHT_CLASS}`)
           .forEach((row) => row.classList.remove(RANKS_DATE_HIGHLIGHT_CLASS));
       }
+      if (settings.isEnabled(RANKS_CARD_BG_FEATURE_ID)) {
+        document
+          .querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS} .play-detail-list`)
+          .forEach((listEl) => {
+            if (listEl instanceof HTMLElement) applyRanksCardBackgrounds(listEl);
+          });
+      }
     };
 
     const schedule = () => {
@@ -2567,8 +2741,14 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     const unsubBg = settings.onChange(RANKS_CARD_BG_FEATURE_ID, (enabled) => {
       if (enabled) {
+        injectRanksDateHighlightStyles();
         const page = document.querySelector(RANKS_PAGE_SELECTOR);
         if (page instanceof HTMLElement) applyRanksCardBackgrounds(page);
+        document
+          .querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS} .play-detail-list`)
+          .forEach((listEl) => {
+            if (listEl instanceof HTMLElement) applyRanksCardBackgrounds(listEl);
+          });
       } else {
         revertRanksCardBackgrounds();
       }
@@ -5770,12 +5950,24 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     bind();
     obs = new MutationObserver((mutations) => {
-      if (
-        mutationsIncludeSelector(
-          mutations,
-          'div.js-sortable--page[data-page-id], a[href^="#"]',
-        )
-      ) {
+      let needsRebind = mutationsIncludeSelector(
+        mutations,
+        'div.js-sortable--page[data-page-id], a[href^="#"]',
+      );
+
+      if (!needsRebind) {
+        for (const mutation of mutations) {
+          if (!mutation.addedNodes.length) continue;
+          const target = mutation.target;
+          if (!(target instanceof Element)) continue;
+          if (target.closest(`.${SECTION_COLLAPSE_PAGE_CLASS}`)) {
+            needsRebind = true;
+            break;
+          }
+        }
+      }
+
+      if (needsRebind) {
         clearTimeout(rebindTimer);
         rebindTimer = setTimeout(bind, 80);
       }

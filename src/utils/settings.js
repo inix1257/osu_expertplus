@@ -72,7 +72,7 @@ OsuExpertPlus.settings = (() => {
       id: "userProfile.scoreCardBackgrounds",
       label: "Beatmap background on score cards",
       description:
-        "Shows the beatmap cover art as a background image on each score card in the Ranks section.",
+        "Shows the beatmap cover art as a background image on each score card in the Ranks section and on Expert+ Recent scores (Historical tab).",
       group: "User Profile",
       default: true,
     },
@@ -81,6 +81,14 @@ OsuExpertPlus.settings = (() => {
       label: "Show score place number",
       description:
         "Displays the position (#1, #2, …) before each score card's rank grade in the Ranks section.",
+      group: "User Profile",
+      default: true,
+    },
+    {
+      id: "userProfile.recentScoresShowFails",
+      label: "Recent scores: show failed scores",
+      description:
+        "On the profile Historical tab, the Expert+ “Recent scores” list can include failed plays. Turn off to show only passing scores. The “Show failed scores” control there uses the same setting.",
       group: "User Profile",
       default: true,
     },
@@ -202,6 +210,7 @@ OsuExpertPlus.settings = (() => {
     HIDE_CL_MOD: "userProfile.hideClMod",
     SCORE_CARD_BACKGROUNDS: "userProfile.scoreCardBackgrounds",
     SCORE_CARD_PLACE_NUMBER: "userProfile.scoreCardPlaceNumber",
+    RECENT_SCORES_SHOW_FAILS: "userProfile.recentScoresShowFails",
     DISCUSSION_DEFAULT_TO_TOTAL: "beatmapDetail.discussionDefaultToTotal",
     OMDB_BEATMAPSET_RATINGS: "beatmapDetail.omdbBeatmapsetRatings",
     BEATMAP_PREVIEW: "beatmapDetail.beatmapPreview",

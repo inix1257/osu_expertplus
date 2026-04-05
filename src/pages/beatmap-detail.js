@@ -236,6 +236,61 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       border-bottom: 1px solid hsl(var(--hsl-b4, 333 18% 20%));
       flex-shrink: 0;
     }
+    .${ROOT_CLASS}__modal-header-start {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+    .${ROOT_CLASS}__modal-header-osu-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      flex-shrink: 0;
+      max-width: min(100%, 240px);
+    }
+    .${ROOT_CLASS}__modal-header-osu-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 5px 10px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      color: hsl(var(--hsl-l2, 0 0% 72%));
+      background: hsl(var(--hsl-b4, 333 18% 18%));
+      transition: background 120ms ease, color 120ms ease, opacity 120ms ease;
+    }
+    .${ROOT_CLASS}__modal-header-osu-msg {
+      margin: 0;
+      font-size: 10px;
+      font-weight: 500;
+      line-height: 1.3;
+      color: #e07a7a;
+    }
+    .${ROOT_CLASS}__modal-header-osu-msg:empty {
+      display: none;
+    }
+    .${ROOT_CLASS}__modal-header-osu-btn:hover:not(:disabled) {
+      background: hsl(var(--hsl-b5, 333 18% 26%));
+      color: hsl(var(--hsl-l1, 0 0% 92%));
+    }
+    .${ROOT_CLASS}__modal-header-osu-btn:focus-visible {
+      outline: 2px solid hsl(var(--hsl-c2, 333 60% 70%));
+      outline-offset: 2px;
+    }
+    .${ROOT_CLASS}__modal-header-osu-btn:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
     .${ROOT_CLASS}__modal-title {
       margin: 0;
       font-size: 13px;
@@ -911,7 +966,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       font-weight: 500;
       letter-spacing: 0.02em;
       text-transform: none;
-      opacity: 0.52;
+      opacity: 1;
       color: hsl(var(--hsl-l1, 0 0% 72%));
     }
     .${OEP_OMDB_ROW_CLASS}__rank-value {
@@ -1046,7 +1101,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      opacity: 0.55;
+      opacity: 1;
       line-height: 1;
       display: inline-flex;
       align-items: center;
@@ -5714,6 +5769,77 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
+   * Modal header control: GET `https://osu.ppy.sh/osu/{beatmapId}` for the selected difficulty and show the file in a new tab.
+   * @param {typeof el} elFn
+   * @param {() => string|null} getBeatmapId
+   */
+  function buildBeatmapMetadataOsuOpenButton(elFn, getBeatmapId) {
+    const wrap = elFn("div", { class: `${ROOT_CLASS}__modal-header-osu-wrap` });
+    const btn = elFn("button", {
+      type: "button",
+      class: `${ROOT_CLASS}__modal-header-osu-btn`,
+      "aria-label": "Open .osu file for current difficulty",
+    });
+    btn.appendChild(
+      elFn("i", { class: "fas fa-file-code", "aria-hidden": "true" }),
+    );
+    btn.appendChild(document.createTextNode("open .osu"));
+    const msgEl = elFn("p", {
+      class: `${ROOT_CLASS}__modal-header-osu-msg`,
+      "aria-live": "polite",
+    });
+    wrap.appendChild(btn);
+    wrap.appendChild(msgEl);
+
+    let msgResetTimer = 0;
+    /**
+     * @param {string} msg
+     */
+    function flashMsg(msg) {
+      msgEl.textContent = msg;
+      if (msgResetTimer) window.clearTimeout(msgResetTimer);
+      msgResetTimer = window.setTimeout(() => {
+        msgEl.textContent = "";
+        msgResetTimer = 0;
+      }, 3200);
+    }
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = getBeatmapId();
+      if (!id) {
+        flashMsg("Could not detect a beatmap id for this page.");
+        return;
+      }
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        const url = `https://osu.ppy.sh/osu/${encodeURIComponent(id)}`;
+        const resp = await fetch(url, { credentials: "include" });
+        if (!resp.ok) {
+          flashMsg(`Could not load .osu (HTTP ${resp.status}).`);
+          return;
+        }
+        const text = await resp.text();
+        const blob = new Blob([text], {
+          type: "text/plain;charset=utf-8",
+        });
+        const objectUrl = URL.createObjectURL(blob);
+        const opened = window.open(objectUrl, "_blank", "noopener,noreferrer");
+        if (!opened) {
+          flashMsg("Popup blocked — allow popups for osu.ppy.sh to view .osu.");
+        }
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120000);
+      } catch (_) {
+        flashMsg("Could not load .osu (network error).");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    return wrap;
+  }
+
+  /**
    * @param {typeof el} elFn
    * @param {string} rootClass
    * @param {object} cfg
@@ -5725,6 +5851,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    * @param {boolean} [cfg.primary]
    * @param {string} [cfg.modalExtraClass]
    * @param {string} [cfg.buttonExtraClass] Extra classes on the open button (e.g. compact placement)
+   * @param {(elFn: typeof el) => Node|null|undefined} [cfg.buildModalTitleExtra] Shown after the modal title (left header group)
    * @param {() => Node} cfg.buildBody
    */
   function attachBeatmapsetInfoModal(elFn, rootClass, cfg) {
@@ -5736,6 +5863,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       primary = false,
       modalExtraClass = "",
       buildBody,
+      buildModalTitleExtra,
       mountButton,
       buttonExtraClass = "",
     } = cfg;
@@ -5771,9 +5899,17 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     });
     modal.style.background = resolveDescriptionSectionBackgroundColor();
     const modalHeader = elFn("div", { class: `${rootClass}__modal-header` });
-    modalHeader.appendChild(
+    const headerStart = elFn("div", {
+      class: `${rootClass}__modal-header-start`,
+    });
+    headerStart.appendChild(
       elFn("h2", { class: `${rootClass}__modal-title`, id: titleId }, title),
     );
+    if (typeof buildModalTitleExtra === "function") {
+      const extra = buildModalTitleExtra(elFn);
+      if (extra) headerStart.appendChild(extra);
+    }
+    modalHeader.appendChild(headerStart);
     const closeBtn = elFn(
       "button",
       {
@@ -6948,6 +7084,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           btn.setAttribute("data-oep-beatmapset-metadata", "");
           artistEl.insertAdjacentElement("afterend", btn);
         },
+        buildModalTitleExtra: (elFn) =>
+          buildBeatmapMetadataOsuOpenButton(elFn, getBeatmapPageBeatmapId),
         buildBody: () => buildModalBody(data, el),
       });
     }

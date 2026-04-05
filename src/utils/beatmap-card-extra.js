@@ -322,6 +322,10 @@ OsuExpertPlus.beatmapCardExtra = (() => {
   /**
    * Initial listing data: `<script id="json-beatmaps" type="application/json">`.
    * Re-parses when the script body changes (Turbo / in-place updates); avoid a one-shot flag.
+   *
+   * SPA navigations often fill this tag by updating the script’s text node. The document-level
+   * `MutationObserver` in `start()` only uses `childList`/`subtree`, so those text updates do not
+   * run `ingestFromJsonBeatmapsScript` unless we observe this node with `characterData: true`.
    */
   function ingestFromJsonBeatmapsScript() {
     const n = document.getElementById("json-beatmaps");
@@ -448,6 +452,12 @@ OsuExpertPlus.beatmapCardExtra = (() => {
 
   /** One-shot same-origin prefetch if hooks missed the site’s first request (script load timing). */
   let profileExtraPrefetchStarted = false;
+
+  /**
+   * On SPA navigation to /beatmapsets, osu-web fires the initial search fetch before `pushState`,
+   * so our hook is never installed in time to intercept it. Guard against double-fetching.
+   */
+  let listingSearchPrefetchStarted = false;
 
   /** ms to wait for site JSON/fetch to populate `cache` after panels appear. */
   const PROFILE_EXTRA_CACHE_WAIT_MS = 2000;
@@ -595,10 +605,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
         const hiStr = formatStarShort(hi);
         if (!loStr || !hiStr) return;
 
-        const wrap = el("span", {
-          class: STAR_RANGE_CLASS,
-          title: "Star rating range (nomod)",
-        });
+        const wrap = el("span", { class: STAR_RANGE_CLASS });
 
         if (lo === hi || loStr === hiStr) {
           const chip = buildStarChip(dc, lo);
@@ -997,6 +1004,45 @@ OsuExpertPlus.beatmapCardExtra = (() => {
   }
 
   /**
+   * On SPA navigation to /beatmapsets, osu-web issues the initial search fetch as part of its own
+   * routing — before calling pushState, and therefore before our hook is installed. Re-fetch the
+   * first page ourselves so the cache is populated for already-visible panels.
+   * @param {() => boolean} wantIngest
+   * @param {typeof window.fetch | null} nativeFetch
+   */
+  function startListingSearchPrefetchIfNeeded(wantIngest, nativeFetch) {
+    if (!wantIngest()) return;
+    if (!/^\/beatmapsets(?:\/?)(?!\d)/i.test(location.pathname)) return;
+    if (listingSearchPrefetchStarted) return;
+    // If #json-beatmaps has content the page was SSR-rendered; first-page data is already ingested.
+    const n = document.getElementById("json-beatmaps");
+    if (n?.textContent?.trim()) return;
+    const pw = pageWin();
+    const doFetch =
+      nativeFetch ||
+      (typeof pw.fetch === "function" ? pw.fetch.bind(pw) : null);
+    if (!doFetch) return;
+    listingSearchPrefetchStarted = true;
+    const params = new URLSearchParams(location.search);
+    params.delete("cursor_string");
+    const qs = params.toString();
+    const url = `/beatmapsets/search${qs ? "?" + qs : ""}`;
+    void (async () => {
+      try {
+        const r = await doFetch(url, {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (!wantIngest()) return;
+        if (!r.ok) return;
+        ingestBeatmapsetsSearchPayload(await r.json());
+      } catch (_) {
+        void 0;
+      }
+    })();
+  }
+
+  /**
    * @param {typeof OsuExpertPlus.settings} settings
    * @param {{ hookProfileExtraPages?: boolean }} [options]
    * @returns {() => void}
@@ -1013,9 +1059,57 @@ OsuExpertPlus.beatmapCardExtra = (() => {
     const MO_MAX_WAIT_MS = 450;
     let ingestPanelsId = 0;
 
+    /** @type {MutationObserver|null} */
+    let jsonBeatmapsMo = null;
+    /** @type {Element|null} */
+    let jsonBeatmapsObserved = null;
+    let jsonBeatmapsTextMutDeb = 0;
+
+    function disconnectJsonBeatmapsObserver() {
+      window.clearTimeout(jsonBeatmapsTextMutDeb);
+      jsonBeatmapsTextMutDeb = 0;
+      try {
+        jsonBeatmapsMo?.disconnect();
+      } catch (_) {
+        void 0;
+      }
+      jsonBeatmapsMo = null;
+      jsonBeatmapsObserved = null;
+    }
+
+    function connectJsonBeatmapsObserver() {
+      if (!wantIngest()) {
+        disconnectJsonBeatmapsObserver();
+        return;
+      }
+      const n = document.getElementById("json-beatmaps");
+      if (!n) {
+        disconnectJsonBeatmapsObserver();
+        return;
+      }
+      if (jsonBeatmapsObserved === n && jsonBeatmapsMo) return;
+      disconnectJsonBeatmapsObserver();
+      jsonBeatmapsObserved = n;
+      jsonBeatmapsMo = new MutationObserver(() => {
+        if (!wantIngest()) return;
+        window.clearTimeout(jsonBeatmapsTextMutDeb);
+        jsonBeatmapsTextMutDeb = window.setTimeout(() => {
+          jsonBeatmapsTextMutDeb = 0;
+          ingestFromJsonBeatmapsScript();
+          scheduleAfterIngest();
+        }, 0);
+      });
+      jsonBeatmapsMo.observe(n, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
+    }
+
     profileExtraState.waitForExtraPages =
       options.hookProfileExtraPages === true;
     profileExtraPrefetchStarted = false;
+    listingSearchPrefetchStarted = false;
 
     /** @type {typeof window.fetch | null} */
     let origFetch = null;
@@ -1072,7 +1166,11 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       if (on) {
         ingestFromJsonBeatmapsScript();
         startProfileExtraPagesPrefetchIfNeeded(wantIngest, origFetch);
+        startListingSearchPrefetchIfNeeded(wantIngest, origFetch);
+        connectJsonBeatmapsObserver();
         scheduleAllPanels(document, settings);
+      } else {
+        disconnectJsonBeatmapsObserver();
       }
       syncPopupHighlightHeight();
     };
@@ -1103,6 +1201,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       if (!wantIngest()) {
         return;
       }
+      connectJsonBeatmapsObserver();
       ingestFromJsonBeatmapsScript();
       scheduleAllPanels(document, settings);
       syncPopupHighlightHeight();
@@ -1172,11 +1271,13 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       window.clearTimeout(moDebounceId);
       window.clearTimeout(moMaxWaitId);
       window.clearTimeout(ingestPanelsId);
+      disconnectJsonBeatmapsObserver();
       unsubMeta();
       unsubStars();
       mo.disconnect();
       profileExtraState.waitForExtraPages = false;
       profileExtraPrefetchStarted = false;
+      listingSearchPrefetchStarted = false;
       scheduleAfterIngest = () => {};
       uninstallXhrHook();
       if (origFetch) pageContext.fetch = origFetch;

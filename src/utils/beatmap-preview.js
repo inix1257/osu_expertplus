@@ -1,5 +1,5 @@
 /** Lazy ESM load osu-beatmap-renderer + Pixi; gameplay preview on beatmapset pages. */
-/* global unsafeWindow, GM_getValue, GM_setValue, GM_xmlhttpRequest */
+/* global unsafeWindow, GM_getValue, GM_xmlhttpRequest */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
@@ -12,7 +12,7 @@ OsuExpertPlus.beatmapPreview = (() => {
   const PIXI_ESM_URL =
     "https://cdn.jsdelivr.net/npm/pixi.js@8.6.6/dist/pixi.min.mjs";
   const RENDERER_ESM_URL =
-    "https://cdn.jsdelivr.net/npm/osu-beatmap-renderer@0.1.1/dist/osu-beatmap-renderer.js";
+    "https://cdn.jsdelivr.net/npm/osu-beatmap-renderer@0.1.2/dist/osu-beatmap-renderer.js";
 
   /** Page window (unsafeWindow under TM). */
   function pageWindow() {
@@ -24,6 +24,36 @@ OsuExpertPlus.beatmapPreview = (() => {
       void 0;
     }
     return window;
+  }
+
+  /** Page-origin `localStorage` (osu.ppy.sh), or null if unavailable. */
+  function pageLocalStorage() {
+    try {
+      const pw = pageWindow();
+      return pw?.localStorage ?? null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * Reads osu! web `localStorage.userPreferences` JSON and returns `audio_volume` if valid (0–1).
+   * @returns {number|null}
+   */
+  function readOsuSiteAudioVolume() {
+    const ls = pageLocalStorage();
+    if (!ls) return null;
+    try {
+      const raw = ls.getItem("userPreferences");
+      if (raw == null || raw === "") return null;
+      const obj = JSON.parse(raw);
+      const v = obj?.audio_volume;
+      const n = Number(v);
+      if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
+    } catch (_) {
+      void 0;
+    }
+    return null;
   }
 
   /** @type {Promise<any>|null} */
@@ -557,7 +587,9 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     styleId,
   }) {
     const wrapClass = "oep-beatmap-preview";
-    const styles = manageStyle(styleId, `
+    const styles = manageStyle(
+      styleId,
+      `
       .${wrapClass} { margin-top: 4px; }
       .${wrapClass}__toggle.btn-osu-big {
         --btn-bg: hsl(var(--hsl-b5, 333 18% 28%));
@@ -715,7 +747,8 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         padding-bottom: 0;
         min-width: 0;
       }
-    `);
+    `,
+    );
     styles.inject();
 
     const row = el("div", {
@@ -736,42 +769,88 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
 
     /** Site preview files are short; cap so we never treat a longer buffer as full-map audio. */
     const PREVIEW_CLIP_MAX_MS = 10000;
-    const PREVIEW_MUSIC_VOLUME_GM_KEY = "beatmapPreview.musicVolume";
-    const PREVIEW_HITSVOL_GM_KEY = "beatmapPreview.hitsoundVolume";
+    const PREVIEW_MUSIC_LS_KEY = "oep.beatmapPreview.musicVolume";
+    const PREVIEW_HITSOUND_LS_KEY = "oep.beatmapPreview.hitsoundVolume";
+    /** Tampermonkey keys from before localStorage migration; read once to seed LS. */
+    const PREVIEW_MUSIC_VOLUME_LEGACY_GM_KEY = "beatmapPreview.musicVolume";
+    const PREVIEW_HITSVOL_LEGACY_GM_KEY = "beatmapPreview.hitsoundVolume";
+    const PREVIEW_VOLUME_DEFAULT = 0.3;
 
     function readStoredMusicVolume() {
+      const ls = pageLocalStorage();
+      if (ls) {
+        try {
+          const s = ls.getItem(PREVIEW_MUSIC_LS_KEY);
+          if (s != null && s !== "") {
+            const n = Number(s);
+            if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
+          }
+        } catch (_) {
+          void 0;
+        }
+      }
       try {
-        const v = GM_getValue(PREVIEW_MUSIC_VOLUME_GM_KEY, 0.3);
-        const n = Number(v);
-        if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
+        const v = GM_getValue(PREVIEW_MUSIC_VOLUME_LEGACY_GM_KEY, undefined);
+        if (v !== undefined && v !== null && String(v) !== "") {
+          const n = Number(v);
+          if (Number.isFinite(n) && n >= 0 && n <= 1) {
+            writeStoredMusicVolume(n);
+            return n;
+          }
+        }
       } catch (_) {
         void 0;
       }
-      return 0.3;
+      const site = readOsuSiteAudioVolume();
+      if (site != null) return site;
+      return PREVIEW_VOLUME_DEFAULT;
     }
 
     function writeStoredMusicVolume(vol) {
+      const ls = pageLocalStorage();
+      if (!ls) return;
       try {
-        GM_setValue(PREVIEW_MUSIC_VOLUME_GM_KEY, vol);
+        ls.setItem(PREVIEW_MUSIC_LS_KEY, String(vol));
       } catch (_) {
         void 0;
       }
     }
 
     function readStoredHitsoundVolume() {
+      const ls = pageLocalStorage();
+      if (ls) {
+        try {
+          const s = ls.getItem(PREVIEW_HITSOUND_LS_KEY);
+          if (s != null && s !== "") {
+            const n = Number(s);
+            if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
+          }
+        } catch (_) {
+          void 0;
+        }
+      }
       try {
-        const v = GM_getValue(PREVIEW_HITSVOL_GM_KEY, 0.3);
-        const n = Number(v);
-        if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
+        const v = GM_getValue(PREVIEW_HITSVOL_LEGACY_GM_KEY, undefined);
+        if (v !== undefined && v !== null && String(v) !== "") {
+          const n = Number(v);
+          if (Number.isFinite(n) && n >= 0 && n <= 1) {
+            writeStoredHitsoundVolume(n);
+            return n;
+          }
+        }
       } catch (_) {
         void 0;
       }
-      return 0.3;
+      const site = readOsuSiteAudioVolume();
+      if (site != null) return site;
+      return PREVIEW_VOLUME_DEFAULT;
     }
 
     function writeStoredHitsoundVolume(vol) {
+      const ls = pageLocalStorage();
+      if (!ls) return;
       try {
-        GM_setValue(PREVIEW_HITSVOL_GM_KEY, vol);
+        ls.setItem(PREVIEW_HITSOUND_LS_KEY, String(vol));
       } catch (_) {
         void 0;
       }
@@ -829,9 +908,13 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       clearTransportFlashTimer();
       transportPlayGlyph.hidden = isPlaying;
       transportPauseGlyph.hidden = !isPlaying;
-      transportOverlay.classList.add(`${wrapClass}__transport-overlay--visible`);
+      transportOverlay.classList.add(
+        `${wrapClass}__transport-overlay--visible`,
+      );
       transportFlashTimer = window.setTimeout(() => {
-        transportOverlay.classList.remove(`${wrapClass}__transport-overlay--visible`);
+        transportOverlay.classList.remove(
+          `${wrapClass}__transport-overlay--visible`,
+        );
         transportFlashTimer = 0;
       }, TRANSPORT_FLASH_HOLD_MS);
     }
@@ -991,7 +1074,10 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
      * @param {number} beatmapMs
      */
     function beatmapTimeOverlapsPreviewClip(eng, beatmapMs) {
-      if (!eng?.getPreviewAudioTimeMsForBeatmapTime || !Number.isFinite(beatmapMs)) {
+      if (
+        !eng?.getPreviewAudioTimeMsForBeatmapTime ||
+        !Number.isFinite(beatmapMs)
+      ) {
         return false;
       }
       const shifted = eng.getPreviewAudioTimeMsForBeatmapTime(beatmapMs);
@@ -1111,6 +1197,69 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         syncPreviewMusicToWindow(sharedEngine);
       } catch (_) {
         void 0;
+      }
+    }
+
+    /** @param {number} deltaMs */
+    function seekByDeltaMs(deltaMs) {
+      if (!sharedEngine || seekRange.disabled || !lastLoadedKey) return;
+      let t = 0;
+      let duration = 0;
+      try {
+        t = sharedEngine.getCurrentTime?.() ?? 0;
+        duration = sharedEngine.getDuration?.() ?? 0;
+      } catch (_) {
+        return;
+      }
+      const maxMs = Math.max(0, Number.isFinite(duration) ? duration : 0);
+      if (maxMs <= 0) return;
+      const next = Math.min(
+        maxMs,
+        Math.max(0, (Number.isFinite(t) ? t : 0) + deltaMs),
+      );
+      try {
+        sharedEngine.setCurrentTime?.(next);
+        syncPreviewMusicToWindow(sharedEngine);
+        syncSeekUiFromEngine();
+      } catch (_) {
+        void 0;
+      }
+    }
+
+    /**
+     * Space: play/pause. ArrowLeft/ArrowRight: ±1s seek.
+     * Volume sliders keep native arrow behavior; Jump to preview keeps Space on the button.
+     * @param {KeyboardEvent} ev
+     */
+    function onPreviewPanelKeydown(ev) {
+      if (
+        !expanded ||
+        panel.hidden ||
+        !lastLoadedKey ||
+        seekRange.disabled ||
+        busy
+      ) {
+        return;
+      }
+      const t = ev.target;
+      if (!(t instanceof Node) || !panel.contains(t)) return;
+      if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+
+      const key = ev.key;
+      const isArrow = key === "ArrowLeft" || key === "ArrowRight";
+      const isPlayKey = key === " " || key === "Enter" || key === "Spacebar";
+
+      if (isArrow) {
+        if (t === musicVolumeRange || t === hitsoundVolumeRange) return;
+        ev.preventDefault();
+        seekByDeltaMs(key === "ArrowLeft" ? -1000 : 1000);
+        return;
+      }
+
+      if (isPlayKey) {
+        if (t instanceof HTMLButtonElement && t !== canvasHost) return;
+        ev.preventDefault();
+        togglePlaybackFromCanvas();
       }
     }
 
@@ -1308,7 +1457,9 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         const eng = await ensureEngine();
         eng.pause();
         const bgAbs = absoluteUrl(bg);
-        const bgObjectUrl = bgAbs ? await fetchBeatmapCoverObjectUrl(bgAbs) : "";
+        const bgObjectUrl = bgAbs
+          ? await fetchBeatmapCoverObjectUrl(bgAbs)
+          : "";
         await eng.loadBeatmap({
           osuText,
           audioUrl: previewAudio || undefined,
@@ -1388,11 +1539,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       if ((ev.detail & 1) !== 1) return;
       togglePlaybackFromCanvas();
     });
-    canvasHost.addEventListener("keydown", (ev) => {
-      if (ev.key !== "Enter" && ev.key !== " ") return;
-      ev.preventDefault();
-      togglePlaybackFromCanvas();
-    });
+    panel.addEventListener("keydown", onPreviewPanelKeydown);
 
     toggleBtn.addEventListener("click", async () => {
       expanded = !expanded;
@@ -1400,9 +1547,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       panel.hidden = !expanded;
       const top = toggleBtn.querySelector(".btn-osu-big__text-top");
       if (top) {
-        top.textContent = expanded
-          ? "Hide beatmap preview"
-          : "Beatmap Preview";
+        top.textContent = expanded ? "Hide beatmap preview" : "Beatmap Preview";
       }
       if (expanded) {
         startSeekAnimationLoop();
@@ -1432,9 +1577,12 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     return {
       dispose: () => {
         window.removeEventListener("hashchange", onHashChange);
+        panel.removeEventListener("keydown", onPreviewPanelKeydown);
         stopSeekAnimationLoop();
         clearTransportFlashTimer();
-        transportOverlay.classList.remove(`${wrapClass}__transport-overlay--visible`);
+        transportOverlay.classList.remove(
+          `${wrapClass}__transport-overlay--visible`,
+        );
         revokeBeatmapCoverObjectUrl();
         parkSharedEngineRoot();
         row.remove();
