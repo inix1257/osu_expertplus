@@ -1,14 +1,4 @@
-/**
- * osu! API v2 client.
- *
- * If the user has configured OAuth credentials (via the settings panel),
- * requests are sent with a Bearer token fetched through the Client
- * Credentials flow (see auth.js).
- *
- * Without credentials the module falls back to the browser's session
- * cookie, which works for same-origin endpoints used internally by the
- * osu! website.
- */
+/** osu! API v2: Bearer when OAuth configured (auth.js), else session cookie. */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
@@ -81,8 +71,6 @@ OsuExpertPlus.api = (() => {
   function getBeatmapsetDiscussionPosts(params) {
     return get(`${BASE}/beatmapsets/discussions/posts`, params);
   }
-
-  // ─── Convenience methods ─────────────────────────────────────────────────
 
   /**
    * Fetch beatmapset metadata by id.

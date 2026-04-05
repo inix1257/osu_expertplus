@@ -1,7 +1,4 @@
-/**
- * Mod icons → text acronyms (uses `data-acronym` on `.mod__icon`).
- * Installed globally from the bundle entry so beatmap pages get the same behavior as profiles.
- */
+/** Replace `.mod__icon` sprites with `data-acronym` text (global). */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 

@@ -1,14 +1,4 @@
-/**
- * Page module: /home/account/edit
- *
- * Injects a step-by-step guide near the "Own Clients" OAuth section that
- * walks the user through creating a Client Credentials app so osu! Expert+
- * can use the official API v2.
- *
- * The guide is only shown when no credentials are saved. It auto-hides as
- * soon as the user saves credentials via the settings panel, and re-appears
- * if they clear them.
- */
+/** /home/account/edit — OAuth “Own Clients” setup guide when creds unset. */
 
 'use strict';
 
@@ -21,8 +11,6 @@ OsuExpertPlus.pages.accountEdit = (() => {
   const auth = OsuExpertPlus.auth;
 
   const GUIDE_ID    = 'oep-oauth-guide';
-
-  // ─── Styles ────────────────────────────────────────────────────────────
 
   const CSS = `
     #${GUIDE_ID} {
@@ -109,8 +97,6 @@ OsuExpertPlus.pages.accountEdit = (() => {
 
   const guideStyle = manageStyle('oep-account-edit-style', CSS);
 
-  // ─── Build guide card ───────────────────────────────────────────────────
-
   function buildGuide() {
     const body = el('div', { class: 'oep-guide__body' },
       'Register a new application below, copy its ',
@@ -173,14 +159,7 @@ OsuExpertPlus.pages.accountEdit = (() => {
     return guide;
   }
 
-  // ─── Find anchor & inject ───────────────────────────────────────────────
-
-  /**
-   * Locate the OAuth section's content column and return it.
-   * osu! renders the account edit page as a series of .account-edit blocks,
-   * each with a section-title column and an input-groups column.
-   * We find the block whose title contains "OAuth".
-   */
+  /** OAuth section’s `.account-edit__input-groups` (title match or #oauth). */
   function findOAuthInputGroups() {
     const titles = document.querySelectorAll('.account-edit__section-title');
     for (const title of titles) {
@@ -200,13 +179,9 @@ OsuExpertPlus.pages.accountEdit = (() => {
     return null;
   }
 
-  // ─── Module lifecycle ───────────────────────────────────────────────────
-
   let _guide = null;
 
   async function init(_match) {
-    console.debug('[osu! Expert+] AccountEdit init');
-
     guideStyle.inject();
 
     // Wait for the React-rendered OAuth section to appear.
@@ -215,12 +190,10 @@ OsuExpertPlus.pages.accountEdit = (() => {
       await waitForElement('.account-edit__section-title', 10000);
       inputGroups = findOAuthInputGroups();
     } catch {
-      console.warn('[osu! Expert+] account/edit: OAuth section not found.');
       return cleanup;
     }
 
     if (!inputGroups) {
-      console.warn('[osu! Expert+] account/edit: Could not locate OAuth input-groups.');
       return cleanup;
     }
 

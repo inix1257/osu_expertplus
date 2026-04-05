@@ -16,12 +16,14 @@ const OUT = path.join(ROOT, 'dist', 'osu-expertplus.user.js');
 // Files are concatenated in this exact order.
 const FILES = [
   'src/utils/dom.js',
+  'src/utils/difficulty-colours.js',
   'src/utils/auth.js',
   'src/utils/api.js',
   'src/utils/omdb.js',
   'src/utils/settings.js',
   'src/utils/beatmap-preview.js',
   'src/utils/beatmap-card-extra.js',
+  'src/utils/beatmap-card-stats.js',
   'src/utils/mod-icons-as-acronyms.js',
   'src/pages/beatmapsets-listing.js',
   'src/pages/beatmap-detail.js',

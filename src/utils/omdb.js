@@ -1,20 +1,14 @@
-/**
- * OMDB (https://omdb.nyahh.net/) API key from /settings/ — single key in GM storage.
- *
- * Usage:
- *   OsuExpertPlus.omdb.getApiKey()   → string (may be empty)
- *   OsuExpertPlus.omdb.setApiKey(k)
- *   OsuExpertPlus.omdb.clearApiKey()
- *   OsuExpertPlus.omdb.isConfigured() → boolean
- *   OsuExpertPlus.omdb.fetchBeatmapsetRatings(setId) → Promise<object[]|null>
- *   OsuExpertPlus.omdb.rateBeatmap(beatmapId, score) → Promise (0–5 in 0.5 steps, or -2 to clear)
- */
+/** OMDB API client; key in GM storage (omdb.nyahh.net). */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
 OsuExpertPlus.omdb = (() => {
   const KEY_API = 'oep_omdb_api_key';
   const API_BASE = 'https://omdb.nyahh.net';
+
+  /** Shown when /api/set returns non-JSON or not an array (missing mapset, API error page, etc.). */
+  const MSG_BEATMAPSET_RESPONSE_UNEXPECTED =
+    'This beatmapset may not be on OMDB, or OMDB returned an error.';
 
   function getApiKey() {
     return String(GM_getValue(KEY_API, '') || '').trim();
@@ -42,13 +36,18 @@ OsuExpertPlus.omdb = (() => {
     if (!key) return null;
     const url = `${API_BASE}/api/set/${encodeURIComponent(String(beatmapsetId))}?key=${encodeURIComponent(key)}`;
     const resp = await fetch(url, { credentials: 'omit' });
+    const raw = await resp.text().catch(() => '');
     if (!resp.ok) {
-      const t = await resp.text().catch(() => '');
-      throw new Error(`OMDB HTTP ${resp.status}${t ? `: ${t.slice(0, 160)}` : ''}`);
+      throw new Error(`OMDB HTTP ${resp.status}${raw ? `: ${raw.slice(0, 160)}` : ''}`);
     }
-    const data = await resp.json();
+    let data;
+    try {
+      data = raw.trim() ? JSON.parse(raw) : null;
+    } catch {
+      throw new Error(MSG_BEATMAPSET_RESPONSE_UNEXPECTED);
+    }
     if (!Array.isArray(data)) {
-      throw new Error('OMDB: expected JSON array');
+      throw new Error(MSG_BEATMAPSET_RESPONSE_UNEXPECTED);
     }
     return data;
   }

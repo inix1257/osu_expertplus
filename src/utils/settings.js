@@ -1,50 +1,40 @@
-/**
- * Settings store — wraps GM_getValue / GM_setValue and maintains a central
- * registry of every toggleable feature in the script.
- *
- * Usage:
- *   OsuExpertPlus.settings.isEnabled('userProfile.alwaysShowStats')
- *   OsuExpertPlus.settings.set('userProfile.alwaysShowStats', false)
- *   OsuExpertPlus.settings.onChange('userProfile.alwaysShowStats', (val) => …)
- */
+/** GM-backed feature toggles: isEnabled, set, onChange, IDS.* */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
 OsuExpertPlus.settings = (() => {
-  // ─── Feature registry ──────────────────────────────────────────────────
-  // Add a new entry here whenever a new toggleable feature is introduced.
-  //
-  // Each feature:
-  //   id          – unique dot-namespaced key (also used as GM storage key)
-  //   label       – short display name shown in the settings panel
-  //   description – one-sentence explanation shown below the toggle
-  //   group       – section heading in the settings panel
-  //   default     – whether the feature is on by default
-
   const FEATURES = [
     {
       id: "userProfile.alwaysShowStats",
       label: "Always show play count & favourites",
       description:
-        "Keeps the play count and favourite count visible on beatmap cards without needing to hover.",
-      group: "User Profile",
+        "On user profiles and on /beatmapsets: keeps play count and favourite count visible on each beatmap card without hovering.",
+      group: "Beatmap Card",
       default: true,
     },
     {
       id: "userProfile.beatmapCardExtraInfo",
       label: "Extra metadata on beatmap cards",
       description:
-        "On your profile beatmap lists and on /beatmapsets search: shows “from {source}” between the artist and mapper lines (reserved line when empty) and BPM plus longest drain length. On the profile, reuses data from osu’s own beatmaps tab request when possible instead of fetching each set again from the API.",
-      group: "User Profile",
-      default: false,
+        "On user profiles and on /beatmapsets: shows “from {source}” between the artist and mapper lines (reserved line when empty) and BPM plus longest drain length below the mapper line (from cached beatmapset JSON, no extra API calls). Uses osu’s listing JSON, search responses, and profile `extra-pages/beatmaps` (fetch/XHR hooks; one session prefetch if needed).",
+      group: "Beatmap Card",
+      default: true,
+    },
+    {
+      id: "userProfile.beatmapCardDifficultyRange",
+      label: "Star rating range on beatmap cards",
+      description:
+        "On user profiles and on /beatmapsets: after each mode’s difficulty dots, shows min–max nomod star rating as coloured pills (from cached `difficulty_rating` per beatmap; same JSON sources as extra metadata).",
+      group: "Beatmap Card",
+      default: true,
     },
     {
       id: "userProfile.fullBeatmapStatNumbers",
       label: "Full numbers on beatmap card stats",
       description:
-        "Shows exact play count and favourite counts (e.g. 159,915 instead of 159.9K) using values from the page HTML.",
-      group: "User Profile",
-      default: false,
+        "On user profiles and on /beatmapsets: shows exact play and favourite counts (e.g. 159,915 instead of 159.9K) from each card’s tooltip/title in the HTML.",
+      group: "Beatmap Card",
+      default: true,
     },
     {
       id: "userProfile.scoreListDetails",
@@ -92,7 +82,7 @@ OsuExpertPlus.settings = (() => {
       description:
         "Displays the position (#1, #2, …) before each score card's rank grade in the Ranks section.",
       group: "User Profile",
-      default: false,
+      default: true,
     },
     {
       id: "beatmapDetail.discussionDefaultToTotal",
@@ -106,7 +96,7 @@ OsuExpertPlus.settings = (() => {
       id: "beatmapDetail.omdbBeatmapsetRatings",
       label: "Show OMDB difficulty ratings",
       description:
-        "On beatmapset pages, shows OMDB stats above the difficulty name and star voting (0 at the left edge of the first star, then 0.5–5). Requires an OMDB API key in settings.",
+        "On beatmapset pages, shows an OMDB link to this mapset above the difficulty name. Difficulty stats, distribution popover, and star voting (0 at the left edge of the first star, then 0.5–5) need an OMDB API key in Expert+ settings.",
       group: "Beatmap Detail",
       default: true,
     },
@@ -120,7 +110,6 @@ OsuExpertPlus.settings = (() => {
     },
   ];
 
-  // One-time: merge former userProfile.ppDecimals + userProfile.bestScoreStats.
   (function migrateScoreListDetails() {
     const flag = "userProfile._oepScoreListDetailsMigrated";
     if (GM_getValue(flag, false)) return;
@@ -138,11 +127,25 @@ OsuExpertPlus.settings = (() => {
     GM_setValue(flag, true);
   })();
 
-  // ─── Listeners ─────────────────────────────────────────────────────────
+  (function migrateBeatmapCardDifficultyRange() {
+    const flag = "userProfile._oepBeatmapCardDifficultyRangeMigrated";
+    if (GM_getValue(flag, false)) return;
+    const unset = "__oep_unset__";
+    const newKey = "userProfile.beatmapCardDifficultyRange";
+    if (GM_getValue(newKey, unset) !== unset) {
+      GM_setValue(flag, true);
+      return;
+    }
+    const extra = FEATURES.find((f) => f.id === "userProfile.beatmapCardExtraInfo");
+    const extraDefault = extra ? extra.default : false;
+    if (GM_getValue("userProfile.beatmapCardExtraInfo", extraDefault)) {
+      GM_setValue(newKey, true);
+    }
+    GM_setValue(flag, true);
+  })();
+
   /** @type {Map<string, Set<function>>} */
   const _listeners = new Map();
-
-  // ─── Public API ─────────────────────────────────────────────────────────
 
   /** Return the full feature registry (read-only copy). */
   function getFeatures() {
@@ -188,14 +191,10 @@ OsuExpertPlus.settings = (() => {
     return () => _listeners.get(id)?.delete(fn);
   }
 
-  /**
-   * Canonical feature ID constants.  Page modules should reference these
-   * instead of hard-coding string literals so the compiler (or a simple
-   * search) can catch typos.
-   */
   const IDS = Object.freeze({
     ALWAYS_SHOW_STATS: "userProfile.alwaysShowStats",
     BEATMAP_CARD_EXTRA_INFO: "userProfile.beatmapCardExtraInfo",
+    BEATMAP_CARD_DIFFICULTY_RANGE: "userProfile.beatmapCardDifficultyRange",
     FULL_BEATMAP_STAT_NUMBERS: "userProfile.fullBeatmapStatNumbers",
     SCORE_LIST_DETAILS: "userProfile.scoreListDetails",
     MODDED_STAR_RATING: "userProfile.moddedStarRating",

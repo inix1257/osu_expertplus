@@ -1,9 +1,4 @@
-/**
- * Page module: /beatmapsets/<id>[/...]  (individual beatmapset / difficulty page)
- *
- * `init()` is called by the Router every time this page is navigated to.
- * Returns a cleanup function (or a Promise thereof) that undoes DOM changes on navigation away.
- */
+/** /beatmapsets/:id and variants. */
 
 "use strict";
 
@@ -25,13 +20,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   const { IDS } = settings;
   const omdb = OsuExpertPlus.omdb;
 
-  // Shared with user profile: controls pp decimals + hit stats score-row details.
+  // With user-profile: score-row PP + hit stats
   const SCORE_LIST_DETAILS_ID = IDS.SCORE_LIST_DETAILS;
   const DISCUSSION_DEFAULT_TO_TOTAL_ID = IDS.DISCUSSION_DEFAULT_TO_TOTAL;
   const OMDB_BEATMAPSET_RATINGS_ID = IDS.OMDB_BEATMAPSET_RATINGS;
   const BEATMAP_PREVIEW_ID = IDS.BEATMAP_PREVIEW;
   const beatmapPreview = OsuExpertPlus.beatmapPreview;
-  // Session-memory cache (lives until tab/page is closed).
   const DISCUSSION_USER_CACHE = new Map();
 
   const STYLE_ID = "osu-expertplus-beatmap-detail-css";
@@ -885,6 +879,22 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     .${OEP_OMDB_ROW_CLASS}__body--muted {
       opacity: 0.5;
     }
+    a.${OEP_OMDB_ROW_CLASS}__settings-link {
+      color: inherit;
+      font-weight: 600;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+    }
+    a.${OEP_OMDB_ROW_CLASS}__settings-link:hover {
+      color: hsl(var(--hsl-c2, 333 60% 72%));
+      opacity: 1;
+    }
+    a.${OEP_OMDB_ROW_CLASS}__settings-link:focus-visible {
+      outline: 2px solid hsl(var(--hsl-c2, 333 60% 65%));
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
     .${OEP_OMDB_ROW_CLASS}__body--error {
       color: #e05c5c;
       opacity: 0.95;
@@ -1636,9 +1646,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           ) {
             applyBeatmapModGrid(modsEl, el);
           }
-        } catch (e) {
-          console.warn("[osu! Expert+] mod grid:", e);
-        }
+        } catch (_) {}
       }, 0);
     }
 
@@ -1711,16 +1719,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: Beatmap scoreboard — highlight scores by age (same prefs as profile
-  // top ranks: period slider + reverse)
-  // ─────────────────────────────────────────────────────────────────────────
-
+  // Scoreboard: age highlight (same period UI as profile top ranks)
   const SCORES_DATE_HIGHLIGHT_STYLE_ID = "osu-expertplus-ranks-date-highlight";
   const SCORES_DATE_FILTER_CLASS = "oep-ranks-date-filter";
   const SCORES_DATE_HIGHLIGHT_CLASS = "oep-ranks-date-highlight";
   const SCORES_DATE_FILTER_MARKER = "data-oep-beatmap-scores-period-filter";
-  /** Cached epoch ms; osu-web tooltips strip `title` from `time.js-tooltip-time`, which broke re-sync. */
+  /** ended_at ms — title is cleared after tooltip bind */
   const SCORE_ROW_ENDED_MS_ATTR = "data-oep-score-ended-ms";
   const MS_PER_DAY_SCORES = 24 * 60 * 60 * 1000;
   const MS_PER_WEEK_SCORES = 7 * MS_PER_DAY_SCORES;
@@ -1773,7 +1777,13 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       flex: 1;
       min-width: 0;
     }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__reverse {
+    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__actions {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      flex-shrink: 0;
+    }
+    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__btn {
       flex-shrink: 0;
       margin: 0;
       font: inherit;
@@ -1786,9 +1796,13 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       color: rgba(255, 255, 255, 0.82);
       cursor: pointer;
     }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__reverse:hover {
+    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__btn:hover {
       border-color: rgba(255, 255, 255, 0.28);
       color: rgba(255, 255, 255, 0.92);
+    }
+    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__btn:focus-visible {
+      outline: 2px solid rgba(102, 204, 255, 0.35);
+      outline-offset: 1px;
     }
     .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__reverse.oep-ranks-date-filter__reverse--on {
       border-color: rgba(102, 204, 255, 0.45);
@@ -2099,11 +2113,21 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     const tailEl = el("span", { class: "oep-ranks-date-filter__tail" });
     setScoresFilterBarLabels(statusEl, tailEl, periodIdx, reversedStored);
 
+    const resetBtn = el(
+      "button",
+      {
+        type: "button",
+        class: "oep-ranks-date-filter__btn oep-ranks-date-filter__reset",
+        "aria-label": "Reset period and reverse filter",
+      },
+      "Reset",
+    );
+
     const revBtn = el(
       "button",
       {
         type: "button",
-        class: `oep-ranks-date-filter__reverse${reversedStored ? " oep-ranks-date-filter__reverse--on" : ""}`,
+        class: `oep-ranks-date-filter__btn oep-ranks-date-filter__reverse${reversedStored ? " oep-ranks-date-filter__reverse--on" : ""}`,
         "aria-pressed": reversedStored ? "true" : "false",
         "aria-label": "Reverse highlight to older scores outside the period",
       },
@@ -2135,7 +2159,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         "div",
         { class: "oep-ranks-date-filter__row" },
         el("p", { class: "oep-ranks-date-filter__text" }, statusEl, tailEl),
-        revBtn,
+        el(
+          "div",
+          { class: "oep-ranks-date-filter__actions" },
+          resetBtn,
+          revBtn,
+        ),
       ),
       range,
     );
@@ -2154,6 +2183,23 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       const idx = clampScoresPeriodIndex(range.value);
       setScoresFilterBarLabels(statusEl, tailEl, idx, next);
       applyBeatmapScoresDateHighlights(scoreboardRoot, idx, next);
+    });
+
+    resetBtn.addEventListener("click", () => {
+      range.value = String(SCORES_PERIOD_IDX_DEFAULT);
+      revBtn.setAttribute("aria-pressed", "false");
+      revBtn.classList.remove("oep-ranks-date-filter__reverse--on");
+      setScoresFilterBarLabels(
+        statusEl,
+        tailEl,
+        SCORES_PERIOD_IDX_DEFAULT,
+        false,
+      );
+      applyBeatmapScoresDateHighlights(
+        scoreboardRoot,
+        SCORES_PERIOD_IDX_DEFAULT,
+        false,
+      );
     });
   }
 
@@ -3386,10 +3432,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       });
     };
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: Extended global leaderboard via GET /beatmaps/{id}/scores
-  // ─────────────────────────────────────────────────────────────────────────
 
   const EXTENDED_LEADERBOARD_FEATURE_ID =
     "beatmapDetail.apiExtendedLeaderboard";
@@ -5020,7 +5062,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           Array.isArray(set?.recent_favourites) ? set.recent_favourites : [],
         )
         .catch((e) => {
-          console.warn("[osu! Expert+] beatmapset recent favourites:", e);
           usersPromise = null;
           throw e;
         });
@@ -5282,8 +5323,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     try {
       await navigator.clipboard.writeText(text);
       return true;
-    } catch (e) {
-      console.warn("[osu! Expert+] clipboard write failed:", e);
+    } catch (_) {
       return false;
     }
   }
@@ -5533,7 +5573,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       if (!container || container.dataset.oepSpoilersBound === "1") continue;
       container.dataset.oepSpoilersBound = "1";
 
-      // Store a "previous" display value when we can infer it.
       for (const contentEl of contents) {
         if (contentEl.dataset.oepSpoilersPrevDisplay != null) continue;
         const inlineDisplay = contentEl.style.display;
@@ -5541,7 +5580,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           contentEl.dataset.oepSpoilersPrevDisplay = inlineDisplay;
           continue;
         }
-        // If it's visible at bind time, we can record its display type.
         try {
           const cs = window.getComputedStyle(contentEl);
           if (cs.display && cs.display !== "none")
@@ -5551,7 +5589,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         }
       }
 
-      // Determine initial open/closed state.
       const initiallyOpen = contents.some((c) => isOpenInitial(c));
       container.dataset.oepSpoilersOpen = initiallyOpen ? "1" : "0";
 
@@ -6203,6 +6240,70 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
+   * OMDB mapset link + short hint when the feature is on but no API key is set.
+   * @returns {() => void}
+   */
+  function mountOmdbBeatmapsetLinkOnlyRow(header, beatmapsetId) {
+    const diffName = header.querySelector(".beatmapset-header__diff-name");
+    const box = header.querySelector(".beatmapset-header__beatmap-picker-box");
+    if (!diffName || !box) return () => {};
+
+    const stale = box.querySelector('[data-oep-omdb-row="1"]');
+    if (stale) stale.remove();
+
+    const omdbLabel = el(
+      "a",
+      {
+        class: `${OEP_OMDB_ROW_CLASS}__label`,
+        href: `https://omdb.nyahh.net/mapset/${encodeURIComponent(String(beatmapsetId))}`,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        title: "Open this beatmapset on OMDB",
+      },
+      "OMDB",
+    );
+    const keyLink = el(
+      "a",
+      {
+        href: "#",
+        class: `${OEP_OMDB_ROW_CLASS}__settings-link`,
+        title: "Open Expert+ settings",
+      },
+      "OMDB API key",
+    );
+    keyLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      OsuExpertPlus.settingsPanel?.open?.();
+    });
+    const bodyEl = el(
+      "span",
+      {
+        class: `${OEP_OMDB_ROW_CLASS}__body ${OEP_OMDB_ROW_CLASS}__body--muted`,
+      },
+      "Add an ",
+      keyLink,
+      " to load OMDB ratings here",
+    );
+    const statsRow = el(
+      "div",
+      { class: OEP_OMDB_ROW_CLASS },
+      omdbLabel,
+      bodyEl,
+    );
+    const wrap = el("div", {
+      class: OEP_OMDB_WRAP_CLASS,
+      "data-oep-omdb-row": "1",
+    });
+    wrap.appendChild(statsRow);
+    box.insertBefore(wrap, diffName);
+
+    return () => {
+      wrap.remove();
+    };
+  }
+
+  /**
    * Inserts an OMDB stats row above `.beatmapset-header__diff-name`.
    * Tracks hovered vs active picker link (same behaviour as the difficulty title).
    * @returns {() => void}
@@ -6556,7 +6657,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         await omdb.rateBeatmap(id, score);
         await reloadSetRatings();
       } catch (err) {
-        console.warn("[osu! Expert+] OMDB vote:", err);
         voteStatus.textContent = err?.message
           ? String(err.message)
           : "Could not submit rating.";
@@ -6601,7 +6701,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       })
       .catch((err) => {
         if (disposed) return;
-        console.warn("[osu! Expert+] OMDB ratings:", err);
         bodyEl.textContent = err?.message
           ? String(err.message)
           : "Could not load OMDB ratings.";
@@ -6714,23 +6813,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    */
   async function init(match) {
     const beatmapsetId = match[1];
-    console.debug(`[osu! Expert+] BeatmapDetail init — id: ${beatmapsetId}`);
     const pathRe = new RegExp(`^/beatmapsets/${beatmapsetId}(?:/|$)`);
-
-    // Diagnostic: snapshot which beatmapset-related elements exist right now
-    // (before any waiting).  This helps identify if `.beatmapset-header` has
-    // been renamed in a newer osu! frontend build.
-    {
-      const _diag = [
-        ".beatmapset-header",
-        ".beatmapset-info",
-        ".beatmapset-scoreboard",
-        ".beatmapset-scoreboard__main",
-        "[data-react='beatmapset-page']",
-        ".osu-layout--full",
-      ].reduce((acc, s) => ({ ...acc, [s]: !!document.querySelector(s) }), {});
-      console.debug("[osu! Expert+] BeatmapDetail DOM at init:", _diag);
-    }
 
     // Discussion routes use a different layout and may not have beatmapset header/scoreboard UI.
     if (/^\/beatmapsets\/\d+\/discussion(?:\/|$)/i.test(location.pathname)) {
@@ -6771,45 +6854,14 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       descriptionInfoModal = null;
     };
 
-    // On SPA re-navigation the previous page's header may still be in the DOM
-    // when init() fires.  Only wait if WE previously marked it — fresh headers
-    // rendered by Inertia before our poll fired won't have the attribute.
-    console.debug(
-      "[osu! Expert+] BeatmapDetail: waiting for stale header to leave…",
-    );
     await waitForStaleElementToLeave(BEATMAPSET_HEADER_STALE_SEL);
 
-    console.debug(
-      "[osu! Expert+] BeatmapDetail: waiting for fresh .beatmapset-header…",
-    );
     let header;
     try {
       header = await waitForElement(".beatmapset-header", 15000);
-    } catch (e) {
-      // Timeout: log what IS in the DOM now to find the real selector.
-      const _diag2 = [
-        ".beatmapset-header",
-        ".beatmapset-info",
-        ".beatmapset-scoreboard",
-        ".beatmapset-scoreboard__main",
-        "[data-react='beatmapset-page']",
-        ".osu-layout--full",
-        ".beatmapset-cover",
-        ".header-v4--beatmapset",
-      ].reduce((acc, s) => {
-        const el = document.querySelector(s);
-        acc[s] = el ? el.className || "(no class)" : false;
-        return acc;
-      }, {});
-      console.debug(
-        "[osu! Expert+] BeatmapDetail: timed out — DOM now:",
-        _diag2,
-      );
+    } catch (_) {
       return cleanup;
     }
-    console.debug(
-      "[osu! Expert+] BeatmapDetail: header found, applying features",
-    );
 
     header.setAttribute(BEATMAPSET_HEADER_PROCESSED_ATTR, "1");
 
@@ -6830,17 +6882,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         omdbRatingsCleanup?.();
       } catch (_) {}
       omdbRatingsCleanup = null;
-      if (
-        !settings.isEnabled(OMDB_BEATMAPSET_RATINGS_ID) ||
-        !omdb.isConfigured()
-      ) {
+      if (!settings.isEnabled(OMDB_BEATMAPSET_RATINGS_ID)) {
         return;
       }
-      omdbRatingsCleanup = mountOmdbBeatmapsetRatingsRow(
-        header,
-        beatmapsetId,
-        pathRe,
-      );
+      omdbRatingsCleanup = omdb.isConfigured()
+        ? mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe)
+        : mountOmdbBeatmapsetLinkOnlyRow(header, beatmapsetId);
     }
     refreshOmdbBeatmapsetRatings();
     bag.add(
@@ -6969,7 +7016,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
             buildBody: () => buildDescriptionModalBody(data, el),
           });
         }
-
       }
     } catch (_) {
       /* beatmapset info column not present (layout edge case) */

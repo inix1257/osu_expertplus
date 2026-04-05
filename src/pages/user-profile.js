@@ -1,9 +1,4 @@
-/**
- * Page module: /users/<id-or-name>  (user profile page)
- *
- * `init()` is called by the Router every time this page is navigated to.
- * Returns a cleanup function that undoes DOM changes on navigation away.
- */
+/** User profile page. Router calls init per visit; cleanup on navigate away. */
 
 "use strict";
 
@@ -28,141 +23,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     modTypeClassForAcronym,
   } = OsuExpertPlus.modIconsAsAcronyms;
 
-  const USER_PROFILE_DEBUG_STORAGE_KEY = "osuExpertPlus.userProfileDebug";
-  const USER_PROFILE_DEBUG_STORAGE_KEY_LEGACY = "osuExtraPlus.userProfileDebug";
-  const USER_PROFILE_DEBUG_QS_KEY = "oexpDebugUserProfile";
-  const USER_PROFILE_DEBUG_QS_KEY_LEGACY = "oepDebugUserProfile";
-
-  function isUserProfileDebugEnabled() {
-    try {
-      const qs = new URLSearchParams(location.search);
-      if (
-        qs.get(USER_PROFILE_DEBUG_QS_KEY) === "1" ||
-        qs.get(USER_PROFILE_DEBUG_QS_KEY_LEGACY) === "1"
-      ) {
-        return true;
-      }
-    } catch (_) {}
-    try {
-      if (localStorage.getItem(USER_PROFILE_DEBUG_STORAGE_KEY) === "1") {
-        return true;
-      }
-      if (localStorage.getItem(USER_PROFILE_DEBUG_STORAGE_KEY_LEGACY) === "1") {
-        localStorage.setItem(USER_PROFILE_DEBUG_STORAGE_KEY, "1");
-        localStorage.removeItem(USER_PROFILE_DEBUG_STORAGE_KEY_LEGACY);
-        return true;
-      }
-    } catch (_) {}
-    return false;
-  }
-
-  function profileDebug(...args) {
-    if (!isUserProfileDebugEnabled()) return;
-    console.debug("[osu! Expert+][UserProfile]", ...args);
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: always-visible beatmap stats on beatmapset cards
-  // ─────────────────────────────────────────────────────────────────────────
-
-  const ALWAYS_SHOW_STATS_ID = IDS.ALWAYS_SHOW_STATS;
-  const ALWAYS_SHOW_STATS_STYLE_ID = "osu-expertplus-userprofile-stats";
-
-  const ALWAYS_SHOW_STATS_CSS = `
-    .beatmapset-panel { --stats-opacity: 1 !important; }
-  `;
-  const alwaysShowStatsStyle = manageStyle(
-    ALWAYS_SHOW_STATS_STYLE_ID,
-    ALWAYS_SHOW_STATS_CSS,
-  );
-
-  function injectAlwaysShowStats() {
-    alwaysShowStatsStyle.inject();
-  }
-  function removeAlwaysShowStats() {
-    alwaysShowStatsStyle.remove();
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: full play count / favourite numbers on beatmapset panels
-  // ─────────────────────────────────────────────────────────────────────────
-  //
-  // osu! shows abbreviated values (159.9K, 1.1K) but keeps the exact count in
-  // title="Playcount: …" / title="Favourites: …" (or data-orig-title after qtip).
-
-  const FULL_BEATMAP_STATS_ID = IDS.FULL_BEATMAP_STAT_NUMBERS;
-  const FULL_BEATMAP_STATS_ITEM_ATTR = "data-oep-full-stat-item";
-  const FULL_BEATMAP_STATS_VALUE_ATTR = "data-oep-full-stat-abbrev";
-
-  function beatmapStatTooltipSource(item) {
-    return (
-      item.getAttribute("data-orig-title") || item.getAttribute("title") || ""
-    );
-  }
-
-  function parseBeatmapStatCount(tooltip, kind) {
-    const re =
-      kind === "play" ? /Playcount:\s*([\d,]+)/i : /Favourites:\s*([\d,]+)/i;
-    const m = tooltip.match(re);
-    if (!m) return null;
-    const n = parseInt(String(m[1]).replace(/,/g, ""), 10);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  function formatBeatmapStatCount(n) {
-    return n.toLocaleString("en-US");
-  }
-
-  /**
-   * @param {ParentNode} scope
-   */
-  function applyFullBeatmapStatNumbers(scope) {
-    const items = scope.querySelectorAll(
-      ".beatmapset-panel__stats-item--play-count, .beatmapset-panel__stats-item--favourite-count",
-    );
-    items.forEach((item) => {
-      if (item.hasAttribute(FULL_BEATMAP_STATS_ITEM_ATTR)) return;
-
-      const isPlay = item.classList.contains(
-        "beatmapset-panel__stats-item--play-count",
-      );
-      const n = parseBeatmapStatCount(
-        beatmapStatTooltipSource(item),
-        isPlay ? "play" : "favourite",
-      );
-      if (n === null) return;
-
-      const icon = item.querySelector(".beatmapset-panel__stats-item-icon");
-      const valSpan = icon?.nextElementSibling;
-      if (!valSpan || valSpan.tagName !== "SPAN") return;
-
-      valSpan.setAttribute(FULL_BEATMAP_STATS_VALUE_ATTR, valSpan.textContent);
-      valSpan.textContent = formatBeatmapStatCount(n);
-      item.setAttribute(FULL_BEATMAP_STATS_ITEM_ATTR, "1");
-    });
-  }
-
-  /**
-   * @param {ParentNode} scope
-   */
-  function revertFullBeatmapStatNumbers(scope) {
-    scope
-      .querySelectorAll(
-        `.beatmapset-panel__stats-item[${FULL_BEATMAP_STATS_ITEM_ATTR}]`,
-      )
-      .forEach((item) => {
-        const icon = item.querySelector(".beatmapset-panel__stats-item-icon");
-        const valSpan = icon?.nextElementSibling;
-        if (valSpan?.hasAttribute(FULL_BEATMAP_STATS_VALUE_ATTR)) {
-          valSpan.textContent = valSpan.getAttribute(
-            FULL_BEATMAP_STATS_VALUE_ATTR,
-          );
-          valSpan.removeAttribute(FULL_BEATMAP_STATS_VALUE_ATTR);
-        }
-        item.removeAttribute(FULL_BEATMAP_STATS_ITEM_ATTR);
-      });
-  }
-
   /**
    * True when a mutation batch contains an added node that matches selector
    * (or contains matching descendants).
@@ -181,35 +41,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     return false;
   }
 
-  /** @returns {function} disconnect */
-  function startFullBeatmapStatsObserver() {
-    const obs = new MutationObserver((mutations) => {
-      if (!settings.isEnabled(FULL_BEATMAP_STATS_ID)) return;
-      for (const m of mutations) {
-        for (const node of m.addedNodes) {
-          if (node.nodeType !== Node.ELEMENT_NODE) continue;
-          const el = /** @type {Element} */ (node);
-          if (el.matches?.(".beatmapset-panel")) {
-            applyFullBeatmapStatNumbers(el);
-          } else {
-            el.querySelectorAll?.(".beatmapset-panel").forEach((panel) => {
-              applyFullBeatmapStatNumbers(panel);
-            });
-          }
-        }
-      }
-    });
-    obs.observe(document.documentElement, { childList: true, subtree: true });
-    return () => obs.disconnect();
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: score list details — pp decimals (from title) + hit statistics row
-  // ─────────────────────────────────────────────────────────────────────────
-  //
-  // osu! renders: <span title="610.267">610<span class="play-detail__pp-unit">pp</span></span>
-  // We format the numeric value to two decimal places in the visible text node.
-
+  // Score lists: PP from span title → 2dp; hit-stat row from API (fetchScores)
   const SCORE_LIST_DETAILS_ID = IDS.SCORE_LIST_DETAILS;
   const PP_DECIMALS_ATTR = "data-oep-pp-original";
 
@@ -230,7 +62,7 @@ OsuExpertPlus.pages.userProfile = (() => {
         if (!Number.isFinite(n)) return;
 
         span.setAttribute(PP_DECIMALS_ATTR, textNode.textContent.trim());
-        textNode.textContent = n.toFixed(2) + "\u200A"; // hair space keeps layout tidy
+        textNode.textContent = n.toFixed(2) + "\u200A"; // hair space
       });
   }
 
@@ -247,57 +79,26 @@ OsuExpertPlus.pages.userProfile = (() => {
       });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Shared stylesheet for all play-detail features
-  // ─────────────────────────────────────────────────────────────────────────
-
   const PLAY_DETAIL_STYLE_ID = "osu-expertplus-play-detail";
 
-  /**
-   * When present on a `.play-detail-list`, desktop width rules and mid-column layout
-   * for pp decimals + hit stats apply. Omitting it restores osu’s default score column
-   * sizing after the option is turned off (otherwise fixed widths leave a blank band).
-   */
+  /** On `.play-detail-list`: enables our desktop column widths; remove when feature off. */
   const SCORE_LIST_LAYOUT_CLASS = "oep-score-list-details-layout";
   const SCORE_LIST_LAYOUT_SEL = `.play-detail-list.${SCORE_LIST_LAYOUT_CLASS}`;
 
-  /**
-   * Desktop score cards: .group--top flex:1; .group--bottom lays out mods (content-sized)
-   * then fixed-width score-detail + pp. Accuracy/combo columns still align across rows;
-   * mods column width follows each row’s mod list up to a cap.
-   *
-   * @see osu-web .play-detail__* in app.css (saved export).
-   */
+  /** Desktop `.play-detail` flex tracks (mods / pp / accuracy / combo+stats). */
   const PLAY_DETAIL_DESKTOP_TUNING = {
-    /**
-     * Max width for the mod icons cell; actual width is max-content (short mod lists stay narrow).
-     */
     modsColMaxWidth: "min(72vw, 40rem)",
-    /**
-     * osu sets .play-detail__pp { --desktop-width: … }; min-width uses it.
-     * Slightly wider so PP decimals (xxxx.xx) + unit don’t crowd the chevron.
-     */
     ppDesktopWidth: "max(102px, 10ch)",
-    /**
-     * Outer flex track for the PP cell (content + osu padding/chevron). Constant across rows.
-     */
     ppColWidth: "calc(max(102px, 10ch) + 2.45rem)",
-    /** Fixed track for % (tabular); keep ≥ ~“100.00%” at 15px without clipping. */
     accuracyColWidth: "7.5ch",
-    /** Fixed track for “comboX/maxX” + stats row (right-aligned block). */
     comboStatsColWidth: "13rem",
-    /** Horizontal gap between accuracy column and combo+stats column. */
     midGap: "0.28em",
-    /**
-     * Min outer width of the SR pill so icon+value can sit centered when content is narrower.
-     */
     srBadgeMinWidth: "4.5rem",
   };
 
   const PLAY_DETAIL_CSS = `
     .oep-hidden { display: none !important; }
 
-    /* SR badge before difficulty: keep pill aligned with text row */
     .play-detail__beatmap-and-time {
       align-items: center;
     }
@@ -311,11 +112,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       box-sizing: border-box;
     }
 
-    /*
-     * Mid column (.score-detail-top-right): accuracy | combo+stats. On desktop, widths
-     * come from --oep-accuracy-col / --oep-combo-stats-col on .group--bottom so they align
-     * with other score rows; mods + score-detail + pp use fixed tracks the same way.
-     */
     ${SCORE_LIST_LAYOUT_SEL} .oep-mid-cols {
       display: flex;
       flex-direction: column;
@@ -355,10 +151,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       margin-top: 0;
     }
 
-    /*
-     * Desktop (≥900px): [ metadata flex:1 ][ content-sized mods | fixed score-detail | fixed pp ].
-     * --oep-* on .group--bottom keeps score-detail + pp edges aligned; mods grow/shrink per row.
-     */
     @media (min-width: 900px) {
       ${SCORE_LIST_LAYOUT_SEL} .play-detail {
         align-items: stretch;
@@ -406,10 +198,6 @@ OsuExpertPlus.pages.userProfile = (() => {
         justify-content: flex-end;
       }
 
-      /*
-       * osu: .score-detail has padding 5px 10px; .score-detail-top-right has margin-left 10px
-       * (gap from rank icon). Icon--extra is display:none here — fixed width = pad + gap + mid.
-       */
       ${SCORE_LIST_LAYOUT_SEL} .play-detail__score-detail {
         flex: 0 0
           calc(
@@ -543,7 +331,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       opacity: 0.92;
       font-variant-numeric: tabular-nums;
     }
-    /* Default combo numbers (achieved) look thinner than the green FC max combo. */
     ${SCORE_LIST_LAYOUT_SEL} .oep-combo-inline__num {
       font-weight: 500;
     }
@@ -552,10 +339,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       font-weight: 800;
     }
 
-    /*
-     * Fallback styling for injected combo/stats text when osu temporarily
-     * re-renders surrounding list classes (e.g. score options popup open).
-     */
     .play-detail-list .oep-combo-inline {
       font-weight: 700;
       font-size: 15px;
@@ -575,7 +358,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       font-weight: 800;
     }
 
-    /* score stats row — inside .play-detail__score-detail-top-right */
     ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats {
       display: flex;
       align-items: center;
@@ -629,7 +411,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     .play-detail-list .oep-score-stats__val--50   { color: #e0b03a; }
     .play-detail-list .oep-score-stats__val--miss { color: #e05c5c; }
 
-    /* Modded SR — outer pill; icon + value live in .oep-sr-badge__inner for a stable gap. */
     .oep-sr-badge {
       display: inline-flex;
       align-items: center;
@@ -640,7 +421,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       min-width: ${PLAY_DETAIL_DESKTOP_TUNING.srBadgeMinWidth};
       min-height: 1.35em;
       border-radius: 10000px;
-      /* osu .play-detail__beatmap-and-time uses gap: 15px; pull title closer without shrinking beatmap↔time */
       margin: 0 -0.55rem 0 0;
       flex-shrink: 0;
       vertical-align: middle;
@@ -677,20 +457,9 @@ OsuExpertPlus.pages.userProfile = (() => {
   `;
   const playDetailStyle = manageStyle(PLAY_DETAIL_STYLE_ID, PLAY_DETAIL_CSS);
 
-  // (score list details continued — fetch + inject hit row)
-  // ─────────────────────────────────────────────────────────────────────────
   const SCORE_STATS_ATTR = "data-oep-stats";
 
-  /**
-   * Fetch all scores of a given type for a user from osu!'s internal API.
-   * type: 'best' | 'pinned' | 'firsts'
-   * Returns an ordered array of score objects (same order the page renders them).
-   *
-   * @param {string|number} userId
-   * @param {string} mode   e.g. 'osu', 'taiko', 'fruits', 'mania'
-   * @param {string} type   'best' | 'pinned' | 'firsts'
-   * @returns {Promise<Object[]>}
-   */
+  /** GET /users/{id}/scores/{type} paginated; same order as DOM. */
   async function fetchScores(userId, mode, type) {
     const scores = [];
     const limit = 100;
@@ -698,16 +467,9 @@ OsuExpertPlus.pages.userProfile = (() => {
     const maxPages = 20;
     let lastPageKey = "";
     let pageCount = 0;
-    const startedAt = performance.now();
 
     for (let offset = 0; ; offset += limit) {
       if (pageCount >= maxPages) {
-        profileDebug("fetchScores stop: max pages", {
-          userId,
-          mode,
-          type,
-          maxPages,
-        });
         break;
       }
       const url = `/users/${userId}/scores/${type}?mode=${mode}&limit=${limit}&offset=${offset}&include=beatmap`;
@@ -717,8 +479,7 @@ OsuExpertPlus.pages.userProfile = (() => {
           credentials: "include",
           headers: { Accept: "application/json" },
         });
-      } catch (e) {
-        console.error("[osu! Expert+] fetch error:", e);
+      } catch {
         break;
       }
 
@@ -731,7 +492,6 @@ OsuExpertPlus.pages.userProfile = (() => {
         break;
       }
 
-      // The endpoint may return a plain array or an {items:[...]} wrapper.
       const items = Array.isArray(body)
         ? body
         : Array.isArray(body?.items)
@@ -748,39 +508,18 @@ OsuExpertPlus.pages.userProfile = (() => {
         )
         .join("|");
       if (pageKey && pageKey === lastPageKey) {
-        profileDebug("fetchScores stop: duplicate page", {
-          userId,
-          mode,
-          type,
-          offset,
-          pageCount,
-        });
         break;
       }
       lastPageKey = pageKey;
 
       scores.push(...items);
       if (scores.length >= maxTotal) {
-        profileDebug("fetchScores stop: max total", {
-          userId,
-          mode,
-          type,
-          maxTotal,
-        });
         break;
       }
       if (items.length < limit) break;
     }
 
     const out = scores.slice(0, maxTotal);
-    profileDebug("fetchScores done", {
-      userId,
-      mode,
-      type,
-      pages: pageCount,
-      count: out.length,
-      ms: Math.round(performance.now() - startedAt),
-    });
     return out;
   }
 
@@ -1030,11 +769,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Weighted pp — always hidden (no replacement text). Unwraps any legacy
-  // .oep-pp-col from older Expert+ builds.
-  // ─────────────────────────────────────────────────────────────────────────
-
   function applyHideWeightedPp(listEl) {
     listEl.querySelectorAll(".play-detail").forEach((rowEl) => {
       const col = rowEl.querySelector(".oep-pp-col");
@@ -1056,39 +790,25 @@ OsuExpertPlus.pages.userProfile = (() => {
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: modded star rating — lazily fetch difficulty attributes for each
-  // score row as it scrolls into view using IntersectionObserver.
-  //
-  // The beatmap ID, ruleset, and mods are read directly from the DOM (the
-  // title link href and mod-icon data attributes), so no score fetch is
-  // needed for this feature alone.
-  // ─────────────────────────────────────────────────────────────────────────
-
+  // Modded SR: IO + POST /beatmaps/{id}/attributes; row data from title href + mod icons
   const MODDED_SR_ID = IDS.MODDED_STAR_RATING;
-  const MODDED_SR_ATTR = "data-oep-sr"; // '' = pending, '1' = done
+  const MODDED_SR_ATTR = "data-oep-sr"; // '' pending, 1 done
 
-  // Mods that actually change star rating — used to build the cache key and
-  // the attributes request body. Everything else is stripped.
   const DIFFICULTY_MODS = new Set([
     "DT",
-    "NC", // speed up
+    "NC",
     "HT",
-    "DC", // slow down
-    "HR", // hard rock
-    "EZ", // easy
-    "FL", // flashlight (minor effect)
+    "DC",
+    "HR",
+    "EZ",
+    "FL",
     "DA",
-    "AC", // difficulty adjust / accuracy challenge
+    "AC",
     "WU",
-    "WD", // wind up / wind down
+    "WD",
     "DF",
-    "TC", // mode-specific
+    "TC",
   ]);
-
-  // ── Session-only in-memory cache (cleared on page refresh) ──────────────
-  // One POST /beatmaps/{id}/attributes yields star_rating and max_combo; we
-  // cache both under the same key so recent scores + modded SR never duplicate.
 
   /** @type {Map<string, { sr: number|null, maxCombo: number|null }>} */
   const _attrsSessionCache = new Map();
@@ -1096,8 +816,6 @@ OsuExpertPlus.pages.userProfile = (() => {
   function _getCachedAttrs(key) {
     return _attrsSessionCache.get(key);
   }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
 
   function _diffMods(acronyms) {
     return acronyms
@@ -1110,90 +828,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     return `${beatmapId}:${diffMods.join("+") || "NM"}`;
   }
 
-  // Mirrors osu-web `utils/beatmap-helper` getDiffColour / getDiffTextColour (piecewise RGB).
-  const _DIFF_DOMAIN = [0.1, 1.25, 2, 2.5, 3.3, 4.2, 4.9, 5.8, 6.7, 7.7, 9];
-  const _DIFF_RANGE = [
-    "#4290FB",
-    "#4FC0FF",
-    "#4FFFD5",
-    "#7CFF4F",
-    "#F6F05C",
-    "#FF8068",
-    "#FF4E6F",
-    "#C645B8",
-    "#6563DE",
-    "#18158E",
-    "#000000",
-  ];
-  const _TEXT_SR_DOMAIN = [9, 9.9, 10.6, 11.5, 12.4];
-  const _TEXT_SR_RANGE = [
-    "#F6F05C",
-    "#FF8068",
-    "#FF4E6F",
-    "#C645B8",
-    "#6563DE",
-    "#18158E",
-  ];
-
-  function _hexToRgb(hex) {
-    const n = parseInt(hex.slice(1), 16);
-    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-  }
-
-  function _rgbToHex(r, g, b) {
-    const clamp = (x) => Math.max(0, Math.min(255, Math.round(x)));
-    return `#${[clamp(r), clamp(g), clamp(b)]
-      .map((x) => x.toString(16).padStart(2, "0"))
-      .join("")}`;
-  }
-
-  /** @param {number} sr */
-  function _getDiffColour(sr) {
-    if (sr < 0.1) return "#AAAAAA";
-    if (sr >= 9) return "#000000";
-    for (let i = 0; i < _DIFF_DOMAIN.length - 1; i++) {
-      const d0 = _DIFF_DOMAIN[i];
-      const d1 = _DIFF_DOMAIN[i + 1];
-      if (sr >= d0 && sr < d1) {
-        const t = (sr - d0) / (d1 - d0);
-        const a = _hexToRgb(_DIFF_RANGE[i]);
-        const b = _hexToRgb(_DIFF_RANGE[i + 1]);
-        return _rgbToHex(
-          a.r + (b.r - a.r) * t,
-          a.g + (b.g - a.g) * t,
-          a.b + (b.b - a.b) * t,
-        );
-      }
-    }
-    return "#000000";
-  }
-
-  /** @param {number} sr */
-  function _getDiffTextColour(sr) {
-    if (sr < 6.5) return "#000000";
-    if (sr < 9) return "#F6F05C";
-    if (sr >= 12.4) return "#18158E";
-    for (let i = 0; i < _TEXT_SR_DOMAIN.length - 1; i++) {
-      const d0 = _TEXT_SR_DOMAIN[i];
-      const d1 = _TEXT_SR_DOMAIN[i + 1];
-      if (sr >= d0 && sr < d1) {
-        const t = (sr - d0) / (d1 - d0);
-        const a = _hexToRgb(_TEXT_SR_RANGE[i]);
-        const b = _hexToRgb(_TEXT_SR_RANGE[i + 1]);
-        return _rgbToHex(
-          a.r + (b.r - a.r) * t,
-          a.g + (b.g - a.g) * t,
-          a.b + (b.b - a.b) * t,
-        );
-      }
-    }
-    return "#18158E";
-  }
-
-  /**
-   * Extract beatmap ID, ruleset, and raw mod acronyms from a .play-detail row.
-   * Uses the title link href (#osu/70052) and .mod__icon[data-acronym] elements.
-   */
   function _extractRowData(rowEl) {
     const href = rowEl.querySelector("a.play-detail__title")?.href ?? "";
     const m = href.match(/#(\w+)\/(\d+)/);
@@ -1205,10 +839,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       ),
     };
   }
-
-  // ── In-flight deduplication ───────────────────────────────────────────────
-  // Multiple rows with the same (beatmapId, mods) can become visible at once.
-  // We share one in-flight Promise per unique combo so only one request fires.
 
   /** @type {Map<string, Promise<{ sr: number|null, maxCombo: number|null }>>} */
   const _attrsInFlight = new Map();
@@ -1248,10 +878,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     return { key, ...packed };
   }
 
-  // ── Per-row fetch + inject ────────────────────────────────────────────────
-
   async function _fetchAndApplySr(rowEl) {
-    // Mark as pending early to prevent duplicate Observer callbacks.
     if (rowEl.hasAttribute(MODDED_SR_ATTR)) return;
     rowEl.setAttribute(MODDED_SR_ATTR, "");
 
@@ -1265,7 +892,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       ruleset,
     );
 
-    // Abort if feature was toggled off while the request was in-flight.
     if (!rowEl.hasAttribute(MODDED_SR_ATTR)) return;
     rowEl.setAttribute(MODDED_SR_ATTR, "1");
 
@@ -1292,16 +918,12 @@ OsuExpertPlus.pages.userProfile = (() => {
         el("span", { class: "oep-sr-badge__val" }, sr.toFixed(2)),
       ),
     );
-    badge.style.backgroundColor = _getDiffColour(sr);
-    badge.style.color = _getDiffTextColour(sr);
+    badge.style.backgroundColor =
+      OsuExpertPlus.difficultyColours.getDiffColour(sr);
+    badge.style.color =
+      OsuExpertPlus.difficultyColours.getDiffTextColour(sr);
     parent.insertBefore(badge, beatmapSpan);
   }
-
-  // ── IntersectionObserver lifecycle ────────────────────────────────────────
-  //
-  // SR is page-wide: pinned, best performance, and first place all use the
-  // same observer. A second MutationObserver on document.body catches rows
-  // added by "load more" in any section.
 
   let _srObserver = null;
   let _srDomObserver = null;
@@ -1321,18 +943,11 @@ OsuExpertPlus.pages.userProfile = (() => {
           _fetchAndApplySr(entry.target);
         }
       },
-      {
-        // Pre-fetch 300px before a row enters view so the badge is usually
-        // ready by the time the user sees it.
-        rootMargin: "300px 0px",
-      },
+      { rootMargin: "300px 0px" },
     );
 
-    // Observe every .play-detail row currently in the document — pinned,
-    // best performance, first place, etc.
     document.querySelectorAll(".play-detail").forEach(_observeRow);
 
-    // Watch for rows added later (e.g. "load more" in any section).
     _srDomObserver = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
@@ -1366,8 +981,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-
   function processElements(elements, scores) {
     elements.forEach((rowEl, i) => {
       const score = scores[i];
@@ -1375,10 +988,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       injectStatsRow(rowEl, score);
     });
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: score card place number — shows #1, #2, … before the rank icon
-  // ─────────────────────────────────────────────────────────────────────────
 
   const SCORE_PLACE_NUMBER_ID = IDS.SCORE_CARD_PLACE_NUMBER;
   const SCORE_PLACE_CLASS = "oep-score-place";
@@ -1423,12 +1032,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     listEl.querySelectorAll(`.${SCORE_PLACE_CLASS}`).forEach((n) => n.remove());
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Score-list manager — covers Pinned, Best Performance, and First Place.
-  // Each section is identified by its preceding h3 title, fetched from its
-  // own API endpoint, and watched independently with a MutationObserver.
-  // ─────────────────────────────────────────────────────────────────────────
-
   const SCORE_SECTION_TYPES = ["pinned", "best", "firsts"];
 
   function setScoreListLayoutClass(sections, enabled) {
@@ -1437,10 +1040,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     });
   }
 
-  // Attribute set on .play-detail-list elements we have already processed.
-  // waitForStaleElementToLeave uses this selector so it only waits for OUR
-  // previously-processed elements — not for fresh elements that Inertia may
-  // have already rendered before our setInterval poll fired.
+  // Mark lists we touched so stale wait targets only our DOM, not Inertia’s fresh paint
   const PLAY_DETAIL_LIST_PROCESSED_ATTR = "data-oep-processed";
   const PLAY_DETAIL_LIST_STALE_SEL = `.play-detail-list[${PLAY_DETAIL_LIST_PROCESSED_ATTR}]`;
 
@@ -1452,30 +1052,17 @@ OsuExpertPlus.pages.userProfile = (() => {
   async function initScoreFeatures(userId, mode) {
     const cleanupFns = [];
 
-    // Inject shared stylesheet once.
     playDetailStyle.inject();
     cleanupFns.push(playDetailStyle.remove);
 
-    // On SPA re-navigation the previous page's score lists may still be in the
-    // DOM when init() fires (Inertia fetches the new page asynchronously).
-    // We only wait if we previously marked a list — fresh elements from Inertia
-    // won't have our attribute, so we never block on them.
-    console.debug(
-      "[osu! Expert+] UserProfile: waiting for stale score lists to leave…",
-    );
     await waitForStaleElementToLeave(PLAY_DETAIL_LIST_STALE_SEL);
 
-    // Wait for at least one score row to appear (React may not have rendered yet).
-    console.debug("[osu! Expert+] UserProfile: waiting for fresh score rows…");
     try {
       await waitForElement(".play-detail-list .play-detail", 15000);
     } catch {
-      console.warn("[osu! Expert+] No score rows found on this page.");
       return () => {};
     }
-    console.debug("[osu! Expert+] UserProfile: score rows found");
 
-    // Collect all recognised score sections (pinned / best / firsts).
     const scoreSections = Array.from(
       document.querySelectorAll(".play-detail-list"),
     )
@@ -1483,16 +1070,11 @@ OsuExpertPlus.pages.userProfile = (() => {
       .filter((s) => SCORE_SECTION_TYPES.includes(s.type));
 
     if (!scoreSections.length) {
-      console.warn("[osu! Expert+] No recognised score sections found.");
       return () => {};
     }
 
-    // Mark each list so we can detect them as stale on the next SPA navigation.
     scoreSections.forEach(({ listEl }) =>
       listEl.setAttribute(PLAY_DETAIL_LIST_PROCESSED_ATTR, "1"),
-    );
-    console.debug(
-      `[osu! Expert+] UserProfile: processing ${scoreSections.length} score section(s)`,
     );
 
     setScoreListLayoutClass(
@@ -1500,7 +1082,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       settings.isEnabled(SCORE_LIST_DETAILS_ID),
     );
 
-    // DOM-only features: apply immediately across all sections.
     scoreSections.forEach(({ listEl }) => {
       if (settings.isEnabled(SCORE_LIST_DETAILS_ID)) applyPpDecimals(listEl);
       applyHideWeightedPp(listEl);
@@ -1508,16 +1089,12 @@ OsuExpertPlus.pages.userProfile = (() => {
     });
     if (settings.isEnabled(SCORE_PLACE_NUMBER_ID)) scorePlaceNumberStyle.inject();
 
-    // Modded SR: single page-wide IntersectionObserver (DOM-sourced).
     if (settings.isEnabled(MODDED_SR_ID)) {
       initSrObserver();
       cleanupFns.push(() => teardownSrObserver());
     }
 
-    // Score stats: fetch each section's scores in parallel, then inject.
-    // scoresMap persists for the lifetime of this page visit so live-toggle
-    // re-enable doesn't need to re-fetch.
-    const scoresMap = new Map(); // type → score[]
+    const scoresMap = new Map();
 
     async function _loadAndApplyStats(section) {
       const { listEl, type } = section;
@@ -1539,9 +1116,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       const { listEl, type } = section;
 
       const obs = new MutationObserver((mutations) => {
-        // Fire if a .play-detail was added (load-more / full row re-render) OR if
-        // a mutation's target is inside a .play-detail (e.g. options popup sub-render
-        // that replaces inner children without replacing the row element itself).
         const affectsRows = mutations.some((m) => {
           if (m.target instanceof Element && m.target.closest(".play-detail"))
             return true;
@@ -1565,9 +1139,6 @@ OsuExpertPlus.pages.userProfile = (() => {
         const allEls = Array.from(listEl.querySelectorAll(".play-detail"));
         if (settings.isEnabled(SCORE_LIST_DETAILS_ID) && scoresMap.has(type)) {
           const scores = scoresMap.get(type);
-          // Re-inject rows where our content is absent — covers both full row
-          // re-renders (SCORE_STATS_ATTR missing) and sub-renders caused by the
-          // score options popup (attr still present but injected children are gone).
           allEls.forEach((rowEl, i) => {
             const needsReinjection =
               !rowEl.hasAttribute(SCORE_STATS_ATTR) ||
@@ -1587,9 +1158,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       });
       cleanupFns.push(() => obs.disconnect());
 
-      // React rewrites the list element's className when toggling --menu-active
-      // (opening the score options popup), which strips our injected layout class.
-      // Watch the class attribute and restore it whenever it's removed.
       const classObs = new MutationObserver(() => {
         if (
           settings.isEnabled(SCORE_LIST_DETAILS_ID) &&
@@ -1605,7 +1173,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       cleanupFns.push(() => classObs.disconnect());
     });
 
-    // Live-toggle support.
     cleanupFns.push(
       settings.onChange(SCORE_LIST_DETAILS_ID, async (enabled) => {
         if (enabled) {
@@ -1650,10 +1217,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       });
     };
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Helpers: extract user id and current game mode from the page
-  // ─────────────────────────────────────────────────────────────────────────
 
   function getUserIdFromUrl() {
     const m = location.pathname.match(/^\/users\/(\d+)/);
@@ -1701,13 +1264,8 @@ OsuExpertPlus.pages.userProfile = (() => {
     return Number.isFinite(n) ? String(n) : null;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Historical → Recent plays: extra list from API (includes failed scores)
-  // ─────────────────────────────────────────────────────────────────────────
-
   const RECENT_FAILS_WRAP_CLASS = "oep-recent-scores-with-fails";
 
-  /** Recent plays live on the Historical extra page (scoresRecent). */
   function findRecentPlaysListRoot() {
     const page = document.querySelector(
       'div.js-sortable--page[data-page-id="historical"]',
@@ -1728,10 +1286,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     return null;
   }
 
-  /**
-   * Remove the official "Recent plays (24h)" block once enhanced list is ready.
-   * @param {HTMLElement|null} listRoot
-   */
   function removeOfficialRecentPlaysSection(listRoot) {
     if (!(listRoot instanceof HTMLElement)) return;
     const prev = listRoot.previousElementSibling;
@@ -2075,8 +1629,8 @@ OsuExpertPlus.pages.userProfile = (() => {
         true,
       );
       return Array.isArray(data) ? data : [];
-    } catch (e) {
-      console.warn("[osu! Expert+] recent scores API:", e);
+    } catch {
+      /* fall through to HTML fetch path */
     }
 
     const scores = [];
@@ -2085,10 +1639,8 @@ OsuExpertPlus.pages.userProfile = (() => {
     const maxPages = 8;
     let lastPageKey = "";
     let pageCount = 0;
-    const startedAt = performance.now();
     for (let offset = 0; ; offset += limit) {
       if (pageCount >= maxPages) {
-        profileDebug("recentFails stop: max pages", { userId, mode, maxPages });
         break;
       }
       const q = new URLSearchParams({
@@ -2105,8 +1657,7 @@ OsuExpertPlus.pages.userProfile = (() => {
           credentials: "include",
           headers: { Accept: "application/json" },
         });
-      } catch (err) {
-        console.error("[osu! Expert+] recent scores fetch:", err);
+      } catch {
         break;
       }
       if (!resp.ok) break;
@@ -2124,8 +1675,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       pageCount += 1;
       if (!items.length) break;
 
-      // Some deployments may ignore `offset` and repeatedly return the same page.
-      // Detect this and stop to avoid unbounded loops/freezes.
       const pageKey = items
         .map((it) =>
           it?.id != null
@@ -2134,31 +1683,17 @@ OsuExpertPlus.pages.userProfile = (() => {
         )
         .join("|");
       if (pageKey && pageKey === lastPageKey) {
-        profileDebug("recentFails stop: duplicate page", {
-          userId,
-          mode,
-          offset,
-          pageCount,
-        });
         break;
       }
       lastPageKey = pageKey;
 
       scores.push(...items);
       if (scores.length >= maxTotal) {
-        profileDebug("recentFails stop: max total", { userId, mode, maxTotal });
         break;
       }
       if (items.length < limit) break;
     }
     const out = scores.slice(0, maxTotal);
-    profileDebug("recentFails done", {
-      userId,
-      mode,
-      pages: pageCount,
-      count: out.length,
-      ms: Math.round(performance.now() - startedAt),
-    });
     return out;
   }
 
@@ -2209,8 +1744,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     let scores;
     try {
       scores = await fetchRecentScoresIncludingFails(userId, mode);
-    } catch (err) {
-      console.error("[osu! Expert+] recent scores:", err);
+    } catch {
       innerList.textContent = "";
       innerList.appendChild(
         el(
@@ -2245,9 +1779,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     if (settings.isEnabled(SCORE_LIST_DETAILS_ID)) {
       applyPpDecimals(innerList);
       processElements(rows, scores);
-      enrichPlayDetailRowsMaxComboFromAttributes(rows, scores).catch((err) =>
-        console.warn("[osu! Expert+] recent max combo enrich:", err),
-      );
+      enrichPlayDetailRowsMaxComboFromAttributes(rows, scores).catch(() => {});
     }
     if (settings.isEnabled(IDS.MOD_ICONS_AS_ACRONYMS)) {
       injectModIconsAcronymStyles();
@@ -2258,7 +1790,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       rows.forEach(_observeRow);
     }
 
-    // Replacement behavior: once enhanced rows are ready, remove official 24h section.
     removeOfficialRecentPlaysSection(listRoot);
   }
 
@@ -2276,9 +1807,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       clearTimeout(_recentFailsDebounce);
       _recentFailsDebounce = setTimeout(() => {
         if (cancelled) return;
-        tryMountRecentScoresWithFails(userId, mode).catch((err) =>
-          console.warn("[osu! Expert+] recent scores mount:", err),
-        );
+        tryMountRecentScoresWithFails(userId, mode).catch(() => {});
       }, 200);
     };
 
@@ -2305,12 +1834,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: Top ranks — highlight by score age (non-linear period + optional reverse)
-  // ─────────────────────────────────────────────────────────────────────────
-  //
-  // Slider index 0 = off. Then: 1–4 weeks, 1–24 months, 3–10 years (see clamp + mapping).
-
+  // Top ranks: age highlight (slider 0=off; weeks → months → years) + optional reverse
   const RANKS_DATE_HIGHLIGHT_STYLE_ID = "osu-expertplus-ranks-date-highlight";
   const RANKS_PAGE_SELECTOR = 'div.js-sortable--page[data-page-id="top_ranks"]';
   const RANKS_DATE_FILTER_CLASS = "oep-ranks-date-filter";
@@ -2318,7 +1842,7 @@ OsuExpertPlus.pages.userProfile = (() => {
   const RANKS_CARD_BG_ATTR = "data-oep-ranks-card-bg";
   const RANKS_CARD_BG_BEATMAPSET_ATTR = "data-oep-ranks-card-bg-beatmapset";
   const RANKS_CARD_BG_SELECTOR = `.play-detail[${RANKS_CARD_BG_ATTR}="1"]`;
-  const RANKS_CARD_BG_URL_VAR = "--oep-ranks-card-bg-url"; // kept for cleanup of pre-migration inline styles
+  const RANKS_CARD_BG_URL_VAR = "--oep-ranks-card-bg-url";
   const RANKS_CARD_BG_IMG_CLASS = "oep-card-bg-img";
   const RANKS_CARD_BASE_BG_VAR = "--oep-ranks-card-base-bg";
   const RANKS_CARD_PP_BG_VAR = "--oep-ranks-card-pp-bg";
@@ -2330,15 +1854,12 @@ OsuExpertPlus.pages.userProfile = (() => {
   let ranksCardBgObserver = null;
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
   const MS_PER_WEEK = 7 * MS_PER_DAY;
-  /** Mean Gregorian month length (365.25 / 12 days). */
   const MS_PER_AVG_MONTH = (365.25 / 12) * MS_PER_DAY;
-  /** 0 = off; max = 4 wk + 24 mo + 8 yr steps (3y…10y). */
   const RANKS_PERIOD_IDX_MIN = 0;
   const RANKS_PERIOD_IDX_MAX = 36;
   const RANKS_PERIOD_IDX_DEFAULT = 0;
   const RANKS_PERIOD_IDX_WEEK_END = 4;
   const RANKS_PERIOD_IDX_MONTH_END = 28;
-  /** First index (29) = 3 years; last (36) = 10 years. */
   const RANKS_PERIOD_YEAR_START_IDX = 29;
   const RANKS_PERIOD_FIRST_YEAR = 3;
   const RANKS_PERIOD_LAST_YEAR = 10;
@@ -2455,12 +1976,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       border: 2px solid rgba(255, 255, 255, 0.92);
       background: #66ccff;
     }
-    /*
-     * Highlight entire score card:
-     * - border ring on ::after draws attention (box-shadow would be clipped by
-     *   the paint containment that content-visibility: auto implies)
-     * - ::after also adds a translucent fill and an inset glow
-     */
     .play-detail.${RANKS_DATE_HIGHLIGHT_CLASS} {
       position: relative;
       z-index: 1;
@@ -2485,11 +2000,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       --oep-ranks-card-edge-cut: 18px;
       background: var(${RANKS_CARD_BASE_BG_VAR}, transparent);
       transition: filter 120ms ease;
-      /*
-       * Layout + style containment without paint: paint containment clips
-       * overflow, hiding osu's .play-detail__more (3-dot menu) which is
-       * positioned at left:100% on desktop (outside the card box).
-       */
       contain: layout style;
     }
     ${RANKS_CARD_BG_SELECTOR}::before {
@@ -2497,10 +2007,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       position: absolute;
       inset: 0;
       border-radius: 6px;
-      /*
-       * Keep osu card silhouette by clipping only the overlay layer
-       * (instead of forcing border-radius/overflow on the whole card).
-       */
       -webkit-clip-path: polygon(
         0 0,
         calc(100% - var(${RANKS_CARD_EDGE_CUT_VAR})) 0,
@@ -2515,36 +2021,15 @@ OsuExpertPlus.pages.userProfile = (() => {
         calc(100% - var(${RANKS_CARD_EDGE_CUT_VAR})) 100%,
         0 100%
       );
-      /*
-       * Single horizontal gradient: dark overlay on the left fades into the
-       * card's base background colour on the right. This replaces the previous
-       * approach of a vertical gradient + mask-image, eliminating one
-       * compositing surface per card (mask-image forces a separate GPU layer).
-       */
       background: linear-gradient(
         90deg,
         rgba(18, 22, 28, 0.72) 0%,
         rgba(18, 22, 28, 0.72) 40%,
         var(${RANKS_CARD_BASE_BG_VAR}, rgba(18, 22, 28, 1)) 75%
       );
-      /*
-       * Must sit above the cover <img> (z-index: -2) but below all card
-       * content. Using a negative z-index keeps it behind z-index: auto
-       * content without requiring every child to declare z-index: 2.
-       */
       z-index: -1;
       pointer-events: none;
     }
-    /*
-     * Cover art image element — decoded async off the main thread to avoid
-     * jank when many cards enter the viewport simultaneously.
-     *
-     * No mask-image here: mask-image forces a separate GPU compositing surface
-     * per element. With 50–100+ score cards that's enormous compositing
-     * overhead. The ::before gradient now covers the right side of the image
-     * with the card's background colour, achieving the same visual fade without
-     * any extra raster surface.
-     */
     ${RANKS_CARD_BG_SELECTOR} .${RANKS_CARD_BG_IMG_CLASS} {
       position: absolute;
       inset: 0;
@@ -2586,13 +2071,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     ${RANKS_CARD_BG_SELECTOR}:focus-within::after {
       opacity: 1;
     }
-    /*
-     * When a card has both the bg feature and the date-highlight class, the
-     * two ::after rules share identical specificity (0,2,1) so the card-bg
-     * rule (opacity:0 / white) wins by source order and erases the blue fill.
-     * A compound selector raises specificity to (0,3,1) so the highlight
-     * always wins, while the hover brightening is preserved.
-     */
     ${RANKS_CARD_BG_SELECTOR}.${RANKS_DATE_HIGHLIGHT_CLASS}::after {
       border: 2px solid rgba(102, 204, 255, 0.9);
       box-shadow: inset 0 0 14px rgba(102, 204, 255, 0.1);
@@ -2616,17 +2094,12 @@ OsuExpertPlus.pages.userProfile = (() => {
     ${RANKS_CARD_BG_SELECTOR} .play-detail__time {
       background: transparent !important;
     }
-    /*
-     * Force the score-detail -> pp transition wedge to use the exact same
-     * tone as the pp block, so hover color remains consistent.
-     */
     ${RANKS_CARD_BG_SELECTOR} .play-detail__pp::before,
     ${RANKS_CARD_BG_SELECTOR} .play-detail__pp::after {
       background-color: var(${RANKS_CARD_STATS_BG_VAR}) !important;
       border-color: var(${RANKS_CARD_STATS_BG_VAR}) !important;
       transition: background-color 120ms ease, border-color 120ms ease;
     }
-    /* Disable any pp-only hover highlight for ranks cards. */
     ${RANKS_CARD_BG_SELECTOR} .play-detail__pp,
     ${RANKS_CARD_BG_SELECTOR}:hover .play-detail__pp,
     ${RANKS_CARD_BG_SELECTOR}:focus-within .play-detail__pp {
@@ -2639,10 +2112,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       border-color: var(${RANKS_CARD_STATS_BG_VAR}) !important;
       filter: none !important;
     }
-    /*
-     * The 3-dot score-options button sits above the ::after hover overlay
-     * (z-index: 2) so it remains visible and clickable.
-     */
     ${RANKS_CARD_BG_SELECTOR} .play-detail__more {
       z-index: 3;
     }
@@ -2697,8 +2166,6 @@ OsuExpertPlus.pages.userProfile = (() => {
    * @returns {number}
    */
   function readStoredRanksPeriodIndex() {
-    // Score-date filter should not persist between navigations.
-    // Always default to "off" so nothing is highlighted on page open.
     return RANKS_PERIOD_IDX_DEFAULT;
   }
 
@@ -2814,11 +2281,8 @@ OsuExpertPlus.pages.userProfile = (() => {
             const imgEl = rowEl.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`);
             if (!beatmapsetId || !imgEl) return;
             if (entry.isIntersecting) {
-              // Set src only when the card enters the viewport; the browser
-              // decodes it async (decoding="async") so the main thread is free.
               imgEl.src = `https://assets.ppy.sh/beatmaps/${beatmapsetId}/covers/card@2x.jpg`;
             } else {
-              // Drop src when off-screen so the browser can free the texture.
               imgEl.removeAttribute("src");
             }
           });
@@ -2872,7 +2336,6 @@ OsuExpertPlus.pages.userProfile = (() => {
         ) {
           rowEl.style.setProperty(RANKS_CARD_STATS_BG_VAR, statsBg);
         }
-        // Create the cover <img> if it doesn't exist yet.
         let imgEl = rowEl.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`);
         if (!imgEl) {
           imgEl = document.createElement("img");
@@ -2885,24 +2348,17 @@ OsuExpertPlus.pages.userProfile = (() => {
           ranksCardBgObserver.observe(rowEl);
           if (!rowEl.isConnected) ranksCardBgObserver.unobserve(rowEl);
         } else {
-          // Fallback when IntersectionObserver is unavailable.
           imgEl.src = `https://assets.ppy.sh/beatmaps/${beatmapsetId}/covers/card@2x.jpg`;
         }
       });
   }
 
-  /**
-   * Below the page “Ranks” title, above pinned / lazy-loaded lists.
-   * @param {HTMLElement} topRanksRoot
-   * @param {HTMLElement} wrap
-   */
   function insertRanksDateFilterBar(topRanksRoot, wrap) {
     const pageExtra =
       topRanksRoot.querySelector(":scope > .page-extra") ||
       topRanksRoot.querySelector(".page-extra");
 
     if (pageExtra instanceof HTMLElement) {
-      /* Directly above pinned / lazy content; below Ranks (+ optional wiki notice). */
       const lazy = pageExtra.querySelector(":scope > .lazy-load");
       if (lazy) {
         pageExtra.insertBefore(wrap, lazy);
@@ -3133,11 +2589,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: collapse profile badges (.profile-badges — osu-web badges.tsx)
-  // Toggle is absolutely positioned outside the flex flow so badge layout is unchanged.
-  // ─────────────────────────────────────────────────────────────────────────
-
   const PROFILE_BADGES_COLLAPSE_STYLE_ID =
     "osu-expertplus-profile-badges-collapse";
   const PROFILE_BADGES_WRAP_CLASS = "oep-profile-badges-wrap";
@@ -3276,11 +2727,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       teardownProfileBadgesCollapse();
     };
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: Userpage BBCode helper toolbar (profile edit mode)
-  // Appears only when the "Me!" editor is mounted after clicking edit.
-  // ─────────────────────────────────────────────────────────────────────────
 
   const BBHELP_STYLE_ID = "osu-expertplus-userpage-bbcode-helper";
   const BBHELP_WRAP_CLASS = "oep-bbhelp";
@@ -3535,7 +2981,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       border-left: 3px solid rgba(255, 255, 255, 0.26);
       color: rgba(255, 255, 255, 0.82);
     }
-    /* Match osu .bbcode-spoilerbox: bold link-like label + chevron; body indented */
     .${BBHELP_PREVIEW_BODY_CLASS} .oep-bbhelp-preview__spoilerbox {
       margin: 0 0 0.65em;
       border: none;
@@ -4051,7 +3496,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     const IMAP_DRAG_THRESHOLD_PX = 5;
     const IMAP_MIN_RECT_PCT = 1;
 
-    // ── DOM ──────────────────────────────────────────────────────────────────
     const overlay = el("div", { class: BBHELP_MODAL_CLASS });
     const card = el("div", {
       class: `${BBHELP_MODAL_CLASS}__card`,
@@ -4262,7 +3706,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       actionsBtns,
     );
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
     // osu-web BBCodeFromDB::parseImagemap only matches link lines when the URL is
     // `#`, `http(s)://…` (no spaces), or `mailto:…` — see ppy/osu-web.
 
@@ -4729,7 +4172,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       syncSelectionVisuals();
     }
 
-    // ── Drawing ───────────────────────────────────────────────────────────────
 
     function pctRawFromEvent(ev, bounds) {
       if (!bounds.width || !bounds.height) return null;
@@ -4865,7 +4307,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     document.addEventListener("mousemove", onGlobalMouseMove);
     document.addEventListener("mouseup", onGlobalMouseUp);
 
-    // ── Image loading ─────────────────────────────────────────────────────────
 
     const loadImage = () => {
       const safe = _sanitizeHttpPreviewUrl(String(urlInput.value || "").trim());
@@ -4942,7 +4383,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       setManualImportOpen(false);
     });
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     const close = () => {
       document.removeEventListener("mousemove", onGlobalMouseMove);
@@ -4970,7 +4410,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       close();
     });
 
-    // ── Assemble ──────────────────────────────────────────────────────────────
 
     card.appendChild(titleRow);
     card.appendChild(manualImportPanel);
@@ -5312,7 +4751,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     return m ? m[0].length : 0;
   }
 
-  /** Earliest `[notice]` or box/spoiler tag (so nesting between them parses correctly). */
   function _findFirstBbcodeNestableOpen(s) {
     for (let i = 0; i < s.length; i += 1) {
       const noticeOp = _matchNoticeOpenAt(s, i);
@@ -5373,7 +4811,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       "oep-bbhelp-preview__spoiler-summary" +
       (label ? "" : " oep-bbhelp-preview__spoiler-summary--icon-only");
     const summaryA11y = label ? "" : ' aria-label="Spoiler"';
-    /* Avoid osu .bbcode-spoilerbox__body { display:none } — it breaks native <details> */
     return (
       `<details class="oep-bbhelp-preview__spoilerbox">` +
       `<summary class="${summaryClass}"${summaryA11y}>` +
@@ -5772,14 +5209,12 @@ OsuExpertPlus.pages.userProfile = (() => {
     injectBbcodeHelperStyles();
 
     const scan = () => {
-      // Cleanup bars from older insertion strategy (sibling of editor container).
       document.querySelectorAll(`.${BBHELP_WRAP_CLASS}`).forEach((wrap) => {
         const parent = wrap.parentElement;
         if (!(parent instanceof HTMLElement)) return;
         if (!parent.matches(BBHELP_EDITOR_SELECTOR)) wrap.remove();
       });
 
-      // Remove orphan or hidden-editor toolbars left behind by unmounts/re-renders.
       document.querySelectorAll(`.${BBHELP_WRAP_CLASS}`).forEach((wrap) => {
         if (!(wrap instanceof HTMLElement)) return;
         const editorId = wrap.getAttribute(BBHELP_WRAP_FOR_ATTR);
@@ -5828,10 +5263,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: compact section reorder via "Contents" row drag-and-drop
-  // ─────────────────────────────────────────────────────────────────────────
-
   const CONTENTS_REORDER_STYLE_ID = "osu-expertplus-profile-contents-reorder";
   const CONTENTS_REORDER_ANCHOR_ATTR = "data-oep-contents-reorder-anchor";
   const CONTENTS_REORDER_HINT_ATTR = "data-oep-contents-reorder-hint";
@@ -5876,13 +5307,10 @@ OsuExpertPlus.pages.userProfile = (() => {
       padding-bottom: 0 !important;
       letter-spacing: 0.01em;
       display: block;
-      /* .title uses width:max-content — full width so bg matches sticky .page-mode strip */
       width: 100%;
       max-width: none;
       box-sizing: border-box;
-      /* same as .page-mode inside .page-extra-tabs when stuck */
       background-color: hsl(var(--hsl-b5));
-      /* anchor osu .title--page-extra-small::before highlight dot */
       position: relative;
     }
   `;
@@ -5946,12 +5374,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     );
   }
 
-  /**
-   * Profile “contents” tab rows (desktop + mobile may each have a row).
-   * Unlike {@link getSortableContentsAnchorGroups}, includes rows with only
-   * one or two tabs so collapse toggles still appear on sparse profiles.
-   * @returns {HTMLAnchorElement[][]}
-   */
+  /** All hash-tab rows (incl. 1–2 tabs); {@link getSortableContentsAnchorGroups} needs ≥3 for DnD. */
   function getProfileContentsAnchorRows() {
     const pages = getSectionPageNodes();
     if (!pages.length) return [];
@@ -6053,18 +5476,12 @@ OsuExpertPlus.pages.userProfile = (() => {
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Feature: Collapsible profile contents sections (shared across all profiles)
-  // ─────────────────────────────────────────────────────────────────────────
-
   const PROFILE_SECTIONS_COLLAPSED_GM_KEY =
     "userProfile.profileSectionsCollapsed";
   const SECTION_COLLAPSE_PAGE_CLASS = "oep-profile-section--collapsed";
   const SECTION_COLLAPSE_BODY_HIDDEN_CLASS =
     "oep-profile-section-body--collapsed-hidden";
-  /** Primary row heading (e.g. Kudosu!) — see div.u-relative > h2.title--page-extra. */
   const SECTION_COLLAPSE_MAIN_TITLE_SELECTOR = "h2.title.title--page-extra";
-  /** Sub-headings inside a block (Ranks, Recent, …). */
   const SECTION_COLLAPSE_SUBTITLE_SELECTOR = "h3.title.title--page-extra-small";
   const SECTION_TAB_COLLAPSED_CLASS = "oep-profile-section-tab--collapsed";
   const SECTION_COLLAPSE_TOGGLE_ATTR = "data-oep-profile-section-collapse-toggle";
@@ -6408,11 +5825,8 @@ OsuExpertPlus.pages.userProfile = (() => {
       reorderSectionPagesByIds(ids);
       try {
         await persistProfileSectionOrder(ids);
-      } catch (e) {
-        console.warn(
-          "[osu! Expert+] Failed to persist profile section order",
-          e,
-        );
+      } catch {
+        /* order stays reordered in DOM only */
       }
     };
 
@@ -6529,7 +5943,6 @@ OsuExpertPlus.pages.userProfile = (() => {
               firstLabel.getBoundingClientRect().left -
                 row.getBoundingClientRect().left,
             );
-            /* padding-left aligns text; margin would shift the whole bar (gap left, overflow right) */
             hint.style.paddingLeft = `${Math.max(0, dx)}px`;
           }
         }
@@ -6573,10 +5986,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Module lifecycle
-  // ─────────────────────────────────────────────────────────────────────────
-
   let _scoreCleanup = null;
   let _recentFailsCleanup = null;
 
@@ -6585,41 +5994,17 @@ OsuExpertPlus.pages.userProfile = (() => {
    * @returns {function}
    */
   function init(_match) {
-    console.debug("[osu! Expert+] UserProfile init");
-    profileDebug(
-      "debug enabled (set localStorage key to 1)",
-      USER_PROFILE_DEBUG_STORAGE_KEY,
-    );
-
     const cleanups = [];
 
-    // Feature: always-show beatmapset card stats.
-    const applyAlwaysShow = (enabled) => {
-      enabled ? injectAlwaysShowStats() : removeAlwaysShowStats();
-    };
-    applyAlwaysShow(settings.isEnabled(ALWAYS_SHOW_STATS_ID));
-    cleanups.push(settings.onChange(ALWAYS_SHOW_STATS_ID, applyAlwaysShow));
-
-    let stopFullBeatmapStatsObs = null;
-    const applyFullBeatmapStatsFeature = (enabled) => {
-      stopFullBeatmapStatsObs?.();
-      stopFullBeatmapStatsObs = null;
-      if (enabled) {
-        applyFullBeatmapStatNumbers(document);
-        stopFullBeatmapStatsObs = startFullBeatmapStatsObserver();
-      } else {
-        revertFullBeatmapStatNumbers(document);
-      }
-    };
-    applyFullBeatmapStatsFeature(settings.isEnabled(FULL_BEATMAP_STATS_ID));
     cleanups.push(
-      settings.onChange(FULL_BEATMAP_STATS_ID, applyFullBeatmapStatsFeature),
+      OsuExpertPlus.beatmapCardStats.startAlwaysShowStats(
+        settings,
+        manageStyle,
+      ),
     );
-    cleanups.push(() => {
-      stopFullBeatmapStatsObs?.();
-      stopFullBeatmapStatsObs = null;
-      revertFullBeatmapStatNumbers(document);
-    });
+    cleanups.push(
+      OsuExpertPlus.beatmapCardStats.startFullBeatmapStatNumbers(settings),
+    );
 
     cleanups.push(
       OsuExpertPlus.beatmapCardExtra.start(settings, {
@@ -6641,7 +6026,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       cleanups.push(startContentsReorderManager());
     }
 
-    // Weighted pp is always stripped from score rows; init always runs score layout helpers.
     const needsScoreFeatures = true;
 
     if (needsScoreFeatures) {
@@ -6656,7 +6040,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     }
 
     return () => {
-      removeAlwaysShowStats();
       cleanups.forEach((fn) => {
         try {
           fn();

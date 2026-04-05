@@ -1,9 +1,4 @@
-/**
- * Lazy-loads inix1257/osu-beatmap-renderer (Pixi + ESM) into the page context and
- * mounts an optional gameplay preview block on beatmapset info pages.
- *
- * @see https://github.com/inix1257/osu-beatmap-renderer
- */
+/** Lazy ESM load osu-beatmap-renderer + Pixi; gameplay preview on beatmapset pages. */
 /* global unsafeWindow, GM_getValue, GM_setValue, GM_xmlhttpRequest */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
@@ -19,10 +14,7 @@ OsuExpertPlus.beatmapPreview = (() => {
   const RENDERER_ESM_URL =
     "https://cdn.jsdelivr.net/npm/osu-beatmap-renderer@0.1.1/dist/osu-beatmap-renderer.js";
 
-  /**
-   * Page `window` (Tampermonkey isolates userscripts; injected modules run on the real page).
-   * @returns {Window}
-   */
+  /** Page window (unsafeWindow under TM). */
   function pageWindow() {
     try {
       if (typeof unsafeWindow !== "undefined" && unsafeWindow) {
@@ -404,6 +396,8 @@ const OEP_BG_CONTAIN_PATCH = "__oepBeatmapEngineBgContain";
         sp.scale.set(scale);
         sp.x = (width - tex.width * scale) / 2;
         sp.y = (height - tex.height * scale) / 2;
+        // Darken cover art so objects/readability match typical in-game dimming.
+        sp.tint = 0x5a5a5a;
       } catch (_e) {
         void 0;
       }
@@ -657,23 +651,23 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         cursor: not-allowed;
       }
       .${wrapClass}__status {
-        flex: 1;
-        min-width: 100px;
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: 100%;
         text-align: right;
       }
       .${wrapClass}__seek-time {
         flex: 0 0 auto;
+        flex-shrink: 0;
         font-size: 11px;
         font-variant-numeric: tabular-nums;
         color: hsl(var(--hsl-l2, 0 0% 75%));
-        min-width: 2.75rem;
-      }
-      .${wrapClass}__seek-time--elapsed {
-        text-align: right;
+        white-space: nowrap;
       }
       .${wrapClass}__seek-range {
-        flex: 1;
-        min-width: 0;
+        flex: 1 1 0;
+        min-width: 72px;
+        width: 0;
         height: 22px;
         accent-color: hsl(var(--hsl-c2, 333 60% 70%));
       }
@@ -853,15 +847,14 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       "Jump to preview",
     );
 
-    const seekTimeElapsed = el(
+    const seekTimeDisplay = el(
       "span",
-      { class: `${wrapClass}__seek-time ${wrapClass}__seek-time--elapsed` },
-      "0:00",
-    );
-    const seekTimeTotal = el(
-      "span",
-      { class: `${wrapClass}__seek-time` },
-      "0:00",
+      {
+        class: `${wrapClass}__seek-time`,
+        "aria-live": "off",
+        title: "Current time / map duration",
+      },
+      "0:00 / 0:00",
     );
     const seekRange = el("input", {
       type: "range",
@@ -927,11 +920,10 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       "div",
       { class: `${wrapClass}__seek` },
       previewTimeBtn,
-      seekTimeElapsed,
+      seekTimeDisplay,
       seekRange,
       musicVolumeWrap,
       hitsoundVolumeWrap,
-      seekTimeTotal,
       statusEl,
     );
 
@@ -1070,6 +1062,10 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
+    function paintSeekTimeLabels(currentMs, durationMs) {
+      seekTimeDisplay.textContent = `${formatPreviewTimeMs(currentMs)} / ${formatPreviewTimeMs(durationMs)}`;
+    }
+
     function stopSeekAnimationLoop() {
       if (seekRafId) {
         cancelAnimationFrame(seekRafId);
@@ -1087,8 +1083,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         seekRange.value = String(
           Math.min(maxMs, Math.max(0, Number.isFinite(t) ? t : 0)),
         );
-        seekTimeElapsed.textContent = formatPreviewTimeMs(t);
-        seekTimeTotal.textContent = formatPreviewTimeMs(duration);
+        paintSeekTimeLabels(t, duration);
       } catch (_) {
         void 0;
       }
@@ -1192,8 +1187,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       if (!on) {
         seekRange.max = "1";
         seekRange.value = "0";
-        seekTimeElapsed.textContent = "0:00";
-        seekTimeTotal.textContent = "0:00";
+        paintSeekTimeLabels(0, 0);
       }
     }
 
@@ -1327,7 +1321,6 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         syncSeekUiFromEngine();
         updateCanvasPlayStateAria();
       } catch (e) {
-        console.warn("[osu! Expert+] Beatmap preview:", e);
         setStatus(
           e instanceof Error ? e.message : "Could not load this difficulty.",
         );
@@ -1361,6 +1354,16 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     });
     seekRange.addEventListener("input", () => {
       applySeekFromInput();
+      if (!sharedEngine || !lastLoadedKey || seekRange.disabled) return;
+      try {
+        const duration = sharedEngine.getDuration?.() ?? 0;
+        const ms = Number(seekRange.value);
+        if (Number.isFinite(ms) && Number.isFinite(duration)) {
+          paintSeekTimeLabels(ms, duration);
+        }
+      } catch (_) {
+        void 0;
+      }
     });
     seekRange.addEventListener("change", () => {
       applySeekFromInput();

@@ -1,15 +1,4 @@
-/**
- * Settings panel — a floating gear button fixed to the bottom-right corner
- * of the page that opens a modal with a toggle for every registered feature
- * and API credential sections (osu! OAuth, OMDB).
- *
- * Styling intentionally follows osu!'s dark theme by reusing its CSS
- * custom properties (--hsl-b*, --hsl-l*, --hsl-c*) and FontAwesome icons
- * (already loaded on osu.ppy.sh).
- *
- * Call OsuExpertPlus.settingsPanel.init() once on script startup.
- * It is never torn down — the panel persists across SPA navigations.
- */
+/** FAB + modal: feature toggles, osu OAuth, OMDB key. init() once; survives SPA (re-attach if body replaced). */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
@@ -19,40 +8,197 @@ OsuExpertPlus.settingsPanel = (() => {
   const auth = OsuExpertPlus.auth;
   const omdb = OsuExpertPlus.omdb;
 
-  const ROOT_ID = 'osu-expertplus-settings';
-  const OPEN_CLASS = 'osu-expertplus-settings--open';
-  const SECTION_COLLAPSED_CLASS = 'osu-expertplus-panel__section--collapsed';
+  const ROOT_ID = "osu-expertplus-settings";
+  const FAB_ANCHOR_ID = "osu-expertplus-fab-anchor";
+  const OPEN_CLASS = "osu-expertplus-settings--open";
+  const SECTION_COLLAPSED_CLASS = "osu-expertplus-panel__section--collapsed";
+  const FAB_NEEDS_API_CLASS = "osu-expertplus-fab-anchor--needs-api";
+  const MODDED_SR_ROW_ATTR = "data-oep-settings-row-modded-sr";
 
-  // ─── Styles ─────────────────────────────────────────────────────────────
+  /** Set in init(); drives osu! API warning chip + panel offset. */
+  const fabUi = { anchor: null, panel: null };
+
+  function applyModdedStarRowLockState(row) {
+    const locked = !auth.isConfigured();
+    row.classList.toggle("osu-expertplus-panel__row--oauth-required", locked);
+    if (locked) {
+      row.title =
+        "Requires osu! API OAuth credentials. Add Client ID and Secret in the section above.";
+    } else {
+      row.removeAttribute("title");
+    }
+    const input = row.querySelector(".osu-expertplus-toggle input");
+    if (input instanceof HTMLInputElement) {
+      input.tabIndex = locked ? -1 : 0;
+    }
+    row.classList.toggle(
+      "osu-expertplus-panel__row--with-feature-hint",
+      locked,
+    );
+    const hint = row.querySelector("[data-oep-modded-sr-hint]");
+    if (hint) {
+      if (locked) {
+        hint.hidden = false;
+        hint.textContent =
+          "Requires osu! API OAuth credentials — add Client ID and Secret in the section above.";
+      } else {
+        hint.hidden = true;
+        hint.textContent = "";
+      }
+    }
+  }
+
+  function refreshModdedStarRatingRowLock() {
+    const row = fabUi.panel?.querySelector?.(`[${MODDED_SR_ROW_ATTR}]`);
+    if (row instanceof HTMLElement) applyModdedStarRowLockState(row);
+  }
+
+  function syncPanelAboveFab() {
+    const { anchor, panel } = fabUi;
+    if (!anchor?.isConnected || !panel?.isConnected) return;
+    const top = anchor.getBoundingClientRect().top;
+    const gap = 10;
+    panel.style.bottom = `${Math.round(window.innerHeight - top + gap)}px`;
+  }
+
+  function refreshFabOsuApiWarning() {
+    const { anchor } = fabUi;
+    if (!anchor) return;
+    anchor.classList.toggle(FAB_NEEDS_API_CLASS, !auth.isConfigured());
+    syncPanelAboveFab();
+  }
+
+  function credentialSectionTitle(kind, filled) {
+    if (kind === "osu") {
+      return filled
+        ? "osu! API credentials — saved"
+        : "osu! API credentials — not set";
+    }
+    return filled ? "OMDB API key — saved" : "OMDB API key — not set";
+  }
 
   const CSS = `
-    #osu-expertplus-fab {
+    #${FAB_ANCHOR_ID} {
       position: fixed;
       bottom: 24px;
-      right: 24px;
+      left: 24px;
       z-index: 9999;
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      border: none;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      max-width: min(320px, calc(100vw - 48px));
+    }
+
+    .osu-expertplus-fab-api-warning {
+      display: none;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 11px 5px 9px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      line-height: 1.35;
+      color: hsl(48 92% 62%);
+      background: linear-gradient(
+        165deg,
+        hsl(38 32% 18%) 0%,
+        hsl(32 28% 14%) 100%
+      );
+      border: 1px solid hsl(40 42% 32%);
+      box-shadow:
+        0 2px 10px rgba(0,0,0,.4),
+        0 0 0 1px rgba(0,0,0,.2) inset;
+    }
+    .${FAB_NEEDS_API_CLASS} .osu-expertplus-fab-api-warning {
+      display: flex;
+    }
+    .osu-expertplus-fab-api-warning__icon {
+      flex-shrink: 0;
+      font-size: 11px;
+      opacity: 0.95;
+      filter: drop-shadow(0 0 6px hsl(48 90% 45% / 0.45));
+    }
+    .osu-expertplus-fab-api-warning__text {
+      min-width: 0;
+    }
+
+    #osu-expertplus-fab {
+      position: relative;
+      flex-shrink: 0;
+      box-sizing: border-box;
+      min-height: 44px;
+      padding: 0 16px 0 12px;
+      border-radius: 22px;
+      border: 1px solid hsl(var(--hsl-b5, 333 18% 28%));
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: 0.02em;
+      background: hsl(var(--hsl-b4, 333 18% 20%));
+      color: hsl(var(--hsl-l1, 0 0% 92%));
+      box-shadow:
+        0 2px 10px rgba(0,0,0,.45),
+        0 0 0 1px rgba(0,0,0,.12) inset;
+      transition:
+        background 160ms ease,
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        opacity 160ms ease;
+      opacity: 0.88;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #osu-expertplus-fab:hover {
+      background: hsl(var(--hsl-b5, 333 18% 28%));
+      border-color: hsl(var(--hsl-b5, 333 18% 36%));
+      opacity: 1;
+      box-shadow:
+        0 4px 18px rgba(0,0,0,.5),
+        0 0 0 1px rgba(255,255,255,.04) inset;
+    }
+    #osu-expertplus-fab:focus-visible {
+      outline: 2px solid hsl(var(--hsl-pink, 333 100% 65%));
+      outline-offset: 3px;
+    }
+    #osu-expertplus-fab:active {
+      transform: translateY(1px);
+      box-shadow: 0 1px 8px rgba(0,0,0,.4);
+    }
+    .osu-expertplus-fab__icon {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
-      background: hsl(var(--hsl-b4, 333 18% 20%));
-      color: hsl(var(--hsl-l1, 0 0% 90%));
-      box-shadow: 0 2px 12px rgba(0,0,0,.5);
-      transition: background 150ms, transform 150ms;
-      opacity: 0.75;
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      font-size: 16px;
+      color: hsl(var(--hsl-c2, 333 60% 72%));
+      transition: transform 180ms ease, color 160ms ease;
     }
-    #osu-expertplus-fab:hover {
-      background: hsl(var(--hsl-b5, 333 18% 30%));
-      opacity: 1;
-      transform: rotate(30deg);
+    #osu-expertplus-fab:hover .osu-expertplus-fab__icon {
+      color: hsl(var(--hsl-l1, 0 0% 96%));
+      transform: rotate(35deg);
+    }
+    .osu-expertplus-fab__label {
+      display: flex;
+      align-items: baseline;
+      white-space: nowrap;
+    }
+    .osu-expertplus-fab__brand-accent {
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: hsl(var(--hsl-pink, 333 100% 72%));
+      text-shadow: 0 0 20px hsl(var(--hsl-pink, 333 100% 65%) / 0.35);
     }
 
-    /* Overlay backdrop */
     #osu-expertplus-backdrop {
       display: none;
       position: fixed;
@@ -62,12 +208,11 @@ OsuExpertPlus.settingsPanel = (() => {
     }
     #osu-expertplus-backdrop.${OPEN_CLASS} { display: block; }
 
-    /* Panel */
     #${ROOT_ID} {
       display: none;
       position: fixed;
       bottom: 80px;
-      right: 24px;
+      left: 24px;
       z-index: 9999;
       width: 340px;
       max-height: 80vh;
@@ -125,6 +270,50 @@ OsuExpertPlus.settingsPanel = (() => {
       outline-offset: -1px;
     }
 
+    /* Credential section headers — osu! API */
+    .oep-cred--osu.oep-cred--ok > .osu-expertplus-panel__group-toggle {
+      background: hsl(145 22% 17%);
+      border-top-color: hsl(145 28% 26%);
+    }
+    .oep-cred--osu.oep-cred--ok > .osu-expertplus-panel__group-toggle:hover {
+      background: hsl(145 22% 21%);
+    }
+    .oep-cred--osu.oep-cred--ok .osu-expertplus-panel__group-label {
+      color: hsl(132 48% 58%);
+    }
+    .oep-cred--osu.oep-cred--missing > .osu-expertplus-panel__group-toggle {
+      background: hsl(38 26% 16%);
+      border-top-color: hsl(36 32% 24%);
+    }
+    .oep-cred--osu.oep-cred--missing > .osu-expertplus-panel__group-toggle:hover {
+      background: hsl(38 26% 20%);
+    }
+    .oep-cred--osu.oep-cred--missing .osu-expertplus-panel__group-label {
+      color: hsl(46 88% 60%);
+    }
+
+    /* Credential section headers — OMDB */
+    .oep-cred--omdb.oep-cred--ok > .osu-expertplus-panel__group-toggle {
+      background: hsl(210 28% 18%);
+      border-top-color: hsl(210 32% 28%);
+    }
+    .oep-cred--omdb.oep-cred--ok > .osu-expertplus-panel__group-toggle:hover {
+      background: hsl(210 28% 22%);
+    }
+    .oep-cred--omdb.oep-cred--ok .osu-expertplus-panel__group-label {
+      color: hsl(205 58% 70%);
+    }
+    .oep-cred--omdb.oep-cred--missing > .osu-expertplus-panel__group-toggle {
+      background: hsl(280 18% 17%);
+      border-top-color: hsl(275 22% 26%);
+    }
+    .oep-cred--omdb.oep-cred--missing > .osu-expertplus-panel__group-toggle:hover {
+      background: hsl(280 18% 21%);
+    }
+    .oep-cred--omdb.oep-cred--missing .osu-expertplus-panel__group-label {
+      color: hsl(38 82% 62%);
+    }
+
     .osu-expertplus-panel__group-label {
       padding: 0;
       font-size: 10px;
@@ -160,6 +349,14 @@ OsuExpertPlus.settingsPanel = (() => {
     }
     .osu-expertplus-panel__section-content .osu-expertplus-panel__row:last-child { border-bottom: none; }
 
+    .osu-expertplus-panel__row--oauth-required {
+      opacity: 0.55;
+      filter: saturate(0.7);
+      pointer-events: none;
+      user-select: none;
+      cursor: not-allowed;
+    }
+
     .osu-expertplus-panel__text {
       flex: 1;
       min-width: 0;
@@ -169,8 +366,23 @@ OsuExpertPlus.settingsPanel = (() => {
       font-weight: 600;
       line-height: 1.25;
     }
+    .osu-expertplus-panel__feature-hint {
+      font-size: 10px;
+      font-weight: 500;
+      line-height: 1.35;
+      margin-top: 4px;
+      color: hsl(var(--hsl-c2, 333 60% 68%));
+      opacity: 0.9;
+    }
+    .osu-expertplus-panel__row--with-feature-hint {
+      align-items: flex-start;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+    .osu-expertplus-panel__row--with-feature-hint .osu-expertplus-toggle {
+      margin-top: 2px;
+    }
 
-    /* Toggle switch */
     .osu-expertplus-toggle {
       position: relative;
       flex-shrink: 0;
@@ -209,7 +421,6 @@ OsuExpertPlus.settingsPanel = (() => {
       transform: translateX(14px);
     }
 
-    /* Credentials section */
     .osu-expertplus-panel__creds {
       padding: 8px 16px 10px;
       display: flex;
@@ -286,202 +497,324 @@ OsuExpertPlus.settingsPanel = (() => {
     }
   `;
 
-  // ─── Toggle row builder ──────────────────────────────────────────────────
-
   function buildToggle(feature) {
-    const input = el('input', { type: 'checkbox' });
+    const input = el("input", { type: "checkbox" });
     input.checked = settings.isEnabled(feature.id);
 
-    const track = el('div', { class: 'osu-expertplus-toggle__track' });
-    const label = el('label', { class: 'osu-expertplus-toggle' }, input, track);
+    const track = el("div", { class: "osu-expertplus-toggle__track" });
+    const label = el("label", { class: "osu-expertplus-toggle" }, input, track);
 
-    input.addEventListener('change', () => settings.set(feature.id, input.checked));
-    settings.onChange(feature.id, (val) => { input.checked = val; });
+    input.addEventListener("change", () => {
+      if (
+        feature.id === settings.IDS.MODDED_STAR_RATING &&
+        !auth.isConfigured()
+      ) {
+        input.checked = settings.isEnabled(feature.id);
+        return;
+      }
+      settings.set(feature.id, input.checked);
+    });
+    settings.onChange(feature.id, (val) => {
+      input.checked = val;
+    });
 
     return label;
   }
 
-  // ─── Credentials section builder ─────────────────────────────────────────
-
-  function buildCredentialsSection() {
-    const clientIdInput = el('input', {
-      type: 'text',
-      placeholder: 'Client ID',
-      autocomplete: 'off',
-      spellcheck: 'false',
+  function buildCredentialsSection(onConfiguredChange) {
+    const clientIdInput = el("input", {
+      type: "text",
+      placeholder: "Client ID",
+      autocomplete: "off",
+      spellcheck: "false",
     });
 
-    const clientSecretInput = el('input', {
-      type: 'password',
-      placeholder: 'Client Secret',
-      autocomplete: 'new-password',
+    const clientSecretInput = el("input", {
+      type: "password",
+      placeholder: "Client Secret",
+      autocomplete: "new-password",
     });
 
-    // Populate with stored values (secret shown as placeholder dots).
-    clientIdInput.value = GM_getValue('oep_client_id', '');
-    if (GM_getValue('oep_client_secret', '')) {
-      clientSecretInput.placeholder = '(saved — enter to change)';
+    clientIdInput.value = GM_getValue("oep_client_id", "");
+    if (GM_getValue("oep_client_secret", "")) {
+      clientSecretInput.placeholder = "(saved — enter to change)";
     }
 
-    const statusEl = el('div', { class: 'osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--info' });
+    const statusEl = el("div", {
+      class:
+        "osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--info",
+    });
 
-    function setStatus(msg, type = 'info') {
+    function setStatus(msg, type = "info") {
       statusEl.textContent = msg;
       statusEl.className = `osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--${type}`;
     }
 
-    // Reflect current configured state on load.
     if (auth.isConfigured()) {
-      setStatus('Credentials saved. API v2 active.', 'ok');
+      setStatus("Credentials saved. API v2 active.", "ok");
     } else {
-      setStatus('No credentials — using session fallback.');
+      setStatus("No credentials — using session fallback.");
     }
 
-    const saveBtn = el('button', { class: 'osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--save' }, 'Save');
-    const clearBtn = el('button', { class: 'osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--clear' }, 'Clear');
+    const saveBtn = el(
+      "button",
+      {
+        class:
+          "osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--save",
+      },
+      "Save",
+    );
+    const clearBtn = el(
+      "button",
+      {
+        class:
+          "osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--clear",
+      },
+      "Clear",
+    );
 
-    saveBtn.addEventListener('click', async () => {
-      const id     = clientIdInput.value.trim();
-      const secret = clientSecretInput.value.trim() || GM_getValue('oep_client_secret', '');
+    saveBtn.addEventListener("click", async () => {
+      const id = clientIdInput.value.trim();
+      const secret =
+        clientSecretInput.value.trim() || GM_getValue("oep_client_secret", "");
 
       if (!id || !secret) {
-        setStatus('Both Client ID and Secret are required.', 'error');
+        setStatus("Both Client ID and Secret are required.", "error");
         return;
       }
 
       auth.setCredentials(id, secret);
       clientIdInput.value = id;
-      clientSecretInput.value = '';
-      clientSecretInput.placeholder = '(saved — enter to change)';
-      setStatus('Verifying…', 'info');
+      clientSecretInput.value = "";
+      clientSecretInput.placeholder = "(saved — enter to change)";
+      setStatus("Verifying…", "info");
 
       try {
         await auth.getToken();
-        setStatus('Credentials saved & verified. API v2 active.', 'ok');
+        setStatus("Credentials saved & verified. API v2 active.", "ok");
       } catch (e) {
         setStatus(
-          `Failed: ${e.message
-            .replace('[osu! Expert+] ', '')
-            .replace('[osu! Extra+] ', '')}`,
-          'error',
+          `Failed: ${e.message.replace("[osu! Expert+] ", "")}`,
+          "error",
         );
+      } finally {
+        refreshFabOsuApiWarning();
+        syncOAuthHintVisibility();
+        refreshModdedStarRatingRowLock();
+        onConfiguredChange?.();
       }
     });
 
-    clearBtn.addEventListener('click', () => {
+    clearBtn.addEventListener("click", () => {
       auth.clearCredentials();
-      clientIdInput.value = '';
-      clientSecretInput.value = '';
-      clientSecretInput.placeholder = 'Client Secret';
-      setStatus('Credentials cleared. Using session fallback.');
+      clientIdInput.value = "";
+      clientSecretInput.value = "";
+      clientSecretInput.placeholder = "Client Secret";
+      setStatus("Credentials cleared. Using session fallback.");
+      refreshFabOsuApiWarning();
+      syncOAuthHintVisibility();
+      refreshModdedStarRatingRowLock();
+      onConfiguredChange?.();
     });
 
-    const hint = el('div', { class: 'osu-expertplus-panel__creds-hint' });
-    hint.innerHTML = 'Create an OAuth app at <a href="https://osu.ppy.sh/home/account/edit#oauth" target="_blank">Account Settings → OAuth</a>, then paste your Client ID and Secret above.';
+    const hint = el("div", { class: "osu-expertplus-panel__creds-hint" });
+    hint.innerHTML =
+      'Create an OAuth app at <a href="https://osu.ppy.sh/home/account/edit#oauth" target="_blank">Account Settings → OAuth</a>, then paste your Client ID and Secret above.';
 
-    return el('div', { class: 'osu-expertplus-panel__creds' },
-      el('div', { class: 'osu-expertplus-panel__creds-field' },
-        el('label', {}, 'Client ID'),
+    function syncOAuthHintVisibility() {
+      hint.hidden = auth.isConfigured();
+    }
+    syncOAuthHintVisibility();
+
+    return el(
+      "div",
+      { class: "osu-expertplus-panel__creds" },
+      el(
+        "div",
+        { class: "osu-expertplus-panel__creds-field" },
+        el("label", {}, "Client ID"),
         clientIdInput,
       ),
-      el('div', { class: 'osu-expertplus-panel__creds-field' },
-        el('label', {}, 'Client Secret'),
+      el(
+        "div",
+        { class: "osu-expertplus-panel__creds-field" },
+        el("label", {}, "Client Secret"),
         clientSecretInput,
       ),
-      el('div', { class: 'osu-expertplus-panel__creds-actions' }, saveBtn, clearBtn),
+      el(
+        "div",
+        { class: "osu-expertplus-panel__creds-actions" },
+        saveBtn,
+        clearBtn,
+      ),
       statusEl,
       hint,
     );
   }
 
-  function buildOmdbCredentialsSection() {
-    const apiKeyInput = el('input', {
-      type: 'password',
-      placeholder: 'API Key',
-      autocomplete: 'new-password',
-      spellcheck: 'false',
+  function buildOmdbCredentialsSection(onConfiguredChange) {
+    const apiKeyInput = el("input", {
+      type: "password",
+      placeholder: "API Key",
+      autocomplete: "new-password",
+      spellcheck: "false",
     });
 
     if (omdb.isConfigured()) {
-      apiKeyInput.placeholder = '(saved — enter to change)';
+      apiKeyInput.placeholder = "(saved — enter to change)";
     }
 
-    const statusEl = el('div', { class: 'osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--info' });
+    const statusEl = el("div", {
+      class:
+        "osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--info",
+    });
 
-    function setStatus(msg, type = 'info') {
+    function setStatus(msg, type = "info") {
       statusEl.textContent = msg;
       statusEl.className = `osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--${type}`;
     }
 
     if (omdb.isConfigured()) {
-      setStatus('API key saved.', 'ok');
+      setStatus("API key saved.", "ok");
     } else {
-      setStatus('No API key configured.');
+      setStatus("No API key configured.");
     }
 
-    const saveBtn = el('button', { class: 'osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--save' }, 'Save');
-    const clearBtn = el('button', { class: 'osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--clear' }, 'Clear');
+    const saveBtn = el(
+      "button",
+      {
+        class:
+          "osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--save",
+      },
+      "Save",
+    );
+    const clearBtn = el(
+      "button",
+      {
+        class:
+          "osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--clear",
+      },
+      "Clear",
+    );
 
-    saveBtn.addEventListener('click', () => {
+    saveBtn.addEventListener("click", () => {
       const key = apiKeyInput.value.trim() || omdb.getApiKey();
 
       if (!key) {
-        setStatus('API key is required.', 'error');
+        setStatus("API key is required.", "error");
         return;
       }
 
       omdb.setApiKey(key);
-      apiKeyInput.value = '';
-      apiKeyInput.placeholder = '(saved — enter to change)';
-      setStatus('API key saved.', 'ok');
+      apiKeyInput.value = "";
+      apiKeyInput.placeholder = "(saved — enter to change)";
+      setStatus("API key saved.", "ok");
+      syncOmdbHintVisibility();
+      onConfiguredChange?.();
     });
 
-    clearBtn.addEventListener('click', () => {
+    clearBtn.addEventListener("click", () => {
       omdb.clearApiKey();
-      apiKeyInput.value = '';
-      apiKeyInput.placeholder = 'API Key';
-      setStatus('API key cleared.');
+      apiKeyInput.value = "";
+      apiKeyInput.placeholder = "API Key";
+      setStatus("API key cleared.");
+      syncOmdbHintVisibility();
+      onConfiguredChange?.();
     });
 
-    const hint = el('div', { class: 'osu-expertplus-panel__creds-hint' });
-    hint.innerHTML = 'Get your API key at <a href="https://omdb.nyahh.net/settings/" target="_blank" rel="noopener noreferrer">omdb.nyahh.net/settings</a> (log in required), then paste it above.';
+    const hint = el("div", { class: "osu-expertplus-panel__creds-hint" });
+    hint.innerHTML =
+      'Sign in at <a href="https://omdb.nyahh.net/settings/" target="_blank" rel="noopener noreferrer">omdb.nyahh.net/settings</a>. Create a new application (the name may be anything). When OMDB shows your API key, copy it and paste it into the field above.';
 
-    return el('div', { class: 'osu-expertplus-panel__creds' },
-      el('div', { class: 'osu-expertplus-panel__creds-field' },
-        el('label', {}, 'API Key'),
+    function syncOmdbHintVisibility() {
+      hint.hidden = omdb.isConfigured();
+    }
+    syncOmdbHintVisibility();
+
+    return el(
+      "div",
+      { class: "osu-expertplus-panel__creds" },
+      el(
+        "div",
+        { class: "osu-expertplus-panel__creds-field" },
+        el("label", {}, "API Key"),
         apiKeyInput,
       ),
-      el('div', { class: 'osu-expertplus-panel__creds-actions' }, saveBtn, clearBtn),
+      el(
+        "div",
+        { class: "osu-expertplus-panel__creds-actions" },
+        saveBtn,
+        clearBtn,
+      ),
       statusEl,
       hint,
     );
   }
 
-  // ─── Panel builder ───────────────────────────────────────────────────────
-
-  function buildSection(title, contentNodes, { collapsedByDefault = false } = {}) {
-    const section = el('section', { class: 'osu-expertplus-panel__section' });
+  function buildSection(
+    title,
+    contentNodes,
+    { collapsedByDefault = false, credential = null } = {},
+  ) {
+    const section = el("section", { class: "osu-expertplus-panel__section" });
     if (collapsedByDefault) section.classList.add(SECTION_COLLAPSED_CLASS);
 
-    const titleId = `oep-settings-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-    const content = el('div', { class: 'osu-expertplus-panel__section-content' }, ...contentNodes);
-    const chevron = el('span', { class: 'osu-expertplus-panel__group-chevron', 'aria-hidden': 'true' }, '▼');
-    const label = el('span', { class: 'osu-expertplus-panel__group-label', id: titleId }, title);
+    const titleId =
+      credential?.stableTitleId ??
+      `oep-settings-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
+    const initialTitle = credential
+      ? credentialSectionTitle(credential.kind, credential.filled)
+      : title;
+
+    const label = el(
+      "span",
+      { class: "osu-expertplus-panel__group-label", id: titleId },
+      initialTitle,
+    );
+
+    function applyCredentialState(filled) {
+      if (!credential) return;
+      section.classList.remove("oep-cred--ok", "oep-cred--missing");
+      section.classList.add(filled ? "oep-cred--ok" : "oep-cred--missing");
+      label.textContent = credentialSectionTitle(credential.kind, filled);
+    }
+
+    if (credential) {
+      section.classList.add(
+        credential.kind === "osu" ? "oep-cred--osu" : "oep-cred--omdb",
+      );
+      applyCredentialState(credential.filled);
+      if (credential.syncHolder) {
+        credential.syncHolder.sync = applyCredentialState;
+      }
+    }
+
+    const content = el(
+      "div",
+      { class: "osu-expertplus-panel__section-content" },
+      ...contentNodes,
+    );
+    const chevron = el(
+      "span",
+      { class: "osu-expertplus-panel__group-chevron", "aria-hidden": "true" },
+      "▼",
+    );
     const toggleBtn = el(
-      'button',
+      "button",
       {
-        type: 'button',
-        class: 'osu-expertplus-panel__group-toggle',
-        'aria-expanded': collapsedByDefault ? 'false' : 'true',
-        'aria-labelledby': titleId,
+        type: "button",
+        class: "osu-expertplus-panel__group-toggle",
+        "aria-expanded": collapsedByDefault ? "false" : "true",
+        "aria-labelledby": titleId,
       },
       label,
       chevron,
     );
 
-    toggleBtn.addEventListener('click', () => {
+    toggleBtn.addEventListener("click", () => {
       const collapsed = section.classList.toggle(SECTION_COLLAPSED_CLASS);
-      toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      toggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
     });
 
     section.appendChild(toggleBtn);
@@ -498,74 +831,179 @@ OsuExpertPlus.settingsPanel = (() => {
       groups.get(f.group).push(f);
     }
 
-    const header = el('div', { class: 'osu-expertplus-panel__header' }, 'osu! Expert+ Settings');
+    const header = el(
+      "div",
+      { class: "osu-expertplus-panel__header" },
+      "osu! Expert+ Settings",
+    );
 
     const rows = [];
     const hasSavedCreds = auth.isConfigured();
     const hasSavedOmdb = omdb.isConfigured();
 
-    // Credentials section at the top; collapse by default once credentials are saved.
+    const osuSyncHolder = { sync: null };
+    const omdbSyncHolder = { sync: null };
+
     rows.push(
       buildSection(
-        'osu! API Credentials',
-        [buildCredentialsSection()],
-        { collapsedByDefault: hasSavedCreds },
+        "",
+        [
+          buildCredentialsSection(() =>
+            osuSyncHolder.sync?.(auth.isConfigured()),
+          ),
+        ],
+        {
+          collapsedByDefault: hasSavedCreds,
+          credential: {
+            kind: "osu",
+            filled: hasSavedCreds,
+            stableTitleId: "oep-settings-section-osu-api",
+            syncHolder: osuSyncHolder,
+          },
+        },
       ),
     );
 
     rows.push(
       buildSection(
-        'OMDB API Key',
-        [buildOmdbCredentialsSection()],
-        { collapsedByDefault: hasSavedOmdb },
+        "",
+        [
+          buildOmdbCredentialsSection(() =>
+            omdbSyncHolder.sync?.(omdb.isConfigured()),
+          ),
+        ],
+        {
+          collapsedByDefault: hasSavedOmdb,
+          credential: {
+            kind: "omdb",
+            filled: hasSavedOmdb,
+            stableTitleId: "oep-settings-section-omdb-api",
+            syncHolder: omdbSyncHolder,
+          },
+        },
       ),
     );
 
-    // Feature toggles grouped by page.
     for (const [groupName, groupFeatures] of groups) {
       const groupRows = [];
       for (const feature of groupFeatures) {
-        const text = el('div', { class: 'osu-expertplus-panel__text' },
-          el('div', { class: 'osu-expertplus-panel__label' }, feature.label),
+        const text = el(
+          "div",
+          { class: "osu-expertplus-panel__text" },
+          el("div", { class: "osu-expertplus-panel__label" }, feature.label),
         );
-        groupRows.push(el('div', { class: 'osu-expertplus-panel__row' }, text, buildToggle(feature)));
+        const row = el(
+          "div",
+          { class: "osu-expertplus-panel__row" },
+          text,
+          buildToggle(feature),
+        );
+        if (feature.id === settings.IDS.MODDED_STAR_RATING) {
+          row.setAttribute(MODDED_SR_ROW_ATTR, "1");
+          text.appendChild(
+            el(
+              "div",
+              {
+                class: "osu-expertplus-panel__feature-hint",
+                "data-oep-modded-sr-hint": "1",
+              },
+              "",
+            ),
+          );
+          applyModdedStarRowLockState(row);
+        }
+        groupRows.push(row);
       }
       rows.push(buildSection(groupName, groupRows));
     }
 
-    return el('div', { id: ROOT_ID }, header, ...rows);
+    return el("div", { id: ROOT_ID }, header, ...rows);
   }
 
-  // ─── Public init ─────────────────────────────────────────────────────────
+  /** Assigned in {@link init}; no-op until then. */
+  let openPanel = () => {};
+  /** Assigned in {@link init}; no-op until then. */
+  let closePanel = () => {};
 
   function init() {
     if (document.getElementById(ROOT_ID)) return;
 
     GM_addStyle(CSS);
 
-    const fab = el('button', { id: 'osu-expertplus-fab', title: 'osu! Expert+ Settings' },
-      el('i', { class: 'fas fa-cog' }),
+    const fab = el(
+      "button",
+      {
+        id: "osu-expertplus-fab",
+        type: "button",
+        title: "osu! Expert+ Settings",
+      },
+      el(
+        "span",
+        { class: "osu-expertplus-fab__icon", "aria-hidden": "true" },
+        el("i", { class: "fas fa-cog" }),
+      ),
+      el(
+        "span",
+        { class: "osu-expertplus-fab__label" },
+        el("span", { class: "osu-expertplus-fab__brand-accent" }, "Expert+"),
+      ),
     );
-    const backdrop = el('div', { id: 'osu-expertplus-backdrop' });
+
+    const apiWarning = el(
+      "div",
+      {
+        class: "osu-expertplus-fab-api-warning",
+        role: "status",
+      },
+      el("i", {
+        class:
+          "fas fa-exclamation-triangle osu-expertplus-fab-api-warning__icon",
+        "aria-hidden": "true",
+      }),
+      el(
+        "span",
+        { class: "osu-expertplus-fab-api-warning__text" },
+        "osu! API credentials not set",
+      ),
+    );
+
+    const fabAnchor = el("div", { id: FAB_ANCHOR_ID }, apiWarning, fab);
+
+    const backdrop = el("div", { id: "osu-expertplus-backdrop" });
     const panel = buildPanel();
 
-    const open  = () => { panel.classList.add(OPEN_CLASS); backdrop.classList.add(OPEN_CLASS); };
-    const close = () => { panel.classList.remove(OPEN_CLASS); backdrop.classList.remove(OPEN_CLASS); };
-    const toggle = () => panel.classList.contains(OPEN_CLASS) ? close() : open();
+    fabUi.anchor = fabAnchor;
+    fabUi.panel = panel;
 
-    fab.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
-    backdrop.addEventListener('click', close);
+    openPanel = () => {
+      panel.classList.add(OPEN_CLASS);
+      backdrop.classList.add(OPEN_CLASS);
+    };
+    closePanel = () => {
+      panel.classList.remove(OPEN_CLASS);
+      backdrop.classList.remove(OPEN_CLASS);
+    };
+    const toggle = () =>
+      panel.classList.contains(OPEN_CLASS) ? closePanel() : openPanel();
+
+    fab.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggle();
+    });
+    backdrop.addEventListener("click", closePanel);
 
     function attachToBody() {
       document.body.appendChild(backdrop);
       document.body.appendChild(panel);
-      document.body.appendChild(fab);
+      document.body.appendChild(fabAnchor);
+      refreshFabOsuApiWarning();
+      refreshModdedStarRatingRowLock();
     }
 
     attachToBody();
+    window.addEventListener("resize", syncPanelAboveFab);
 
-    // Inertia replaces document.body on SPA navigation, removing our elements.
-    // Watch document.documentElement for body replacements and re-attach.
+    // Re-attach when SPA replaces document.body
     new MutationObserver((mutations) => {
       for (const m of mutations) {
         for (const node of m.addedNodes) {
@@ -578,5 +1016,14 @@ OsuExpertPlus.settingsPanel = (() => {
     }).observe(document.documentElement, { childList: true });
   }
 
-  return { init };
+  return {
+    init,
+    /** Opens the Expert+ settings modal (idempotent if {@link init} has not run). */
+    open: () => {
+      openPanel();
+    },
+    close: () => {
+      closePanel();
+    },
+  };
 })();

@@ -16,7 +16,7 @@
 
 'use strict';
 
-// --- Modules (injected by build) ---
+// build.js concatenates these (order matters)
 // @require src/utils/dom.js
 // @require src/utils/api.js
 // @require src/utils/settings.js

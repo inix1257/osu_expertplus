@@ -1,35 +1,17 @@
-/**
- * OAuth 2.0 Client Credentials manager for the osu! API v2.
- *
- * Credentials (client_id + client_secret) are stored with GM_setValue so
- * they persist across page loads and are never sent to any server other
- * than osu.ppy.sh.
- *
- * The access token is also cached in GM storage and is refreshed
- * automatically when it expires (tokens last 24 h).
- *
- * Usage:
- *   await OsuExpertPlus.auth.getToken()   → 'Bearer xxxx…' or null
- *   OsuExpertPlus.auth.isConfigured()     → true/false
- *   OsuExpertPlus.auth.setCredentials(id, secret)
- *   OsuExpertPlus.auth.clearCredentials()
- */
+/** Client-credentials OAuth for API v2; GM-stored id/secret + token cache (~24h). */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
 OsuExpertPlus.auth = (() => {
   const TOKEN_ENDPOINT = 'https://osu.ppy.sh/oauth/token';
 
-  // GM storage keys
   const KEY_CLIENT_ID     = 'oep_client_id';
   const KEY_CLIENT_SECRET = 'oep_client_secret';
   const KEY_ACCESS_TOKEN  = 'oep_access_token';
   const KEY_TOKEN_EXPIRY  = 'oep_token_expiry';   // Unix ms
 
-  // In-memory promise so concurrent callers share a single in-flight request.
+  // Dedupe concurrent token refresh
   let _fetchPromise = null;
-
-  // ─── Credential storage ─────────────────────────────────────────────────
 
   function getClientId()     { return GM_getValue(KEY_CLIENT_ID, ''); }
   function getClientSecret() { return GM_getValue(KEY_CLIENT_SECRET, ''); }
@@ -61,8 +43,6 @@ OsuExpertPlus.auth = (() => {
     GM_deleteValue(KEY_TOKEN_EXPIRY);
     _fetchPromise = null;
   }
-
-  // ─── Token management ───────────────────────────────────────────────────
 
   function getCachedToken() {
     const token  = GM_getValue(KEY_ACCESS_TOKEN, '');

@@ -1,6 +1,4 @@
-/**
- * DOM utility helpers shared across page modules.
- */
+/** DOM helpers: qs/qsa/el, wait*, manageStyle, createCleanupBag */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
@@ -36,6 +34,12 @@ OsuExpertPlus.dom = (() => {
         element.className = value;
       } else if (key.startsWith('on') && typeof value === 'function') {
         element.addEventListener(key.slice(2).toLowerCase(), value);
+      } else if (
+        key === 'style' &&
+        value != null &&
+        typeof value === 'object'
+      ) {
+        Object.assign(element.style, /** @type {object} */ (value));
       } else {
         element.setAttribute(key, value);
       }
@@ -50,41 +54,23 @@ OsuExpertPlus.dom = (() => {
     return element;
   }
 
-  /**
-   * If a matching element currently exists in `root`, waits until it is
-   * disconnected from the document (i.e. Inertia/React has torn down the
-   * previous page component after SPA navigation).  Resolves immediately if
-   * no matching element is present.
-   *
-   * Use this before waitForElement on SPA re-navigations to avoid resolving
-   * with stale elements that belong to the previous page.
-   *
-   * @param {string} selector
-   * @param {number} [timeout=8000]
-   * @param {Element} [root=document.body]
-   * @returns {Promise<void>}
-   */
+  /** Wait for selector match to disconnect (SPA teardown); no-op if absent. Use before waitForElement on re-nav. */
   function waitForStaleElementToLeave(selector, timeout = 8000, root = document.documentElement) {
     return new Promise((resolve) => {
       const stale = root.querySelector(selector);
       if (!stale || !stale.isConnected) {
-        console.debug(`[osu! Expert+] waitForStaleElementToLeave("${selector}"): nothing to wait for`);
         return resolve();
       }
 
-      console.debug(`[osu! Expert+] waitForStaleElementToLeave("${selector}"): waiting for stale element to leave…`);
-      const t0 = Date.now();
       const observer = new MutationObserver(() => {
         if (!stale.isConnected) {
           observer.disconnect();
-          console.debug(`[osu! Expert+] waitForStaleElementToLeave("${selector}"): gone after ${Date.now() - t0}ms`);
           resolve();
         }
       });
       observer.observe(root, { childList: true, subtree: true });
       setTimeout(() => {
         observer.disconnect();
-        console.debug(`[osu! Expert+] waitForStaleElementToLeave("${selector}"): timed out after ${timeout}ms`);
         resolve();
       }, timeout);
     });
