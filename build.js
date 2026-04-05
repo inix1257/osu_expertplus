@@ -7,41 +7,41 @@
  * Run:  node build.js
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
 const ROOT = __dirname;
-const OUT = path.join(ROOT, 'dist', 'osu-expertplus.user.js');
+const OUT = path.join(ROOT, "dist", "osu-expertplus.user.js");
 
 // Files are concatenated in this exact order.
 const FILES = [
-  'src/utils/dom.js',
-  'src/utils/difficulty-colours.js',
-  'src/utils/auth.js',
-  'src/utils/api.js',
-  'src/utils/omdb.js',
-  'src/utils/settings.js',
-  'src/utils/beatmap-preview.js',
-  'src/utils/beatmap-card-extra.js',
-  'src/utils/beatmap-card-stats.js',
-  'src/utils/mod-icons-as-acronyms.js',
-  'src/pages/beatmapsets-listing.js',
-  'src/pages/beatmap-detail.js',
-  'src/pages/user-profile.js',
-  'src/pages/account-edit.js',
-  'src/router.js',
-  'src/ui/settings-panel.js',
+  "src/utils/dom.js",
+  "src/utils/difficulty-colours.js",
+  "src/utils/auth.js",
+  "src/utils/api.js",
+  "src/utils/omdb.js",
+  "src/utils/settings.js",
+  "src/utils/beatmap-preview.js",
+  "src/utils/beatmap-card-extra.js",
+  "src/utils/beatmap-card-stats.js",
+  "src/utils/mod-icons-as-acronyms.js",
+  "src/pages/beatmapsets-listing.js",
+  "src/pages/beatmap-detail.js",
+  "src/pages/user-profile.js",
+  "src/pages/account-edit.js",
+  "src/router.js",
+  "src/ui/settings-panel.js",
 ];
 
 // Public install URL (GitHub raw). Change owner/repo/branch if your fork differs.
 const INSTALL_BASE =
-  'https://raw.githubusercontent.com/inix1257/osu_expertplus/main/dist/osu-expertplus.user.js';
+  "https://raw.githubusercontent.com/inix1257/osu_expertplus/main/dist/osu-expertplus.user.js";
 
 const METADATA = `\
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.1.0
+// @version      0.1.1
 // @description  Adds convenient extra features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -68,9 +68,10 @@ function build() {
 
   for (const relPath of FILES) {
     const absPath = path.join(ROOT, relPath);
-    const src = fs.readFileSync(absPath, 'utf8')
+    const src = fs
+      .readFileSync(absPath, "utf8")
       // Strip 'use strict' directives (already at the top).
-      .replace(/^'use strict';\s*/m, '')
+      .replace(/^'use strict';\s*/m, "")
       .trimEnd();
     parts.push(`\n/* ── ${relPath} ── */\n${src}`);
   }
@@ -88,7 +89,7 @@ function build() {
 `);
 
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, parts.join('\n'), 'utf8');
+  fs.writeFileSync(OUT, parts.join("\n"), "utf8");
   console.log(`Built → ${OUT}`);
 }
 

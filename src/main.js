@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.1.0
+// @version      0.1.1
 // @description  Adds convenient extra features to osu.ppy.sh
 // @author       inix1257
 // @match        https://osu.ppy.sh/*
@@ -14,7 +14,7 @@
 // @run-at       document-idle
 // ==/UserScript==
 
-'use strict';
+"use strict";
 
 // build.js concatenates these (order matters)
 // @require src/utils/dom.js
