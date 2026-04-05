@@ -1,5 +1,7 @@
 because i couldn't be bothered to make 200 PRs
 
+note: there might be potential behavior conflicts with other userscripts, so use at your own risk.
+
 # Install
 
 1. Install a userscript manager — [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) usually works.
