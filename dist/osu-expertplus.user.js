@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.2.5
+// @version      0.2.7
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -526,6 +526,77 @@ OsuExpertPlus.api = (() => {
   }
 
   /**
+   * GET /beatmaps/{beatmap}/scores/users/{user} — a user's score on a beatmap
+   * ([Get a User Beatmap score](https://osu.ppy.sh/docs/#get-a-user-beatmap-score)).
+   * Response shape: BeatmapUserScore — `{ position, score }`.
+   *
+   * @param {string|number} beatmapId
+   * @param {string|number} userId
+   * @param {string|{ mode?: string, legacy_only?: number, mods?: string[] }} [modeOrQuery]
+   *        Ruleset string (e.g. `'osu'`), or query params matching the docs.
+   */
+  function getBeatmapUserScore(beatmapId, userId, modeOrQuery) {
+    /** @type {Record<string, string|number|string[]>} */
+    const params = {};
+    if (typeof modeOrQuery === "string") {
+      if (modeOrQuery) params.mode = modeOrQuery;
+    } else if (modeOrQuery && typeof modeOrQuery === "object") {
+      if (modeOrQuery.mode) params.mode = modeOrQuery.mode;
+      if (modeOrQuery.legacy_only != null) {
+        params.legacy_only = modeOrQuery.legacy_only;
+      }
+      if (Array.isArray(modeOrQuery.mods) && modeOrQuery.mods.length) {
+        params.mods = modeOrQuery.mods;
+      }
+    }
+    return get(`${BASE}/beatmaps/${beatmapId}/scores/users/${userId}`, params);
+  }
+
+  /**
+   * GET /beatmaps/{beatmap}/scores/users/{user}/all — all of a user’s scores on
+   * a beatmap ([Get a User Beatmap scores](https://osu.ppy.sh/docs/#get-a-user-beatmap-scores)).
+   * Response: `{ scores: Score[] }`.
+   *
+   * @param {string|number} beatmapId
+   * @param {string|number} userId
+   * @param {{ ruleset?: string, mode?: string, legacy_only?: number }} [query]
+   */
+  function getBeatmapUserScoresAll(beatmapId, userId, query) {
+    /** @type {Record<string, string|number>} */
+    const params = {};
+    if (query && typeof query === "object") {
+      if (query.ruleset) params.ruleset = query.ruleset;
+      if (query.mode) params.mode = query.mode;
+      if (query.legacy_only != null) params.legacy_only = query.legacy_only;
+    }
+    return get(
+      `${BASE}/beatmaps/${beatmapId}/scores/users/${userId}/all`,
+      params,
+    );
+  }
+
+  /**
+   * GET /beatmaps/{beatmap}/scores — top scores for a beatmap.
+   * @param {string|number} beatmapId
+   * @param {{ mode?: string, mods?: string[], legacy_only?: number, type?: string, limit?: number }} [query]
+   * @returns {Promise<{ scores: object[] }>}
+   */
+  function getBeatmapScores(beatmapId, query) {
+    /** @type {Record<string, string|number|string[]>} */
+    const params = {};
+    if (query && typeof query === "object") {
+      if (query.mode) params.mode = query.mode;
+      if (query.legacy_only != null) params.legacy_only = query.legacy_only;
+      if (query.type) params.type = query.type;
+      if (query.limit != null) params.limit = query.limit;
+      if (Array.isArray(query.mods) && query.mods.length) {
+        params["mods[]"] = query.mods;
+      }
+    }
+    return get(`${BASE}/beatmaps/${beatmapId}/scores`, params);
+  }
+
+  /**
    * POST /beatmaps/{beatmap}/attributes — returns difficulty attributes with
    * the given mods applied, including the modded star_rating.
    *
@@ -562,6 +633,9 @@ OsuExpertPlus.api = (() => {
     searchBeatmapsets,
     getUserBestScores,
     getUserRecentScores,
+    getBeatmapUserScore,
+    getBeatmapUserScoresAll,
+    getBeatmapScores,
     postBeatmapAttributes,
   };
 })();
@@ -596,7 +670,8 @@ OsuExpertPlus.omdb = (() => {
   }
 
   /**
-   * GET /api/set/{beatmapset_id} — returns per-beatmap rating rows or null if no API key.
+   * GET /api/set/{beatmapset_id} — per-beatmap rating rows or null if no API key.
+   * A difficulty from this set may be omitted from the array when it is blacklisted on OMDB.
    * @param {string|number} beatmapsetId
    * @returns {Promise<object[]|null>}
    */
@@ -687,9 +762,9 @@ OsuExpertPlus.settings = (() => {
     },
     {
       id: "userProfile.beatmapCardDifficultyRange",
-      label: "Star rating range on beatmap cards",
+      label: "Star rating on beatmap cards",
       description:
-        "On user profiles and on /beatmapsets: after each mode’s difficulty dots, shows min–max nomod star rating as coloured pills (from cached `difficulty_rating` per beatmap; same JSON sources as extra metadata).",
+        "On user profiles and on /beatmapsets: after each mode’s difficulty dots, shows the highest nomod star rating as a coloured pill (Font Awesome up-chevron, star, and value; from cached `difficulty_rating` per beatmap; same JSON sources as extra metadata).",
       group: "Beatmap Card",
       default: true,
     },
@@ -702,10 +777,10 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
-      id: "userProfile.scoreListDetails",
-      label: "PP decimals & hit statistics on scores",
+      id: "userProfile.scoreHitStatistics",
+      label: "Hit statistics on profile scores",
       description:
-        "On best performance, pinned, and first place lists: shows pp to two decimal places (e.g. 610.27pp) and a colour-coded hit row (great / ok / meh / miss).",
+        "On best performance, pinned, first place, and Expert+ Recent scores (Historical): adds a colour-coded hit row (great / ok / meh / miss). Beatmapset leaderboards keep hit-stat colours regardless of this option.",
       group: "User Profile",
       default: true,
     },
@@ -716,22 +791,6 @@ OsuExpertPlus.settings = (() => {
         "Fetches and displays the accurate star rating with mods applied next to each difficulty name. Requires API credentials.",
       group: "User Profile",
       default: true,
-    },
-    {
-      id: "userProfile.modIconsAsAcronyms",
-      label: "Mod acronyms instead of icons",
-      description:
-        "Shows mod letters (e.g. HD, DT) on score rows and beatmap leaderboards instead of sprite icons.",
-      group: "User Profile",
-      default: false,
-    },
-    {
-      id: "userProfile.hideClMod",
-      label: "Hide Classic (CL) mod",
-      description:
-        "Hides the Classic (CL) mod on score rows and leaderboards. Works whether mods are shown as icons or acronyms.",
-      group: "User Profile",
-      default: false,
     },
     {
       id: "userProfile.scoreCardBackgrounds",
@@ -745,8 +804,48 @@ OsuExpertPlus.settings = (() => {
       id: "userProfile.scoreCardPlaceNumber",
       label: "Score place number on rank cards",
       description:
-        "Displays the position (#1, #2, …) before each score card's rank grade in the Ranks section.",
+        "On Best performance only: shows #1, #2, … before the beatmap title on each score row in the Ranks section.",
       group: "User Profile",
+      default: true,
+    },
+    {
+      id: "scores.periodHighlight",
+      label: "Score age period highlight",
+      description:
+        "On user profile Top Ranks only: bar to highlight scores by how recent they are (weeks through years), with reverse and reset.",
+      group: "User Profile",
+      default: true,
+    },
+    {
+      id: "userProfile.scorePpDecimals",
+      label: "PP decimals on scores",
+      description:
+        "On profile best performance, pinned, first place, Expert+ Recent (Historical), and on beatmapset leaderboards: shows pp to two decimal places (e.g. 610.27pp) instead of rounding to an integer in the visible text (full value stays in the tooltip/title where the site provides it).",
+      group: "Scores",
+      default: true,
+    },
+    {
+      id: "userProfile.modIconsAsAcronyms",
+      label: "Mod acronyms instead of icons",
+      description:
+        "Shows mod letters (e.g. HD, DT) on score rows and beatmap leaderboards instead of sprite icons.",
+      group: "Scores",
+      default: false,
+    },
+    {
+      id: "userProfile.hideClMod",
+      label: "Hide Classic (CL) mod",
+      description:
+        "Hides the Classic (CL) mod on score rows and leaderboards. Works whether mods are shown as icons or acronyms.",
+      group: "Scores",
+      default: false,
+    },
+    {
+      id: "beatmapDetail.metadataDescriptionModalButtons",
+      label: "Full description & metadata buttons",
+      description:
+        "On beatmapset pages, adds the \"Show metadata\" button under the artist and the \"Full description\" button in the info panel (each opens a modal).",
+      group: "Beatmap Detail",
       default: true,
     },
     {
@@ -774,6 +873,14 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
+      id: "beatmapDetail.beatmapsetPreviewAudioButton",
+      label: "Open preview audio button on beatmapset pages",
+      description:
+        "On beatmapset info pages, adds a square header button (with icon) that opens the official preview MP3 at b.ppy.sh in a new tab.",
+      group: "Beatmap Detail",
+      default: false,
+    },
+    {
       id: "beatmapDetail.beatconnectDownloadButton",
       label: "Beatconnect download on beatmapset pages",
       description:
@@ -786,6 +893,22 @@ OsuExpertPlus.settings = (() => {
       label: "Load up to 100 scores on beatmap leaderboard",
       description:
         "On beatmap scoreboards, bumps the `/beatmaps/{id}/scores` API limit from osu!’s default (50) to 100 so the first page loads more rows at once. Turn off to use the site default.",
+      group: "Beatmap Detail",
+      default: true,
+    },
+    {
+      id: "beatmapDetail.scoreboardPlayerLookup",
+      label: "Leaderboard player lookup bar",
+      description:
+        "On beatmapset scoreboards, shows the username field to look up a player’s scores on the current difficulty; results replace the main leaderboard table (same idea as wildcard merge). Requires osu! API OAuth (Client ID + Secret) in Expert+ settings; without credentials the bar stays visible but disabled with a short notice.",
+      group: "Beatmap Detail",
+      default: true,
+    },
+    {
+      id: "beatmapDetail.scoreboardModGrid",
+      label: "Grid layout for scoreboard mod filters",
+      description:
+        "On beatmapset scoreboards, replaces the default horizontal mod strip with Expert+’s grouped grid (stable / Lazer, difficulty rows, reset, collapsible “Mod filters”). Turn off to use osu!’s original mod strip layout.",
       group: "Beatmap Detail",
       default: true,
     },
@@ -810,6 +933,21 @@ OsuExpertPlus.settings = (() => {
     GM_setValue("userProfile.scoreListDetails", on(pp) && on(st));
     GM_deleteValue("userProfile.ppDecimals");
     GM_deleteValue("userProfile.bestScoreStats");
+    GM_setValue(flag, true);
+  })();
+
+  (function migrateScoreListDetailsSplit() {
+    const flag = "userProfile._oepScoreListDetailsSplitMigrated";
+    if (GM_getValue(flag, false)) return;
+    const unset = "__oep_unset__";
+    const legacy = "userProfile.scoreListDetails";
+    const v = GM_getValue(legacy, unset);
+    if (v !== unset) {
+      const on = Boolean(v);
+      GM_setValue("userProfile.scorePpDecimals", on);
+      GM_setValue("userProfile.scoreHitStatistics", on);
+      GM_deleteValue(legacy);
+    }
     GM_setValue(flag, true);
   })();
 
@@ -881,26 +1019,48 @@ OsuExpertPlus.settings = (() => {
     return () => _listeners.get(id)?.delete(fn);
   }
 
+  /** Revert every option listed in the settings panel to its registered default. */
+  function resetPanelTogglesToDefaults() {
+    for (const f of FEATURES) {
+      set(f.id, Boolean(f.default));
+    }
+  }
+
   const IDS = Object.freeze({
     ALWAYS_SHOW_STATS: "userProfile.alwaysShowStats",
     BEATMAP_CARD_EXTRA_INFO: "userProfile.beatmapCardExtraInfo",
     BEATMAP_CARD_DIFFICULTY_RANGE: "userProfile.beatmapCardDifficultyRange",
     FULL_BEATMAP_STAT_NUMBERS: "userProfile.fullBeatmapStatNumbers",
-    SCORE_LIST_DETAILS: "userProfile.scoreListDetails",
+    SCORE_PP_DECIMALS: "userProfile.scorePpDecimals",
+    SCORE_HIT_STATISTICS: "userProfile.scoreHitStatistics",
     MODDED_STAR_RATING: "userProfile.moddedStarRating",
     MOD_ICONS_AS_ACRONYMS: "userProfile.modIconsAsAcronyms",
     HIDE_CL_MOD: "userProfile.hideClMod",
     SCORE_CARD_BACKGROUNDS: "userProfile.scoreCardBackgrounds",
     SCORE_CARD_PLACE_NUMBER: "userProfile.scoreCardPlaceNumber",
+    SCORE_PERIOD_HIGHLIGHT: "scores.periodHighlight",
     RECENT_SCORES_SHOW_FAILS: "userProfile.recentScoresShowFails",
+    METADATA_DESCRIPTION_MODAL_BUTTONS:
+      "beatmapDetail.metadataDescriptionModalButtons",
     DISCUSSION_DEFAULT_TO_TOTAL: "beatmapDetail.discussionDefaultToTotal",
     OMDB_BEATMAPSET_RATINGS: "beatmapDetail.omdbBeatmapsetRatings",
     BEATMAP_PREVIEW: "beatmapDetail.beatmapPreview",
+    BEATMAPSET_PREVIEW_AUDIO_BUTTON:
+      "beatmapDetail.beatmapsetPreviewAudioButton",
     BEATCONNECT_DOWNLOAD_BUTTON: "beatmapDetail.beatconnectDownloadButton",
     API_EXTENDED_LEADERBOARD: "beatmapDetail.apiExtendedLeaderboard",
+    SCOREBOARD_MOD_GRID: "beatmapDetail.scoreboardModGrid",
+    SCOREBOARD_PLAYER_LOOKUP: "beatmapDetail.scoreboardPlayerLookup",
   });
 
-  return { IDS, getFeatures, isEnabled, set, onChange };
+  return {
+    IDS,
+    getFeatures,
+    isEnabled,
+    set,
+    onChange,
+    resetPanelTogglesToDefaults,
+  };
 })();
 
 /* ── src/utils/beatmap-preview.js ── */
@@ -2740,7 +2900,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     });
 
     canvasHost.addEventListener("click", (ev) => {
-      // Odd `detail` only: double-click yields play then ignore 2nd click; triple-click can play–pause–play.
+      // Only odd `detail` (1st, 3rd, …): double-click plays once; triple-click can play-pause-play.
       if ((ev.detail & 1) !== 1) return;
       togglePlaybackFromCanvas();
     });
@@ -2881,18 +3041,42 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       min-height: var(--panel-height);
       align-items: stretch;
       overflow: visible;
+      position: relative;
+      z-index: 1;
+      isolation: isolate;
     }
+    .beatmapset-panel:has(.${BLOCK_CLASS}) .beatmapset-panel__play-container,
+    .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}) .beatmapset-panel__play-container,
+    .beatmapset-panel:has(.${STAR_RANGE_CLASS}) .beatmapset-panel__play-container,
+    .beatmapset-panel:has(.${BLOCK_CLASS}) .beatmapset-panel__menu-container,
+    .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}) .beatmapset-panel__menu-container,
+    .beatmapset-panel:has(.${STAR_RANGE_CLASS}) .beatmapset-panel__menu-container {
+      align-self: stretch;
+    }
+    .beatmapset-panel:has(.${BLOCK_CLASS}) .beatmapset-panel__cover-col--info,
+    .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}) .beatmapset-panel__cover-col--info,
+    .beatmapset-panel:has(.${STAR_RANGE_CLASS}) .beatmapset-panel__cover-col--info {
+      align-self: stretch;
+    }
+    /* Cover link is a sibling before __content (abs. over the whole card). In-flow height comes only
+       from __content; subpixel layout vs the panel translateZ(0) layer can show 1–2px of panel
+       background at the rounded bottom. Match card radius, clip children, composited layer. */
     .beatmapset-panel:has(.${BLOCK_CLASS}) .beatmapset-panel__cover-container,
     .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}) .beatmapset-panel__cover-container,
     .beatmapset-panel:has(.${STAR_RANGE_CLASS}) .beatmapset-panel__cover-container {
-      height: 100% !important;
+      top: 0 !important;
+      bottom: 0 !important;
+      height: auto !important;
       min-height: var(--panel-height);
+      border-radius: inherit;
+      overflow: hidden;
+      transform: translateZ(0);
     }
     .beatmapset-panel:has(.${BLOCK_CLASS}) .beatmapset-panel__info,
     .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}) .beatmapset-panel__info,
     .beatmapset-panel:has(.${STAR_RANGE_CLASS}) .beatmapset-panel__info {
       overflow: visible;
-      min-height: 0;
+      align-self: stretch;
     }
 
     /* API source lives in our slot; hide osu’s row so we don’t get two lines. */
@@ -2952,7 +3136,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       text-overflow: ellipsis;
     }
 
-    /* Min / max SR: wrapper (no fill) + two pills + neutral dash (spectrum per chip, inline). */
+    /* Max SR per mode: wrapper + one pill (spectrum by highest difficulty in that mode). */
     .beatmapset-panel__extra-item.beatmapset-panel__extra-item--dots .${STAR_RANGE_CLASS} {
       margin-left: 0.45em;
       display: inline-flex;
@@ -2963,14 +3147,6 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       white-space: nowrap;
       line-height: 1;
       font-size: max(10px, 0.82em);
-    }
-    .beatmapset-panel__extra-item.beatmapset-panel__extra-item--dots
-      .${STAR_RANGE_CLASS}__sep {
-      font-weight: 700;
-      color: hsl(var(--hsl-c2, 333 60% 68%));
-      opacity: 0.9;
-      flex-shrink: 0;
-      user-select: none;
     }
     .beatmapset-panel__extra-item.beatmapset-panel__extra-item--dots
       .${STAR_RANGE_CLASS}__chip {
@@ -2990,28 +3166,52 @@ OsuExpertPlus.beatmapCardExtra = (() => {
     .beatmapset-panel__extra-item.beatmapset-panel__extra-item--dots
       .${STAR_RANGE_CLASS}__chip-inner {
       display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      align-items: stretch;
       flex-wrap: nowrap;
-      column-gap: 0.12em;
+      column-gap: 0.1em;
       line-height: 1;
       color: inherit;
       min-width: 0;
     }
     .beatmapset-panel__extra-item.beatmapset-panel__extra-item--dots
+      .${STAR_RANGE_CLASS}__chip-up {
+      font-size: 0.58em;
+      line-height: 1;
+      color: inherit;
+      opacity: 0.92;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .beatmapset-panel__extra-item.beatmapset-panel__extra-item--dots
+      .${STAR_RANGE_CLASS}__chip-up::before {
+      display: block;
+      line-height: 1;
+    }
+    .beatmapset-panel__extra-item.beatmapset-panel__extra-item--dots
       .${STAR_RANGE_CLASS}__chip-icon {
-      font-size: 0.65em;
+      font-size: 0.72em;
       line-height: 1;
       color: inherit;
       flex-shrink: 0;
-      display: inline-flex;
+      display: flex;
       align-items: center;
+      justify-content: center;
+    }
+    .beatmapset-panel__extra-item.beatmapset-panel__extra-item--dots
+      .${STAR_RANGE_CLASS}__chip-icon::before {
+      display: block;
+      line-height: 1;
     }
     .beatmapset-panel__extra-item.beatmapset-panel__extra-item--dots
       .${STAR_RANGE_CLASS}__chip-val {
       font-variant-numeric: tabular-nums;
       color: inherit;
       flex-shrink: 0;
+      line-height: 1;
+      display: flex;
+      align-items: center;
     }
   `,
   );
@@ -3332,7 +3532,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
   }
 
   /**
-   * One SR pill (★ + value) with osu difficulty bg/text colours.
+   * One SR pill (FA up-chevron, star, value) with osu difficulty bg/text colours.
    * @param {{ getDiffColour: (n: number) => string, getDiffTextColour: (n: number) => string }|null|undefined} dc
    * @param {number} sr
    * @returns {HTMLElement|null}
@@ -3351,7 +3551,11 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       el(
         "span",
         { class: `${STAR_RANGE_CLASS}__chip-inner` },
-        el("i", {
+        el("span", {
+          class: `fas fa-chevron-up ${STAR_RANGE_CLASS}__chip-up`,
+          "aria-hidden": "true",
+        }),
+        el("span", {
           class: `fas fa-star ${STAR_RANGE_CLASS}__chip-icon`,
           "aria-hidden": "true",
         }),
@@ -3381,6 +3585,20 @@ OsuExpertPlus.beatmapCardExtra = (() => {
   }
 
   /**
+   * @param {object} data  beatmapset JSON
+   * @returns {number}
+   */
+  function distinctModeCountFromSet(data) {
+    const maps = data?.beatmaps;
+    if (!Array.isArray(maps)) return 0;
+    const seen = new Set();
+    for (const b of maps) {
+      if (typeof b?.mode === "string") seen.add(b.mode);
+    }
+    return seen.size;
+  }
+
+  /**
    * @param {Element} item  `.beatmapset-panel__extra-item--dots`
    * @returns {string|null}  ruleset id e.g. osu
    */
@@ -3396,7 +3614,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
   }
 
   /**
-   * Star rating min–max per mode row (visible without hovering the popup).
+   * Highest star rating per mode row (visible without hovering the popup).
    * @param {Element} panel
    * @param {object} data
    */
@@ -3404,6 +3622,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
     const dc = OsuExpertPlus.difficultyColours;
     const byMode = ratingsByRulesetFromSet(data);
     if (byMode.size === 0) return;
+    if (distinctModeCountFromSet(data) >= 4) return;
 
     panel
       .querySelectorAll(".beatmapset-panel__extra-item--dots")
@@ -3415,29 +3634,14 @@ OsuExpertPlus.beatmapCardExtra = (() => {
         if (!ratings?.length) return;
         const nums = ratings.filter((n) => Number.isFinite(n));
         if (!nums.length) return;
-        const lo = Math.min(...nums);
         const hi = Math.max(...nums);
-        const loStr = formatStarShort(lo);
         const hiStr = formatStarShort(hi);
-        if (!loStr || !hiStr) return;
+        if (!hiStr) return;
 
         const wrap = el("span", { class: STAR_RANGE_CLASS });
-
-        if (lo === hi || loStr === hiStr) {
-          const chip = buildStarChip(dc, lo);
-          if (!chip) return;
-          wrap.appendChild(chip);
-        } else {
-          const lowChip = buildStarChip(dc, lo);
-          const highChip = buildStarChip(dc, hi);
-          if (!lowChip || !highChip) return;
-          wrap.appendChild(lowChip);
-          wrap.appendChild(
-            el("span", { class: `${STAR_RANGE_CLASS}__sep` }, "\u2013"),
-          );
-          wrap.appendChild(highChip);
-        }
-
+        const chip = buildStarChip(dc, hi);
+        if (!chip) return;
+        wrap.appendChild(chip);
         row.appendChild(wrap);
       });
   }
@@ -4632,6 +4836,213 @@ OsuExpertPlus.modIconsAsAcronyms = (() => {
   };
 })();
 
+/* ── src/utils/beatmapsets-listing-mode.js ── */
+/** Remember beatmap listing gamemode (URL `m=`) and default new visits + nav links. */
+
+window.OsuExpertPlus = window.OsuExpertPlus || {};
+
+OsuExpertPlus.beatmapsetsListingMode = (() => {
+  const STORAGE_KEY = "beatmapsetsListing.preferredMode";
+  /** Written when the user picks “Any” so it does not fall back to osu (0). */
+  const STORED_ANY = "any";
+  /** `GM_getValue` default only — never persisted; missing key → treat as osu (0). */
+  const STORED_UNSET = "__oep_bms_mode_unset__";
+  const LISTING_PATH_RE = /^\/beatmapsets\/?$/i;
+
+  /**
+   * @returns {string|null}  ruleset id `0`–`3`, or `null` when the user chose Any
+   */
+  function getPreferredMode() {
+    const v = GM_getValue(STORAGE_KEY, STORED_UNSET);
+    if (v === STORED_UNSET) return "0";
+    if (v === STORED_ANY) return null;
+    const s = String(v);
+    if (/^[0123]$/.test(s)) return s;
+    return "0";
+  }
+
+  /** @param {string|null} m */
+  function setPreferredMode(m) {
+    if (m == null || m === "") {
+      GM_setValue(STORAGE_KEY, STORED_ANY);
+    } else if (/^[0123]$/.test(m)) {
+      GM_setValue(STORAGE_KEY, m);
+    }
+  }
+
+  function isBeatmapsetsListingPath(pathname) {
+    return LISTING_PATH_RE.test(pathname);
+  }
+
+  function hasAdvancedBeatmapSearch() {
+    const el = document.querySelector(
+      '.js-react[data-react="beatmaps"][data-advanced-search="1"]',
+    );
+    return el != null;
+  }
+
+  /**
+   * Mode row: grid is general → mode → …; sticky bar is status → mode.
+   * @param {Element} a
+   */
+  function isModeFilterAnchor(a) {
+    return (
+      !!a.closest(
+        ".beatmapsets-search__filter-grid > .beatmapsets-search-filter:nth-child(2)",
+      ) ||
+      !!a.closest(
+        ".beatmapsets-search--sticky .beatmapsets-search__filters > .beatmapsets-search-filter:nth-child(2)",
+      )
+    );
+  }
+
+  function persistFromListingLocation() {
+    if (!isBeatmapsetsListingPath(location.pathname)) return;
+    const m = new URLSearchParams(location.search).get("m");
+    if (m == null || m === "") {
+      setPreferredMode(null);
+    } else if (/^[0123]$/.test(m)) {
+      setPreferredMode(m);
+    }
+    patchListingAnchors();
+  }
+
+  function patchListingAnchors() {
+    const pref = getPreferredMode();
+    const nodes = document.querySelectorAll('a[href*="/beatmapsets"]');
+    for (const a of nodes) {
+      if (!(a instanceof HTMLAnchorElement)) continue;
+      let u;
+      try {
+        u = new URL(a.href);
+      } catch (_) {
+        continue;
+      }
+      if (u.hostname !== "osu.ppy.sh") continue;
+      if (!LISTING_PATH_RE.test(u.pathname)) continue;
+      if (u.searchParams.has("m")) continue;
+      if (pref == null) continue;
+      u.searchParams.set("m", pref);
+      const rel = u.pathname + u.search + u.hash;
+      const attr = a.getAttribute("href");
+      if (attr != null && /^https?:\/\//i.test(attr)) {
+        a.href = u.toString();
+      } else {
+        a.setAttribute("href", rel);
+      }
+    }
+  }
+
+  let linkMo = null;
+  let linkDebounce = 0;
+
+  /**
+   * Keeps “Beatmap listing” (and similar) links aligned with the saved `m` param.
+   * @returns {() => void}
+   */
+  function installLinkPatcher() {
+    const schedule = () => {
+      window.clearTimeout(linkDebounce);
+      linkDebounce = window.setTimeout(patchListingAnchors, 200);
+    };
+    patchListingAnchors();
+    linkMo = new MutationObserver(schedule);
+    linkMo.observe(document.documentElement, { childList: true, subtree: true });
+    return () => {
+      linkMo?.disconnect();
+      linkMo = null;
+      window.clearTimeout(linkDebounce);
+      linkDebounce = 0;
+    };
+  }
+
+  /**
+   * Listing page: apply saved mode when URL has no `m`, and record filter clicks.
+   * @returns {() => void}
+   */
+  function startPageBehavior() {
+    let applied = false;
+    /** @type {MutationObserver|null} */
+    let mo = null;
+    let moDebounce = 0;
+    let cap = 0;
+
+    const tryApplyPreferred = () => {
+      if (applied) return;
+      if (!isBeatmapsetsListingPath(location.pathname)) return;
+      if (!hasAdvancedBeatmapSearch()) {
+        applied = true;
+        return;
+      }
+      const pref = getPreferredMode();
+      if (pref == null) {
+        applied = true;
+        return;
+      }
+      const cur = new URLSearchParams(location.search).get("m");
+      if (cur != null && cur !== "") {
+        applied = true;
+        return;
+      }
+      const el = document.querySelector(
+        `a.beatmapsets-search-filter__item[data-filter-value="${CSS.escape(pref)}"]`,
+      );
+      if (!(el instanceof HTMLElement)) return;
+      el.click();
+      applied = true;
+    };
+
+    const onMo = () => {
+      window.clearTimeout(moDebounce);
+      moDebounce = window.setTimeout(() => {
+        tryApplyPreferred();
+        if (applied && mo) {
+          mo.disconnect();
+          mo = null;
+        }
+      }, 60);
+    };
+
+    tryApplyPreferred();
+    if (!applied) {
+      mo = new MutationObserver(onMo);
+      mo.observe(document.body, { childList: true, subtree: true });
+    }
+
+    cap = window.setTimeout(() => {
+      mo?.disconnect();
+      mo = null;
+      applied = true;
+    }, 20000);
+
+    const onDocClick = (e) => {
+      if (!isBeatmapsetsListingPath(location.pathname)) return;
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      const a = t.closest("a.beatmapsets-search-filter__item");
+      if (!(a instanceof HTMLAnchorElement)) return;
+      if (!isModeFilterAnchor(a)) return;
+      window.setTimeout(persistFromListingLocation, 200);
+    };
+
+    document.addEventListener("click", onDocClick, true);
+
+    return () => {
+      mo?.disconnect();
+      window.clearTimeout(moDebounce);
+      window.clearTimeout(cap);
+      document.removeEventListener("click", onDocClick, true);
+    };
+  }
+
+  return {
+    getPreferredMode,
+    installLinkPatcher,
+    startPageBehavior,
+    patchListingAnchors,
+  };
+})();
+
 /* ── src/pages/beatmapsets-listing.js ── */
 /** /beatmapsets listing (no set id). */
 
@@ -4657,6 +5068,7 @@ OsuExpertPlus.pages.beatmapsetsListing = (() => {
       OsuExpertPlus.beatmapCardStats.startFullBeatmapStatNumbers(settings),
     );
     bag.add(OsuExpertPlus.beatmapCardExtra.start(settings));
+    bag.add(OsuExpertPlus.beatmapsetsListingMode.startPageBehavior());
 
     return () => bag.dispose();
   }
@@ -4685,15 +5097,22 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   } = OsuExpertPlus.dom;
   const settings = OsuExpertPlus.settings;
   const { IDS } = settings;
+  const auth = OsuExpertPlus.auth;
   const omdb = OsuExpertPlus.omdb;
 
   // With user-profile: score-row PP + hit stats
-  const SCORE_LIST_DETAILS_ID = IDS.SCORE_LIST_DETAILS;
+  const SCORE_PP_DECIMALS_ID = IDS.SCORE_PP_DECIMALS;
+  const METADATA_DESCRIPTION_MODAL_BUTTONS_ID =
+    IDS.METADATA_DESCRIPTION_MODAL_BUTTONS;
   const DISCUSSION_DEFAULT_TO_TOTAL_ID = IDS.DISCUSSION_DEFAULT_TO_TOTAL;
   const OMDB_BEATMAPSET_RATINGS_ID = IDS.OMDB_BEATMAPSET_RATINGS;
   const BEATMAP_PREVIEW_ID = IDS.BEATMAP_PREVIEW;
+  const BEATMAPSET_PREVIEW_AUDIO_BUTTON_ID =
+    IDS.BEATMAPSET_PREVIEW_AUDIO_BUTTON;
   const BEATCONNECT_DOWNLOAD_BUTTON_ID = IDS.BEATCONNECT_DOWNLOAD_BUTTON;
   const API_EXTENDED_LEADERBOARD_ID = IDS.API_EXTENDED_LEADERBOARD;
+  const SCOREBOARD_MOD_GRID_ID = IDS.SCOREBOARD_MOD_GRID;
+  const SCOREBOARD_PLAYER_LOOKUP_ID = IDS.SCOREBOARD_PLAYER_LOOKUP;
   const beatmapPreview = OsuExpertPlus.beatmapPreview;
   const DISCUSSION_USER_CACHE = new Map();
 
@@ -4702,9 +5121,36 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   const MOD_GRID_STYLE_ID = "osu-expertplus-beatmap-mod-grid-css";
   const ROOT_CLASS = "osu-expertplus-beatmapset-extras";
   const MOD_GRID_CLASS = "oep-beatmap-scoreboard-mods";
+  const MOD_GRID_COLLAPSED_CLASS = `${MOD_GRID_CLASS}--collapsed`;
   /** Hidden React strip button → visible grid clone (clone does not receive React class updates). */
   const beatmapModGridOriginalToClone = new WeakMap();
+  /** Live MO + debounce ids for `.beatmapset-scoreboard__mods` (tear down if setting flips off mid-setup). */
+  const beatmapModGridLiveHandles = new WeakMap();
+
+  const MOD_WILDCARD_CLASS = "oep-mod-wildcard";
+  const MOD_WILDCARD_ATTR = "data-oep-mod-wildcard";
+  const WILDCARD_MERGED_ROW_ATTR = "data-oep-wildcard-merged-row";
+  const SCORE_USER_SEARCH_RESULT_ATTR = "data-oep-user-search-result";
+  const WILDCARD_LOADING_CLASS = "oep-wildcard-loading";
+  const MAX_WILDCARD_MODS = 2;
+  /** acronym → sequence counter (for oldest-eviction). 0 = not wildcard. */
+  let wildcardModState = new Map();
+  /** Monotonically increasing counter so the oldest wildcard can be evicted. */
+  let wildcardSeqCounter = 0;
+  /** Timer id for the 1-second mod-change debounce. */
+  let wildcardDebounceTimer = 0;
+  /** Abort controller for in-flight wildcard fetches. */
+  let wildcardAbortCtrl = /** @type {AbortController|null} */ (null);
+
+  /** One grid control for DT↔NC (cycle) and one for SD↔PF. */
+  const MERGED_MOD_DT_NC = "DT_NC";
+  const MERGED_MOD_SD_PF = "SD_PF";
+  /** @type {Map<string, number>} merge id → step (DT_NC: 0–3, SD_PF: 0–4). */
+  let mergedModCycleStep = new Map();
+
   const SCOREBOARD_PP_ORIGINAL_ATTR = "data-oep-scoreboard-pp-original";
+  /** Injected always-visible header nomod star rating (osu-web shows native line only on picker hover). */
+  const HEADER_NOMOD_STAR_ATTR = "data-oep-header-nomod-star";
   /** OMDB (omdb.nyahh.net) block above `.beatmapset-header__diff-name`. */
   const OEP_OMDB_WRAP_CLASS = "oep-beatmapset-omdb-wrap";
   const OEP_OMDB_ROW_CLASS = "oep-beatmapset-omdb-row";
@@ -5441,7 +5887,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       display: grid !important;
       gap: 8px 12px;
       align-items: start;
+      justify-items: stretch;
       margin-bottom: 1.5rem;
+      text-align: start;
     }
     .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] > .beatmap-scoreboard-mod[data-oep-mod-hidden] {
       display: none !important;
@@ -5456,10 +5904,83 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] {
       grid-template-columns: minmax(6.5rem, max-content) minmax(0, 1fr) minmax(0, 1fr);
       grid-template-areas:
+        "mod-toggle mod-toggle mod-toggle"
         "hdr-corner hdr-stable hdr-lazer"
         "r0-label r0-stable r0-lazer"
         "r1-label r1-stable r1-lazer"
         "r2-label r2-stable r2-lazer";
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__toggle-row {
+      grid-area: mod-toggle;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      justify-self: stretch;
+      width: 100%;
+      min-width: 0;
+      text-align: start;
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__collapse-toggle {
+      position: relative;
+      display: block;
+      flex: 0 0 auto;
+      margin: 0;
+      margin-right: auto;
+      padding: 4px 0 4px 1.35rem;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: hsl(var(--hsl-c2, 333 60% 70%));
+      text-align: start !important;
+      width: fit-content;
+      max-width: 100%;
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__collapse-label {
+      display: block;
+      text-align: start !important;
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__collapse-toggle:hover {
+      color: hsl(var(--hsl-l1, 0 0% 92%));
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__collapse-toggle:focus-visible {
+      outline: 2px solid hsl(var(--hsl-c2, 333 60% 70%));
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__collapse-toggle i {
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 1rem;
+      height: 1em;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      font-size: 12px;
+      line-height: 1;
+      opacity: 0.9;
+      transform: translateY(-50%);
+      transform-origin: 0.35em 50%;
+      transition: transform 0.15s ease;
+    }
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}].${MOD_GRID_COLLAPSED_CLASS} {
+      text-align: start !important;
+      width: 100% !important;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}].${MOD_GRID_COLLAPSED_CLASS}
+      > :not(.${MOD_GRID_CLASS}__toggle-row):not(.beatmap-scoreboard-mod) {
+      display: none !important;
+    }
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}].${MOD_GRID_COLLAPSED_CLASS}
+      .${MOD_GRID_CLASS}__collapse-toggle i {
+      transform: translateY(-50%) rotate(-90deg);
     }
     [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__hdr-corner {
       grid-area: hdr-corner;
@@ -5564,15 +6085,66 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       align-items: center;
       min-width: 0;
     }
-    /* Mod statistics numbers: enabled (i.e. non-zero) mods -> white.
-       Keep osu-web's grey-ish styling for disabled/zero-count mods. */
-    .beatmap-scoreboard-mod--enabled .mod__extender span,
-    .beatmap-scoreboard-mod--enabled .mod__extender,
-    .beatmap-scoreboard-mod--enabled .mod__customised-indicator span,
-    .beatmap-scoreboard-mod--enabled .mod__customised-indicator,
-    .beatmap-scoreboard-mod--enabled .beatmap-scoreboard-mod__stat,
-    .beatmap-scoreboard-mod--enabled .beatmap-scoreboard-mod__count {
+    /* Mod statistics numbers (grid layout only): enabled mods -> white. */
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .beatmap-scoreboard-mod--enabled .mod__extender span,
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .beatmap-scoreboard-mod--enabled .mod__extender,
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .beatmap-scoreboard-mod--enabled .mod__customised-indicator span,
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .beatmap-scoreboard-mod--enabled .mod__customised-indicator,
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .beatmap-scoreboard-mod--enabled .beatmap-scoreboard-mod__stat,
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .beatmap-scoreboard-mod--enabled .beatmap-scoreboard-mod__count {
       color: hsl(var(--hsl-l1, 0 0% 90%)) !important;
+    }
+    /* Wildcard mod styling */
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .${MOD_WILDCARD_CLASS} {
+      position: relative;
+      --scoreboard-mod-opacity: 0.85;
+      filter: none;
+    }
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .${MOD_WILDCARD_CLASS} .mod__icon {
+      outline: 2px dashed hsl(45 100% 60% / 0.85);
+      outline-offset: 1px;
+      border-radius: 8px;
+    }
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .${MOD_WILDCARD_CLASS}::after {
+      content: "?";
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: hsl(45 100% 50%);
+      color: hsl(0 0% 10%);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 16px;
+      text-align: center;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .${MOD_WILDCARD_CLASS} .beatmap-scoreboard-mod__stat,
+    .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .${MOD_WILDCARD_CLASS} .beatmap-scoreboard-mod__count {
+      color: hsl(45 100% 70%) !important;
+    }
+    /* Wildcard loading overlay on the scoreboard table */
+    .${WILDCARD_LOADING_CLASS} {
+      position: relative;
+      pointer-events: none;
+      opacity: 0.45;
+      transition: opacity 0.15s ease;
+    }
+    .${WILDCARD_LOADING_CLASS}::after {
+      content: "Loading mod combinations…";
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: hsl(0 0% 85%);
+      pointer-events: none;
+      z-index: 5;
     }
     /* Favourite hover popover (replaces osu! qtip user list on heart stat). */
     .${ROOT_CLASS}__fav-popover {
@@ -6110,6 +6682,20 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       color: #fff;
     }
 
+    /* Single always-visible nomod star line; hide osu-web duplicate on picker hover. */
+    .beatmapset-header
+      .beatmapset-header__diff-extra--star-difficulty:not([${HEADER_NOMOD_STAR_ATTR}]) {
+      display: none !important;
+    }
+    .beatmapset-header__diff-extra--star-difficulty[${HEADER_NOMOD_STAR_ATTR}] {
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+    }
+    .beatmapset-header__diff-extra--star-difficulty[${HEADER_NOMOD_STAR_ATTR}] .fas.fa-star {
+      font-size: 1em;
+      color: inherit;
+      vertical-align: baseline;
+    }
+
     /*
      * Beatmap leaderboard hit columns (GREAT/OK/MEH/MISS etc.) — same palette as
      * user-profile score card .oep-score-stats__val--* (see user-profile.js).
@@ -6176,6 +6762,111 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     .beatmapset-scoreboard table.beatmap-scoreboard-table__table td.beatmap-scoreboard-table__cell .oep-beatmap-scoreboard-pp-value {
       color: #c4b5fd;
     }
+    /* Beatmap scoreboard user search */
+    .oep-user-search {
+      box-sizing: border-box;
+      margin: 0 0 1rem 0;
+    }
+    .oep-user-search__bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 34rem;
+    }
+    .oep-user-search__input {
+      flex: 1;
+      min-width: 0;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 6px;
+      color: rgba(255, 255, 255, 0.92);
+      font: inherit;
+      font-size: 0.875rem;
+      outline: none;
+      transition: border-color 120ms ease, background 120ms ease;
+    }
+    .oep-user-search__input:focus {
+      border-color: rgba(102, 204, 255, 0.5);
+      background: rgba(255, 255, 255, 0.09);
+    }
+    .oep-user-search__input::placeholder {
+      color: rgba(255, 255, 255, 0.35);
+    }
+    .oep-user-search__btn {
+      flex-shrink: 0;
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 6px;
+      color: rgba(255, 255, 255, 0.7);
+      font: inherit;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+    .oep-user-search__btn:hover:not(:disabled) {
+      border-color: rgba(255, 255, 255, 0.28);
+      color: rgba(255, 255, 255, 0.92);
+    }
+    .oep-user-search__btn:focus-visible {
+      outline: 2px solid rgba(102, 204, 255, 0.4);
+      outline-offset: 1px;
+    }
+    .oep-user-search__btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .oep-user-search__btn--go {
+      background: rgba(102, 204, 255, 0.12);
+      border-color: rgba(102, 204, 255, 0.3);
+      color: #8fd4ff;
+    }
+    .oep-user-search__btn--go:hover:not(:disabled) {
+      background: rgba(102, 204, 255, 0.2);
+      border-color: rgba(102, 204, 255, 0.5);
+      color: #b3e3ff;
+    }
+    .oep-user-search__btn--reset[hidden] {
+      display: none;
+    }
+    .oep-user-search__status {
+      margin-top: 0.4rem;
+      max-width: 34rem;
+      font-size: 0.8125rem;
+      color: rgba(255, 255, 255, 0.5);
+      min-height: 1em;
+    }
+    .oep-user-search__result {
+      margin-top: 0.6rem;
+      overflow: visible;
+      width: 100%;
+      max-width: 100%;
+    }
+    .oep-user-search--no-api .oep-user-search__input:disabled {
+      opacity: 0.72;
+      cursor: not-allowed;
+    }
+    /* Same wrapper osu-web uses around the real table: sets --perfect-color, overflow-x, etc. */
+    .oep-user-search__result .beatmap-scoreboard-table {
+      max-width: 100%;
+    }
+    /* Searched-user result row — works both in the mini-table and in the real table */
+    table.beatmap-scoreboard-table__table tr[data-oep-user-search-result] > td.beatmap-scoreboard-table__cell,
+    table.beatmap-scoreboard-table__table tr[data-oep-user-search-result]:hover > td.beatmap-scoreboard-table__cell {
+      background-color: rgba(167, 139, 250, 0.12);
+    }
+    table.beatmap-scoreboard-table__table tr[data-oep-user-search-result] > td.beatmap-scoreboard-table__cell:first-child {
+      box-shadow: inset 3px 0 0 rgba(167, 139, 250, 0.55);
+    }
+    /* Cloned row includes osu-web’s hover-only ⋯ menu column; hide for lookup result */
+    .oep-user-search__result thead th.beatmap-scoreboard-table__header--popup-menu {
+      display: none !important;
+    }
+    tr[data-oep-user-search-result] > td.beatmap-scoreboard-table__popup-menu {
+      display: none !important;
+    }
   `;
 
   const mainStyle = manageStyle(STYLE_ID, CSS);
@@ -6234,6 +6925,35 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    * @param {HTMLElement} modsEl
    */
   function resetBeatmapScoreboardModSelection(modsEl) {
+    mergedModCycleStep.clear();
+    const hadWildcards = getWildcardMods().length > 0;
+    if (hadWildcards) {
+      clearWildcardState();
+      for (const orig of modsEl.querySelectorAll(
+        ":scope > .beatmap-scoreboard-mod[data-oep-mod-hidden]",
+      )) {
+        if (!(orig instanceof HTMLElement)) continue;
+        const ac = modButtonAcronym(orig);
+        if (!ac) continue;
+        updateCloneWildcardVisual(ac, modsEl, false);
+      }
+      const scoreboardRoot = modsEl.closest(".beatmapset-scoreboard");
+      if (scoreboardRoot instanceof HTMLElement) {
+        clearWildcardMergedLeaderboard(scoreboardRoot);
+      }
+    }
+
+    for (const orig of modsEl.querySelectorAll(
+      ":scope > .beatmap-scoreboard-mod[data-oep-mod-hidden]",
+    )) {
+      if (!(orig instanceof HTMLElement)) continue;
+      const clone = beatmapModGridOriginalToClone.get(orig);
+      if (clone instanceof HTMLElement) {
+        clone.classList.remove("beatmap-scoreboard-mod--enabled");
+        clone.setAttribute("aria-pressed", "false");
+      }
+    }
+
     const maxSteps = 40;
     let step = 0;
     const run = () => {
@@ -6273,7 +6993,50 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       root instanceof HTMLElement
         ? getActiveBeatmapScoreboardFilterMods(root)
         : [];
-    resetBtn.disabled = active.length === 0;
+    const hasWildcards = getWildcardMods().length > 0;
+    const hasEnabledInWildcardMode =
+      hasWildcards && getWildcardEnabledMods(modsEl).length > 0;
+    resetBtn.disabled =
+      active.length === 0 && !hasWildcards && !hasEnabledInWildcardMode;
+  }
+
+  /**
+   * @param {Element|null|undefined} el
+   */
+  function destroyOsuWebQtipIfBound(el) {
+    try {
+      const $ = typeof window !== "undefined" && window.$;
+      if (!$ || !el || !$.fn?.qtip) return;
+      const $el = $(el);
+      if ($el.data("qtip")) $el.qtip("destroy");
+    } catch (_) {
+      void 0;
+    }
+  }
+
+  /**
+   * qTip’s target can lose hover events when innerHTML is replaced, leaving the popup stuck.
+   * @param {HTMLElement} root
+   */
+  function destroyOsuWebQtipOnElementSubtree(root) {
+    if (!(root instanceof HTMLElement)) return;
+    destroyOsuWebQtipIfBound(root);
+    for (const node of root.querySelectorAll("*")) {
+      destroyOsuWebQtipIfBound(node);
+    }
+  }
+
+  /**
+   * Copies markup from the hidden React strip button onto the visible grid clone.
+   * @param {HTMLElement} clone
+   * @param {HTMLElement} original
+   */
+  function replaceBeatmapModGridCloneInnerHTML(clone, original) {
+    if (!(clone instanceof HTMLElement) || !(original instanceof HTMLElement))
+      return;
+    if (clone.innerHTML === original.innerHTML) return;
+    destroyOsuWebQtipOnElementSubtree(clone);
+    clone.innerHTML = original.innerHTML;
   }
 
   /**
@@ -6282,12 +7045,54 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    */
   function syncBeatmapModGridCloneHighlights(modsEl) {
     if (!modsEl.hasAttribute(MOD_GRID_ATTR)) return;
+    const hasActiveWildcards = getWildcardMods().length > 0;
+
+    for (const clone of modsEl.querySelectorAll(
+      `[data-oep-merged-mod="${MERGED_MOD_DT_NC}"], [data-oep-merged-mod="${MERGED_MOD_SD_PF}"]`,
+    )) {
+      if (!(clone instanceof HTMLElement)) continue;
+      const mergeId = clone.getAttribute("data-oep-merged-mod");
+      if (mergeId) syncMergedModCloneHighlights(modsEl, clone, mergeId);
+    }
+
     for (const original of modsEl.querySelectorAll(
       ":scope > .beatmap-scoreboard-mod[data-oep-mod-hidden]",
     )) {
       if (!(original instanceof HTMLElement)) continue;
+      if (shouldSkipOriginalInModGridSync(modsEl, original)) continue;
       const clone = beatmapModGridOriginalToClone.get(original);
       if (!(clone instanceof HTMLElement)) continue;
+
+      const ac = modButtonAcronym(original);
+      const isWildcard = ac && (wildcardModState.get(ac) || 0) > 0;
+
+      if (isWildcard) {
+        replaceBeatmapModGridCloneInnerHTML(clone, original);
+        clone.disabled = original.disabled;
+        clone.classList.remove("beatmap-scoreboard-mod--enabled");
+        clone.setAttribute("aria-pressed", "false");
+        if (!clone.classList.contains(MOD_WILDCARD_CLASS)) {
+          clone.classList.add(MOD_WILDCARD_CLASS);
+          clone.setAttribute(MOD_WILDCARD_ATTR, "1");
+        }
+        continue;
+      }
+
+      if (hasActiveWildcards) {
+        replaceBeatmapModGridCloneInnerHTML(clone, original);
+        clone.disabled = original.disabled;
+        const origOn = isBeatmapScoreboardModStripButtonOn(original);
+        if (origOn) {
+          clone.classList.add("beatmap-scoreboard-mod--enabled");
+          clone.setAttribute("aria-pressed", "true");
+        } else {
+          clone.classList.remove("beatmap-scoreboard-mod--enabled");
+          clone.setAttribute("aria-pressed", "false");
+        }
+        clone.classList.remove(MOD_WILDCARD_CLASS);
+        clone.removeAttribute(MOD_WILDCARD_ATTR);
+        continue;
+      }
 
       if (clone.className !== original.className) {
         clone.className = original.className;
@@ -6301,17 +7106,40 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
       clone.disabled = original.disabled;
 
-      if (clone.innerHTML !== original.innerHTML) {
-        clone.innerHTML = original.innerHTML;
-      }
+      replaceBeatmapModGridCloneInnerHTML(clone, original);
+
+      clone.classList.remove(MOD_WILDCARD_CLASS);
+      clone.removeAttribute(MOD_WILDCARD_ATTR);
     }
+  }
+
+  /**
+   * @param {HTMLElement} modsEl
+   */
+  function stopBeatmapScoreboardModGridLive(modsEl) {
+    const h = beatmapModGridLiveHandles.get(modsEl);
+    if (h) {
+      window.clearTimeout(h.debounceId);
+      window.clearTimeout(h.modStateDebounceId);
+      h.mo?.disconnect();
+      h.modStateMo?.disconnect();
+      beatmapModGridLiveHandles.delete(modsEl);
+    }
+    modsEl.removeAttribute(MOD_RESET_BTN_SYNC_ATTR);
+    teardownBeatmapModGrid(modsEl);
   }
 
   function teardownBeatmapModGrid(modsEl) {
     if (!(modsEl instanceof HTMLElement)) return;
 
+    clearWildcardState();
+    const scoreboardRoot = modsEl.closest(".beatmapset-scoreboard");
+    if (scoreboardRoot instanceof HTMLElement) {
+      clearWildcardMergedLeaderboard(scoreboardRoot);
+    }
+
     modsEl.removeAttribute(MOD_GRID_ATTR);
-    modsEl.classList.remove(MOD_GRID_CLASS);
+    modsEl.classList.remove(MOD_GRID_CLASS, MOD_GRID_COLLAPSED_CLASS);
 
     // Unhide original React-managed buttons (kept in place, never moved).
     for (const btn of modsEl.querySelectorAll(
@@ -6328,6 +7156,1228 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     }
   }
 
+  /** Reset all wildcard state (used on teardown or beatmap change). */
+  function clearWildcardState() {
+    mergedModCycleStep.clear();
+    wildcardModState.clear();
+    wildcardSeqCounter = 0;
+    window.clearTimeout(wildcardDebounceTimer);
+    wildcardDebounceTimer = 0;
+    if (wildcardAbortCtrl) {
+      wildcardAbortCtrl.abort();
+      wildcardAbortCtrl = null;
+    }
+  }
+
+  /** @returns {string[]} Acronyms currently in wildcard state. */
+  function getWildcardMods() {
+    const out = [];
+    for (const [ac, seq] of wildcardModState) {
+      if (seq > 0) out.push(ac);
+    }
+    return out;
+  }
+
+  /**
+   * Mark a mod as wildcard. If this would exceed MAX_WILDCARD_MODS, the oldest
+   * wildcard is evicted and its clone visual is reset.
+   * @param {string} acronym
+   * @param {HTMLElement} modsEl
+   */
+  function enableWildcard(acronym, modsEl) {
+    const current = getWildcardMods().filter((a) => a !== acronym);
+    while (current.length >= MAX_WILDCARD_MODS) {
+      const oldest = current.sort(
+        (a, b) =>
+          (wildcardModState.get(a) || 0) - (wildcardModState.get(b) || 0),
+      )[0];
+      wildcardModState.set(oldest, 0);
+      current.splice(current.indexOf(oldest), 1);
+      updateCloneWildcardVisual(oldest, modsEl, false);
+    }
+    wildcardSeqCounter += 1;
+    wildcardModState.set(acronym, wildcardSeqCounter);
+  }
+
+  /**
+   * @param {string} acronym
+   * @param {HTMLElement} modsEl
+   * @param {boolean} isWildcard
+   */
+  function updateCloneWildcardVisual(acronym, modsEl, isWildcard) {
+    for (const orig of modsEl.querySelectorAll(
+      ":scope > .beatmap-scoreboard-mod[data-oep-mod-hidden]",
+    )) {
+      if (!(orig instanceof HTMLElement)) continue;
+      if (modButtonAcronym(orig) !== acronym) continue;
+      const clone = beatmapModGridOriginalToClone.get(orig);
+      if (!(clone instanceof HTMLElement)) continue;
+      if (isWildcard) {
+        clone.classList.add(MOD_WILDCARD_CLASS);
+        clone.setAttribute(MOD_WILDCARD_ATTR, "1");
+      } else {
+        clone.classList.remove(MOD_WILDCARD_CLASS);
+        clone.removeAttribute(MOD_WILDCARD_ATTR);
+      }
+    }
+  }
+
+  /** @returns {boolean} */
+  function isWildcardFeatureAvailable() {
+    return auth.isConfigured() && settings.isEnabled(SCOREBOARD_MOD_GRID_ID);
+  }
+
+  /**
+   * Given enabled mods and wildcard mods, generate all mod combinations.
+   * e.g. enabled=[DT], wildcard=[HD,FL] → [[DT],[DT,HD],[DT,FL],[DT,HD,FL]]
+   * @param {string[]} enabledMods
+   * @param {string[]} wildcardMods
+   * @returns {string[][]}
+   */
+  function generateModCombinations(enabledMods, wildcardMods) {
+    const combos = [];
+    const n = wildcardMods.length;
+    for (let mask = 0; mask < 1 << n; mask++) {
+      const combo = [...enabledMods];
+      for (let i = 0; i < n; i++) {
+        if (mask & (1 << i)) combo.push(wildcardMods[i]);
+      }
+      combos.push(combo.sort());
+    }
+    return combos;
+  }
+
+  /**
+   * Fetch leaderboard scores for multiple mod combinations, merge, dedup, sort,
+   * and return the top `limit` scores.
+   * @param {string} beatmapId
+   * @param {string[][]} modCombos
+   * @param {string} mode
+   * @param {number} limit
+   * @param {AbortSignal} signal
+   * @returns {Promise<object[]>}
+   */
+  async function fetchAndMergeWildcardLeaderboards(
+    beatmapId,
+    modCombos,
+    mode,
+    limit,
+    signal,
+  ) {
+    const fetches = modCombos.map((mods) =>
+      OsuExpertPlus.api
+        .getBeatmapScores(beatmapId, {
+          mode,
+          // Omitting mods[] returns every mod combination; NM is required for nomod.
+          mods: mods.length ? mods : ["NM"],
+          limit: EXTENDED_LB_LIMIT,
+        })
+        .then((res) => res?.scores || [])
+        .catch(() => []),
+    );
+
+    const results = await Promise.all(fetches);
+    if (signal.aborted) return [];
+
+    const seen = new Set();
+    const merged = [];
+    for (const scores of results) {
+      for (const s of scores) {
+        const id = leaderboardScoreId(s);
+        if (id && seen.has(id)) continue;
+        if (id) seen.add(id);
+        merged.push(s);
+      }
+    }
+    sortLeaderboardScoresLikeTable(merged);
+    return merged.slice(0, limit);
+  }
+
+  /**
+   * Replace the scoreboard tbody with API-fetched merged wildcard rows.
+   * @param {HTMLElement} scoreboardRoot
+   * @param {object[]} scores
+   */
+  function renderWildcardMergedLeaderboard(scoreboardRoot, scores) {
+    const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
+    if (!(realTable instanceof HTMLTableElement)) return;
+    const tbody = realTable.querySelector(
+      "tbody.beatmap-scoreboard-table__body",
+    );
+    if (!tbody) return;
+    const templateRow = tbody.querySelector(
+      "tr.beatmap-scoreboard-table__body-row",
+    );
+    if (!(templateRow instanceof HTMLTableRowElement)) return;
+
+    const colMap = buildBeatmapScoreboardColumnMap(templateRow, realTable);
+    const modTemplateBtn =
+      resolveBeatmapScoreboardModTemplateEl(scoreboardRoot);
+    const beatmapId = getBeatmapPageBeatmapId();
+    const mapFullCombo = beatmapId
+      ? getBeatmapFullComboFromBeatmapsetJson(beatmapId)
+      : null;
+
+    const existingExtendedRows = tbody.querySelectorAll(
+      `tr[${EXTENDED_SCORE_ROW_ATTR}]`,
+    );
+    existingExtendedRows.forEach((r) => r.remove());
+
+    const existingWildcardRows = tbody.querySelectorAll(
+      `tr[${WILDCARD_MERGED_ROW_ATTR}]`,
+    );
+    existingWildcardRows.forEach((r) => r.remove());
+
+    tbody
+      .querySelectorAll(`tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`)
+      .forEach((r) => r.remove());
+
+    const nativeRows = [
+      ...tbody.querySelectorAll("tr.beatmap-scoreboard-table__body-row"),
+    ];
+    for (const nr of nativeRows) nr.style.display = "none";
+
+    // Insert wildcard rows before the hidden native rows so nth-child alternation
+    // starts at 1 and matches the visual first row.
+    const firstNative = nativeRows[0] ?? null;
+
+    for (let i = 0; i < scores.length; i++) {
+      const score = scores[i];
+      if (!score || typeof score !== "object") continue;
+      const row = /** @type {HTMLTableRowElement} */ (
+        templateRow.cloneNode(true)
+      );
+      row.setAttribute(WILDCARD_MERGED_ROW_ATTR, "1");
+      row.style.display = "";
+      row.classList.remove(
+        "beatmap-scoreboard-table__body-row--friend",
+        "beatmap-scoreboard-table__body-row--first",
+        "beatmap-scoreboard-table__body-row--self",
+      );
+
+      // Strip per-user decorations from the player cell before re-applying score data.
+      if (colMap.user != null) {
+        const playerTd = row.cells[colMap.user];
+        if (playerTd) {
+          // Remove team flag link (osu! tournament teams show a flag next to the username).
+          for (const teamLink of playerTd.querySelectorAll(
+            'a[href*="/teams/"]',
+          )) {
+            teamLink.remove();
+          }
+        }
+      }
+
+      applyApiScoreToBeatmapScoreRow(
+        row,
+        score,
+        i + 1,
+        colMap,
+        realTable,
+        templateRow,
+        modTemplateBtn,
+        mapFullCombo,
+      );
+
+      // Sync js-usercard data-user-id so hover cards reference the correct user.
+      if (colMap.user != null) {
+        const uid = score.user?.id ?? score.user_id;
+        const playerTd = row.cells[colMap.user];
+        const card = playerTd?.querySelector(".js-usercard");
+        if (card instanceof HTMLElement && uid != null) {
+          card.setAttribute("data-user-id", String(uid));
+        }
+      }
+
+      tbody.insertBefore(row, firstNative);
+    }
+
+    refreshBeatmapScoreboardTableEnhancements(scoreboardRoot);
+  }
+
+  /**
+   * Remove wildcard-merged rows and restore native rows.
+   * @param {HTMLElement|null} scoreboardRoot
+   */
+  function clearWildcardMergedLeaderboard(scoreboardRoot) {
+    if (!scoreboardRoot) return;
+    const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
+    if (!(realTable instanceof HTMLTableElement)) return;
+    const tbody = realTable.querySelector(
+      "tbody.beatmap-scoreboard-table__body",
+    );
+    if (!tbody) return;
+    tbody
+      .querySelectorAll(`tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`)
+      .forEach((r) => r.remove());
+    tbody
+      .querySelectorAll(`tr[${WILDCARD_MERGED_ROW_ATTR}]`)
+      .forEach((r) => r.remove());
+    for (const nr of tbody.querySelectorAll(
+      "tr.beatmap-scoreboard-table__body-row",
+    )) {
+      /** @type {HTMLElement} */ (nr).style.display = "";
+    }
+    refreshBeatmapScoreboardTableEnhancements(scoreboardRoot);
+  }
+
+  /**
+   * Remove player-lookup rows from the main leaderboard and show osu-web rows again.
+   * @param {HTMLElement|null|undefined} scoreboardRoot
+   * @param {Element|null|undefined} modsEl
+   * @param {boolean} [rescheduleWildcard=true] When true and wildcard mods are active, re-runs the merged fetch (e.g. user clicked Reset).
+   */
+  function clearUserSearchMergedLeaderboard(
+    scoreboardRoot,
+    modsEl,
+    rescheduleWildcard = true,
+  ) {
+    if (!(scoreboardRoot instanceof HTMLElement)) return;
+    const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
+    if (!(realTable instanceof HTMLTableElement)) return;
+    const tbody = realTable.querySelector(
+      "tbody.beatmap-scoreboard-table__body",
+    );
+    if (!tbody) return;
+    tbody
+      .querySelectorAll(`tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`)
+      .forEach((r) => r.remove());
+    for (const nr of tbody.querySelectorAll(
+      "tr.beatmap-scoreboard-table__body-row",
+    )) {
+      /** @type {HTMLElement} */ (nr).style.display = "";
+    }
+    refreshBeatmapScoreboardTableEnhancements(scoreboardRoot);
+    if (!rescheduleWildcard) return;
+    const mods =
+      modsEl instanceof HTMLElement
+        ? modsEl
+        : scoreboardRoot.querySelector(".beatmapset-scoreboard__mods");
+    if (mods instanceof HTMLElement && getWildcardMods().length > 0) {
+      scheduleWildcardFetch(mods);
+    }
+  }
+
+  /**
+   * Collect the "enabled" (not wildcard, not disabled) mods from our tracked state.
+   * @param {HTMLElement} modsEl
+   * @returns {string[]}
+   */
+  function getWildcardEnabledMods(modsEl) {
+    const enabled = [];
+    if (beatmapModGridHasMergedDtNc(modsEl)) {
+      const s = mergedModCycleStep.get(MERGED_MOD_DT_NC) ?? 0;
+      if (s === 1) enabled.push("DT");
+      if (s === 2) enabled.push("NC");
+    }
+    if (beatmapModGridHasMergedSdPf(modsEl)) {
+      const s = mergedModCycleStep.get(MERGED_MOD_SD_PF) ?? 0;
+      if (s === 1) enabled.push("SD");
+      if (s === 2) enabled.push("PF");
+    }
+    for (const orig of modsEl.querySelectorAll(
+      ":scope > .beatmap-scoreboard-mod[data-oep-mod-hidden]",
+    )) {
+      if (!(orig instanceof HTMLElement)) continue;
+      const ac = modButtonAcronym(orig);
+      if (!ac || ac === "NM") continue;
+      if (shouldSkipOriginalInModGridSync(modsEl, orig)) continue;
+      const clone = beatmapModGridOriginalToClone.get(orig);
+      if (!(clone instanceof HTMLElement)) continue;
+      const isWildcard = (wildcardModState.get(ac) || 0) > 0;
+      if (isWildcard) continue;
+      if (
+        clone.classList.contains("beatmap-scoreboard-mod--enabled") ||
+        clone.getAttribute("aria-pressed") === "true"
+      ) {
+        enabled.push(ac);
+      }
+    }
+    return enabled;
+  }
+
+  /**
+   * Trigger the wildcard leaderboard fetch-merge-render cycle after debounce.
+   * @param {HTMLElement} modsEl
+   */
+  function scheduleWildcardFetch(modsEl) {
+    window.clearTimeout(wildcardDebounceTimer);
+    if (wildcardAbortCtrl) {
+      wildcardAbortCtrl.abort();
+      wildcardAbortCtrl = null;
+    }
+
+    const wildcards = getWildcardMods();
+    const scoreboardRoot =
+      modsEl.closest(".beatmapset-scoreboard") ||
+      document.querySelector(".beatmapset-scoreboard");
+    if (!(scoreboardRoot instanceof HTMLElement)) return;
+
+    if (wildcards.length === 0) {
+      clearWildcardMergedLeaderboard(scoreboardRoot);
+      const tableWrap = scoreboardRoot.querySelector(
+        ".beatmap-scoreboard-table",
+      );
+      if (tableWrap instanceof HTMLElement) {
+        tableWrap.classList.remove(WILDCARD_LOADING_CLASS);
+      }
+      syncActiveModsToOriginals(modsEl);
+      return;
+    }
+
+    const enabledMods = getWildcardEnabledMods(modsEl);
+    const beatmapId = getBeatmapPageBeatmapId();
+    const mode = getBeatmapPageRuleset();
+    if (!beatmapId) return;
+
+    const combos = generateModCombinations(enabledMods, wildcards);
+
+    const tableWrap = scoreboardRoot.querySelector(".beatmap-scoreboard-table");
+    if (tableWrap instanceof HTMLElement) {
+      tableWrap.classList.add(WILDCARD_LOADING_CLASS);
+    }
+
+    wildcardAbortCtrl = new AbortController();
+    const signal = wildcardAbortCtrl.signal;
+
+    wildcardDebounceTimer = window.setTimeout(() => {
+      wildcardDebounceTimer = 0;
+      fetchAndMergeWildcardLeaderboards(
+        beatmapId,
+        combos,
+        mode,
+        EXTENDED_LB_LIMIT,
+        signal,
+      )
+        .then((merged) => {
+          if (signal.aborted) return;
+          if (tableWrap instanceof HTMLElement) {
+            tableWrap.classList.remove(WILDCARD_LOADING_CLASS);
+          }
+          if (merged.length > 0) {
+            renderWildcardMergedLeaderboard(scoreboardRoot, merged);
+          }
+        })
+        .catch(() => {
+          if (tableWrap instanceof HTMLElement) {
+            tableWrap.classList.remove(WILDCARD_LOADING_CLASS);
+          }
+        });
+    }, 1000);
+  }
+
+  /**
+   * When leaving wildcard mode (all wildcards removed), click originals
+   * to sync their enabled state with what the clones show.
+   * @param {HTMLElement} modsEl
+   */
+  function syncActiveModsToOriginals(modsEl) {
+    const cloneEnabled = buildBeatmapModGridCloneEnabledSet(modsEl);
+
+    let clickQueue = [];
+    for (const orig of modsEl.querySelectorAll(
+      ":scope > .beatmap-scoreboard-mod[data-oep-mod-hidden]",
+    )) {
+      if (!(orig instanceof HTMLElement)) continue;
+      const ac = modButtonAcronym(orig);
+      if (!ac || ac === "NM") continue;
+      const origOn = isBeatmapScoreboardModStripButtonOn(orig);
+      const shouldBeOn = cloneEnabled.has(ac);
+      if (origOn !== shouldBeOn) clickQueue.push(orig);
+    }
+
+    let step = 0;
+    const maxSteps = 40;
+    const run = () => {
+      if (++step > maxSteps || !clickQueue.length) {
+        syncBeatmapModGridCloneHighlights(modsEl);
+        syncBeatmapScoreboardModResetButton(modsEl);
+        return;
+      }
+      const btn = clickQueue.shift();
+      btn.click();
+      window.requestAnimationFrame(run);
+    };
+    if (clickQueue.length) window.requestAnimationFrame(run);
+  }
+
+  /**
+   * @param {HTMLElement} modsEl
+   * @param {string} acronym
+   * @returns {HTMLElement|null}
+   */
+  function findHiddenBeatmapModButton(modsEl, acronym) {
+    const want = String(acronym || "").trim().toUpperCase();
+    if (!want) return null;
+    for (const btn of modsEl.querySelectorAll(
+      ":scope > .beatmap-scoreboard-mod[data-oep-mod-hidden]",
+    )) {
+      if (!(btn instanceof HTMLElement)) continue;
+      if (modButtonAcronym(btn) === want) return btn;
+    }
+    return null;
+  }
+
+  /**
+   * @param {HTMLElement} modsEl
+   * @returns {boolean}
+   */
+  function beatmapModGridHasMergedDtNc(modsEl) {
+    return Boolean(
+      modsEl.querySelector(`[data-oep-merged-mod="${MERGED_MOD_DT_NC}"]`),
+    );
+  }
+
+  /**
+   * @param {HTMLElement} modsEl
+   * @returns {boolean}
+   */
+  function beatmapModGridHasMergedSdPf(modsEl) {
+    return Boolean(
+      modsEl.querySelector(`[data-oep-merged-mod="${MERGED_MOD_SD_PF}"]`),
+    );
+  }
+
+  /**
+   * @param {HTMLElement} modsEl
+   * @param {HTMLElement} original
+   * @returns {boolean}
+   */
+  function shouldSkipOriginalInModGridSync(modsEl, original) {
+    const ac = modButtonAcronym(original);
+    if (beatmapModGridHasMergedDtNc(modsEl) && (ac === "DT" || ac === "NC")) {
+      return true;
+    }
+    if (beatmapModGridHasMergedSdPf(modsEl) && (ac === "SD" || ac === "PF")) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * @param {HTMLElement} modsEl
+   * @returns {Set<string>}
+   */
+  function buildBeatmapModGridCloneEnabledSet(modsEl) {
+    const set = new Set();
+    if (beatmapModGridHasMergedDtNc(modsEl)) {
+      const s = mergedModCycleStep.get(MERGED_MOD_DT_NC) ?? 0;
+      if (s === 1) set.add("DT");
+      if (s === 2) set.add("NC");
+    }
+    if (beatmapModGridHasMergedSdPf(modsEl)) {
+      const s = mergedModCycleStep.get(MERGED_MOD_SD_PF) ?? 0;
+      if (s === 1) set.add("SD");
+      if (s === 2) set.add("PF");
+    }
+    for (const orig of modsEl.querySelectorAll(
+      ":scope > .beatmap-scoreboard-mod[data-oep-mod-hidden]",
+    )) {
+      if (!(orig instanceof HTMLElement)) continue;
+      const ac = modButtonAcronym(orig);
+      if (!ac || ac === "NM") continue;
+      if (beatmapModGridHasMergedDtNc(modsEl) && (ac === "DT" || ac === "NC")) {
+        continue;
+      }
+      if (beatmapModGridHasMergedSdPf(modsEl) && (ac === "SD" || ac === "PF")) {
+        continue;
+      }
+      const clone = beatmapModGridOriginalToClone.get(orig);
+      if (!(clone instanceof HTMLElement)) continue;
+      if (
+        clone.classList.contains("beatmap-scoreboard-mod--enabled") ||
+        clone.getAttribute("aria-pressed") === "true"
+      ) {
+        set.add(ac);
+      }
+    }
+    return set;
+  }
+
+  function reconcileMergedModCycleFromDom(modsEl) {
+    if (beatmapModGridHasMergedDtNc(modsEl)) {
+      const dt = findHiddenBeatmapModButton(modsEl, "DT");
+      const nc = findHiddenBeatmapModButton(modsEl, "NC");
+      if (dt instanceof HTMLElement && nc instanceof HTMLElement) {
+        let step = 0;
+        if ((wildcardModState.get("DT") || 0) > 0) step = 3;
+        else if (isBeatmapScoreboardModStripButtonOn(nc)) step = 2;
+        else if (isBeatmapScoreboardModStripButtonOn(dt)) step = 1;
+        mergedModCycleStep.set(MERGED_MOD_DT_NC, step);
+      }
+    }
+    if (beatmapModGridHasMergedSdPf(modsEl)) {
+      const sd = findHiddenBeatmapModButton(modsEl, "SD");
+      const pf = findHiddenBeatmapModButton(modsEl, "PF");
+      if (sd instanceof HTMLElement && pf instanceof HTMLElement) {
+        let step = 0;
+        if ((wildcardModState.get("PF") || 0) > 0) step = 4;
+        else if ((wildcardModState.get("SD") || 0) > 0) step = 3;
+        else if (isBeatmapScoreboardModStripButtonOn(pf)) step = 2;
+        else if (isBeatmapScoreboardModStripButtonOn(sd)) step = 1;
+        mergedModCycleStep.set(MERGED_MOD_SD_PF, step);
+      }
+    }
+  }
+
+  function mergedModGridEffectiveStepCount(mergeId) {
+    if (isWildcardFeatureAvailable()) {
+      return mergeId === MERGED_MOD_DT_NC ? 4 : 5;
+    }
+    return mergeId === MERGED_MOD_DT_NC ? 3 : 3;
+  }
+
+  function finishMergedModStepApply(modsEl, mergeId, step) {
+    mergedModCycleStep.set(mergeId, step);
+    syncBeatmapModGridCloneHighlights(modsEl);
+    syncBeatmapScoreboardModResetButton(modsEl);
+    scheduleWildcardFetch(modsEl);
+  }
+
+  function applyDtNcTargetStep(modsEl, targetStep) {
+    const dt = findHiddenBeatmapModButton(modsEl, "DT");
+    const nc = findHiddenBeatmapModButton(modsEl, "NC");
+    if (!(dt instanceof HTMLElement) || !(nc instanceof HTMLElement)) return;
+    let frames = 0;
+    const tick = () => {
+      if (++frames > 56) {
+        finishMergedModStepApply(modsEl, MERGED_MOD_DT_NC, targetStep);
+        return;
+      }
+      const dtOn = isBeatmapScoreboardModStripButtonOn(dt);
+      const ncOn = isBeatmapScoreboardModStripButtonOn(nc);
+      const wDt = (wildcardModState.get("DT") || 0) > 0;
+
+      if (targetStep === 3) {
+        if (wDt) {
+          if (dtOn) {
+            dt.click();
+            requestAnimationFrame(tick);
+            return;
+          }
+          if (ncOn) {
+            nc.click();
+            requestAnimationFrame(tick);
+            return;
+          }
+          finishMergedModStepApply(modsEl, MERGED_MOD_DT_NC, 3);
+          return;
+        }
+        if (ncOn) {
+          nc.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (dtOn) {
+          dt.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (!isWildcardFeatureAvailable()) {
+          finishMergedModStepApply(modsEl, MERGED_MOD_DT_NC, 3);
+          return;
+        }
+        enableWildcard("DT", modsEl);
+        updateCloneWildcardVisual("DT", modsEl, true);
+        finishMergedModStepApply(modsEl, MERGED_MOD_DT_NC, 3);
+        return;
+      }
+
+      if (wDt) {
+        wildcardModState.set("DT", 0);
+        updateCloneWildcardVisual("DT", modsEl, false);
+        requestAnimationFrame(tick);
+        return;
+      }
+
+      if (targetStep === 0) {
+        if (ncOn) {
+          nc.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (dtOn) {
+          dt.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        finishMergedModStepApply(modsEl, MERGED_MOD_DT_NC, 0);
+        return;
+      }
+      if (targetStep === 1) {
+        if (ncOn) {
+          nc.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (!dtOn) {
+          dt.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        finishMergedModStepApply(modsEl, MERGED_MOD_DT_NC, 1);
+        return;
+      }
+      if (targetStep === 2) {
+        if (dtOn) {
+          dt.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (!ncOn) {
+          nc.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        finishMergedModStepApply(modsEl, MERGED_MOD_DT_NC, 2);
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  function applySdPfTargetStep(modsEl, targetStep) {
+    const sd = findHiddenBeatmapModButton(modsEl, "SD");
+    const pf = findHiddenBeatmapModButton(modsEl, "PF");
+    if (!(sd instanceof HTMLElement) || !(pf instanceof HTMLElement)) return;
+    let frames = 0;
+    const tick = () => {
+      if (++frames > 64) {
+        finishMergedModStepApply(modsEl, MERGED_MOD_SD_PF, targetStep);
+        return;
+      }
+      const sdOn = isBeatmapScoreboardModStripButtonOn(sd);
+      const pfOn = isBeatmapScoreboardModStripButtonOn(pf);
+      const wSd = (wildcardModState.get("SD") || 0) > 0;
+      const wPf = (wildcardModState.get("PF") || 0) > 0;
+
+      if (targetStep === 4) {
+        if (wPf) {
+          if (sdOn) {
+            sd.click();
+            requestAnimationFrame(tick);
+            return;
+          }
+          if (pfOn) {
+            pf.click();
+            requestAnimationFrame(tick);
+            return;
+          }
+          finishMergedModStepApply(modsEl, MERGED_MOD_SD_PF, 4);
+          return;
+        }
+        if (wSd) {
+          wildcardModState.set("SD", 0);
+          updateCloneWildcardVisual("SD", modsEl, false);
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (pfOn) {
+          pf.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (sdOn) {
+          sd.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (!isWildcardFeatureAvailable()) {
+          finishMergedModStepApply(modsEl, MERGED_MOD_SD_PF, 4);
+          return;
+        }
+        enableWildcard("PF", modsEl);
+        updateCloneWildcardVisual("PF", modsEl, true);
+        finishMergedModStepApply(modsEl, MERGED_MOD_SD_PF, 4);
+        return;
+      }
+
+      if (targetStep === 3) {
+        if (wSd) {
+          if (sdOn) {
+            sd.click();
+            requestAnimationFrame(tick);
+            return;
+          }
+          if (pfOn) {
+            pf.click();
+            requestAnimationFrame(tick);
+            return;
+          }
+          finishMergedModStepApply(modsEl, MERGED_MOD_SD_PF, 3);
+          return;
+        }
+        if (wPf) {
+          wildcardModState.set("PF", 0);
+          updateCloneWildcardVisual("PF", modsEl, false);
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (pfOn) {
+          pf.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (sdOn) {
+          sd.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (!isWildcardFeatureAvailable()) {
+          finishMergedModStepApply(modsEl, MERGED_MOD_SD_PF, 3);
+          return;
+        }
+        enableWildcard("SD", modsEl);
+        updateCloneWildcardVisual("SD", modsEl, true);
+        finishMergedModStepApply(modsEl, MERGED_MOD_SD_PF, 3);
+        return;
+      }
+
+      if (wPf) {
+        wildcardModState.set("PF", 0);
+        updateCloneWildcardVisual("PF", modsEl, false);
+        requestAnimationFrame(tick);
+        return;
+      }
+      if (wSd) {
+        wildcardModState.set("SD", 0);
+        updateCloneWildcardVisual("SD", modsEl, false);
+        requestAnimationFrame(tick);
+        return;
+      }
+
+      if (targetStep === 0) {
+        if (pfOn) {
+          pf.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (sdOn) {
+          sd.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        finishMergedModStepApply(modsEl, MERGED_MOD_SD_PF, 0);
+        return;
+      }
+      if (targetStep === 1) {
+        if (pfOn) {
+          pf.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (!sdOn) {
+          sd.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        finishMergedModStepApply(modsEl, MERGED_MOD_SD_PF, 1);
+        return;
+      }
+      if (targetStep === 2) {
+        if (sdOn) {
+          sd.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (!pfOn) {
+          pf.click();
+          requestAnimationFrame(tick);
+          return;
+        }
+        finishMergedModStepApply(modsEl, MERGED_MOD_SD_PF, 2);
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  function applyMergedModTargetStep(modsEl, mergeId, targetStep) {
+    if (mergeId === MERGED_MOD_DT_NC) {
+      applyDtNcTargetStep(modsEl, targetStep);
+    } else if (mergeId === MERGED_MOD_SD_PF) {
+      applySdPfTargetStep(modsEl, targetStep);
+    }
+  }
+
+  /**
+   * @param {HTMLElement} modsEl
+   * @param {HTMLElement} clone
+   * @param {string} mergeId
+   */
+  function syncMergedModCloneHighlights(modsEl, clone, mergeId) {
+    if (!(clone instanceof HTMLElement)) return;
+    const hasActiveWildcards = getWildcardMods().length > 0;
+    const dt = findHiddenBeatmapModButton(modsEl, "DT");
+    const nc = findHiddenBeatmapModButton(modsEl, "NC");
+    const sd = findHiddenBeatmapModButton(modsEl, "SD");
+    const pf = findHiddenBeatmapModButton(modsEl, "PF");
+
+    if (mergeId === MERGED_MOD_DT_NC) {
+      if (!(dt instanceof HTMLElement) || !(nc instanceof HTMLElement)) return;
+      const step = mergedModCycleStep.get(MERGED_MOD_DT_NC) ?? 0;
+      const wDt = (wildcardModState.get("DT") || 0) > 0;
+      if (step === 3 || wDt) {
+        replaceBeatmapModGridCloneInnerHTML(clone, dt);
+        clone.disabled = dt.disabled;
+        clone.classList.remove("beatmap-scoreboard-mod--enabled");
+        clone.setAttribute("aria-pressed", "false");
+        if (!clone.classList.contains(MOD_WILDCARD_CLASS)) {
+          clone.classList.add(MOD_WILDCARD_CLASS);
+          clone.setAttribute(MOD_WILDCARD_ATTR, "1");
+        }
+        return;
+      }
+      clone.classList.remove(MOD_WILDCARD_CLASS);
+      clone.removeAttribute(MOD_WILDCARD_ATTR);
+      if (hasActiveWildcards) {
+        if (step === 2) {
+          replaceBeatmapModGridCloneInnerHTML(clone, nc);
+          clone.disabled = nc.disabled;
+          const on = isBeatmapScoreboardModStripButtonOn(nc);
+          if (on) {
+            clone.classList.add("beatmap-scoreboard-mod--enabled");
+            clone.setAttribute("aria-pressed", "true");
+          } else {
+            clone.classList.remove("beatmap-scoreboard-mod--enabled");
+            clone.setAttribute("aria-pressed", "false");
+          }
+        } else if (step === 1) {
+          replaceBeatmapModGridCloneInnerHTML(clone, dt);
+          clone.disabled = dt.disabled;
+          const on = isBeatmapScoreboardModStripButtonOn(dt);
+          if (on) {
+            clone.classList.add("beatmap-scoreboard-mod--enabled");
+            clone.setAttribute("aria-pressed", "true");
+          } else {
+            clone.classList.remove("beatmap-scoreboard-mod--enabled");
+            clone.setAttribute("aria-pressed", "false");
+          }
+        } else {
+          replaceBeatmapModGridCloneInnerHTML(clone, dt);
+          clone.disabled = dt.disabled;
+          clone.classList.remove("beatmap-scoreboard-mod--enabled");
+          clone.setAttribute("aria-pressed", "false");
+        }
+        return;
+      }
+      if (step === 2) {
+        replaceBeatmapModGridCloneInnerHTML(clone, nc);
+        clone.disabled = nc.disabled;
+        if (clone.className !== nc.className) clone.className = nc.className;
+        for (const attr of ["aria-pressed", "aria-disabled", "title"]) {
+          const v = nc.getAttribute(attr);
+          if (v == null) clone.removeAttribute(attr);
+          else clone.setAttribute(attr, v);
+        }
+      } else {
+        replaceBeatmapModGridCloneInnerHTML(clone, dt);
+        clone.disabled = dt.disabled;
+        if (clone.className !== dt.className) clone.className = dt.className;
+        for (const attr of ["aria-pressed", "aria-disabled", "title"]) {
+          const v = dt.getAttribute(attr);
+          if (v == null) clone.removeAttribute(attr);
+          else clone.setAttribute(attr, v);
+        }
+      }
+      return;
+    }
+
+    if (mergeId === MERGED_MOD_SD_PF) {
+      if (!(sd instanceof HTMLElement) || !(pf instanceof HTMLElement)) return;
+      const step = mergedModCycleStep.get(MERGED_MOD_SD_PF) ?? 0;
+      const wSd = (wildcardModState.get("SD") || 0) > 0;
+      const wPf = (wildcardModState.get("PF") || 0) > 0;
+      if (step === 4 || wPf) {
+        replaceBeatmapModGridCloneInnerHTML(clone, pf);
+        clone.disabled = pf.disabled;
+        clone.classList.remove("beatmap-scoreboard-mod--enabled");
+        clone.setAttribute("aria-pressed", "false");
+        if (!clone.classList.contains(MOD_WILDCARD_CLASS)) {
+          clone.classList.add(MOD_WILDCARD_CLASS);
+          clone.setAttribute(MOD_WILDCARD_ATTR, "1");
+        }
+        return;
+      }
+      if (step === 3 || wSd) {
+        replaceBeatmapModGridCloneInnerHTML(clone, sd);
+        clone.disabled = sd.disabled;
+        clone.classList.remove("beatmap-scoreboard-mod--enabled");
+        clone.setAttribute("aria-pressed", "false");
+        if (!clone.classList.contains(MOD_WILDCARD_CLASS)) {
+          clone.classList.add(MOD_WILDCARD_CLASS);
+          clone.setAttribute(MOD_WILDCARD_ATTR, "1");
+        }
+        return;
+      }
+      clone.classList.remove(MOD_WILDCARD_CLASS);
+      clone.removeAttribute(MOD_WILDCARD_ATTR);
+      if (hasActiveWildcards) {
+        if (step === 2) {
+          replaceBeatmapModGridCloneInnerHTML(clone, pf);
+          clone.disabled = pf.disabled;
+          const on = isBeatmapScoreboardModStripButtonOn(pf);
+          if (on) {
+            clone.classList.add("beatmap-scoreboard-mod--enabled");
+            clone.setAttribute("aria-pressed", "true");
+          } else {
+            clone.classList.remove("beatmap-scoreboard-mod--enabled");
+            clone.setAttribute("aria-pressed", "false");
+          }
+        } else if (step === 1) {
+          replaceBeatmapModGridCloneInnerHTML(clone, sd);
+          clone.disabled = sd.disabled;
+          const on = isBeatmapScoreboardModStripButtonOn(sd);
+          if (on) {
+            clone.classList.add("beatmap-scoreboard-mod--enabled");
+            clone.setAttribute("aria-pressed", "true");
+          } else {
+            clone.classList.remove("beatmap-scoreboard-mod--enabled");
+            clone.setAttribute("aria-pressed", "false");
+          }
+        } else {
+          replaceBeatmapModGridCloneInnerHTML(clone, sd);
+          clone.disabled = sd.disabled;
+          clone.classList.remove("beatmap-scoreboard-mod--enabled");
+          clone.setAttribute("aria-pressed", "false");
+        }
+        return;
+      }
+      if (step === 2) {
+        replaceBeatmapModGridCloneInnerHTML(clone, pf);
+        clone.disabled = pf.disabled;
+        if (clone.className !== pf.className) clone.className = pf.className;
+        for (const attr of ["aria-pressed", "aria-disabled", "title"]) {
+          const v = pf.getAttribute(attr);
+          if (v == null) clone.removeAttribute(attr);
+          else clone.setAttribute(attr, v);
+        }
+      } else {
+        replaceBeatmapModGridCloneInnerHTML(clone, sd);
+        clone.disabled = sd.disabled;
+        if (clone.className !== sd.className) clone.className = sd.className;
+        for (const attr of ["aria-pressed", "aria-disabled", "title"]) {
+          const v = sd.getAttribute(attr);
+          if (v == null) clone.removeAttribute(attr);
+          else clone.setAttribute(attr, v);
+        }
+      }
+    }
+  }
+
+  /**
+   * @param {HTMLElement} modsEl
+   * @param {Record<string, HTMLElement>} piles
+   * @param {HTMLElement} btn
+   * @param {string} pileKey
+   */
+  function placeBeatmapModGridSingleClone(modsEl, piles, btn, pileKey) {
+    const clone = btn.cloneNode(true);
+    beatmapModGridOriginalToClone.set(btn, clone);
+    clone.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+
+      const ac = modButtonAcronym(btn);
+      if (!ac || ac === "NM" || !isWildcardFeatureAvailable()) {
+        btn.click();
+        window.requestAnimationFrame(() => {
+          syncBeatmapModGridCloneHighlights(modsEl);
+        });
+        return;
+      }
+
+      const hasWildcards = getWildcardMods().length > 0;
+      const isCurrentlyWildcard = (wildcardModState.get(ac) || 0) > 0;
+      const cloneIsEnabled =
+        clone.classList.contains("beatmap-scoreboard-mod--enabled") ||
+        clone.getAttribute("aria-pressed") === "true";
+
+      if (isCurrentlyWildcard) {
+        wildcardModState.set(ac, 0);
+        updateCloneWildcardVisual(ac, modsEl, false);
+        clone.classList.remove("beatmap-scoreboard-mod--enabled");
+        clone.setAttribute("aria-pressed", "false");
+        scheduleWildcardFetch(modsEl);
+      } else if (cloneIsEnabled) {
+        if (!hasWildcards) {
+          btn.click();
+        }
+        enableWildcard(ac, modsEl);
+        updateCloneWildcardVisual(ac, modsEl, true);
+        clone.classList.remove("beatmap-scoreboard-mod--enabled");
+        clone.setAttribute("aria-pressed", "false");
+        window.requestAnimationFrame(() => {
+          syncBeatmapModGridCloneHighlights(modsEl);
+        });
+        scheduleWildcardFetch(modsEl);
+      } else {
+        if (hasWildcards) {
+          clone.classList.add("beatmap-scoreboard-mod--enabled");
+          clone.setAttribute("aria-pressed", "true");
+          scheduleWildcardFetch(modsEl);
+        } else {
+          btn.click();
+          window.requestAnimationFrame(() => {
+            syncBeatmapModGridCloneHighlights(modsEl);
+          });
+        }
+      }
+      syncBeatmapScoreboardModResetButton(modsEl);
+    });
+    piles[pileKey]?.appendChild(clone);
+    btn.setAttribute("data-oep-mod-hidden", "1");
+  }
+
+  /**
+   * @param {HTMLElement} modsEl
+   * @param {Record<string, HTMLElement>} piles
+   * @param {string} mergeId
+   * @param {HTMLElement} primaryOriginal
+   * @param {HTMLElement} secondaryOriginal
+   * @param {string} pileKey
+   */
+  function placeBeatmapModGridMergedPair(
+    modsEl,
+    piles,
+    mergeId,
+    primaryOriginal,
+    secondaryOriginal,
+    pileKey,
+  ) {
+    const clone = primaryOriginal.cloneNode(true);
+    clone.setAttribute("data-oep-merged-mod", mergeId);
+    beatmapModGridOriginalToClone.set(primaryOriginal, clone);
+    beatmapModGridOriginalToClone.set(secondaryOriginal, clone);
+    clone.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const max = mergedModGridEffectiveStepCount(mergeId);
+      const cur = mergedModCycleStep.get(mergeId) ?? 0;
+      const next = (cur + 1) % max;
+      applyMergedModTargetStep(modsEl, mergeId, next);
+    });
+    piles[pileKey]?.appendChild(clone);
+    primaryOriginal.setAttribute("data-oep-mod-hidden", "1");
+    secondaryOriginal.setAttribute("data-oep-mod-hidden", "1");
+  }
+
+  /**
+   * Stable column order: r0 = EZ,NF,HT; r1 = HR,HD,DT↔NC,FL,SD↔PF;
+   * r2 = NM then remaining stable acronyms. Lazer column unchanged from osu-web row types.
+   * @param {HTMLElement} modsEl
+   * @param {Record<string, HTMLElement>} piles
+   */
+  function placeBeatmapModGridButtons(modsEl, piles) {
+    const directList = [
+      ...modsEl.querySelectorAll(":scope > .beatmap-scoreboard-mod"),
+    ];
+    /** @type {Map<string, HTMLElement>} */
+    const byAc = new Map();
+    for (const btn of directList) {
+      if (!(btn instanceof HTMLElement)) continue;
+      const ac = modButtonAcronym(btn);
+      if (ac) byAc.set(ac, btn);
+    }
+
+    const STABLE_R0 = ["EZ", "NF", "HT"];
+    const placedStable = new Set();
+
+    for (const ac of STABLE_R0) {
+      const b = byAc.get(ac);
+      if (b) {
+        placeBeatmapModGridSingleClone(modsEl, piles, b, "r0-stable");
+        placedStable.add(ac);
+      }
+    }
+
+    for (const ac of ["HR", "HD"]) {
+      const b = byAc.get(ac);
+      if (b) {
+        placeBeatmapModGridSingleClone(modsEl, piles, b, "r1-stable");
+        placedStable.add(ac);
+      }
+    }
+
+    const dtB = byAc.get("DT");
+    const ncB = byAc.get("NC");
+    if (dtB && ncB) {
+      placeBeatmapModGridMergedPair(
+        modsEl,
+        piles,
+        MERGED_MOD_DT_NC,
+        dtB,
+        ncB,
+        "r1-stable",
+      );
+      placedStable.add("DT");
+      placedStable.add("NC");
+    } else {
+      if (dtB) {
+        placeBeatmapModGridSingleClone(modsEl, piles, dtB, "r1-stable");
+        placedStable.add("DT");
+      }
+      if (ncB) {
+        placeBeatmapModGridSingleClone(modsEl, piles, ncB, "r1-stable");
+        placedStable.add("NC");
+      }
+    }
+
+    const flB = byAc.get("FL");
+    if (flB) {
+      placeBeatmapModGridSingleClone(modsEl, piles, flB, "r1-stable");
+      placedStable.add("FL");
+    }
+
+    const sdB = byAc.get("SD");
+    const pfB = byAc.get("PF");
+    if (sdB && pfB) {
+      placeBeatmapModGridMergedPair(
+        modsEl,
+        piles,
+        MERGED_MOD_SD_PF,
+        sdB,
+        pfB,
+        "r1-stable",
+      );
+      placedStable.add("SD");
+      placedStable.add("PF");
+    } else {
+      if (sdB) {
+        placeBeatmapModGridSingleClone(modsEl, piles, sdB, "r1-stable");
+        placedStable.add("SD");
+      }
+      if (pfB) {
+        placeBeatmapModGridSingleClone(modsEl, piles, pfB, "r1-stable");
+        placedStable.add("PF");
+      }
+    }
+
+    const nmLeft = byAc.get("NM");
+    if (nmLeft && !placedStable.has("NM")) {
+      placeBeatmapModGridSingleClone(modsEl, piles, nmLeft, "r2-stable");
+      placedStable.add("NM");
+    }
+
+    for (const btn of directList) {
+      if (!(btn instanceof HTMLElement)) continue;
+      const ac = modButtonAcronym(btn);
+      if (!ac) continue;
+      if (placedStable.has(ac)) continue;
+      if (!STABLE_MOD_ACRONYMS.has(ac)) {
+        const modInner = btn.querySelector(".mod");
+        const row =
+          modInner instanceof HTMLElement ? modDifficultyRow(modInner) : 2;
+        const key = `r${row}-lazer`;
+        placeBeatmapModGridSingleClone(modsEl, piles, btn, key);
+        continue;
+      }
+      placeBeatmapModGridSingleClone(modsEl, piles, btn, "r2-stable");
+    }
+  }
+
   /**
    * @param {HTMLElement} modsEl
    * @param {typeof el} elFn
@@ -6341,6 +8391,40 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     teardownBeatmapModGrid(modsEl);
 
     modsEl.setAttribute(MOD_GRID_ATTR, "1");
+
+    const collapseToggle = elFn(
+      "button",
+      {
+        type: "button",
+        class: `${MOD_GRID_CLASS}__collapse-toggle`,
+        "aria-expanded": "true",
+        "aria-label": "Collapse mod filter grid",
+      },
+      elFn(
+        "span",
+        { class: `${MOD_GRID_CLASS}__collapse-label` },
+        "Mod filters",
+      ),
+      elFn("i", { class: "fas fa-chevron-down", "aria-hidden": "true" }),
+    );
+    const toggleRow = elFn(
+      "div",
+      { class: `${MOD_GRID_CLASS}__toggle-row` },
+      collapseToggle,
+    );
+    collapseToggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const collapsed = modsEl.classList.toggle(MOD_GRID_COLLAPSED_CLASS);
+      collapseToggle.setAttribute(
+        "aria-expanded",
+        collapsed ? "false" : "true",
+      );
+      collapseToggle.setAttribute(
+        "aria-label",
+        collapsed ? "Expand mod filter grid" : "Collapse mod filter grid",
+      );
+    });
 
     const headStable = elFn(
       "div",
@@ -6414,6 +8498,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
     const frag = document.createDocumentFragment();
     for (const node of [
+      toggleRow,
       corner,
       headStable,
       headLazer,
@@ -6431,28 +8516,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     }
     modsEl.appendChild(frag);
 
-    for (const btn of directButtons) {
-      const modInner = btn.querySelector(".mod");
-      const row =
-        modInner instanceof HTMLElement ? modDifficultyRow(modInner) : 2;
-      const stable = modStableColumn(btn);
-      const key = `r${row}-${stable ? "stable" : "lazer"}`;
-
-      // Clone into the grid pile; keep the original in place for React.
-      const clone = btn.cloneNode(true);
-      beatmapModGridOriginalToClone.set(btn, clone);
-      clone.addEventListener("click", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        btn.click();
-        window.requestAnimationFrame(() => {
-          syncBeatmapModGridCloneHighlights(modsEl);
-        });
-      });
-      piles[key]?.appendChild(clone);
-
-      btn.setAttribute("data-oep-mod-hidden", "1");
-    }
+    placeBeatmapModGridButtons(modsEl, piles);
+    reconcileMergedModCycleFromDom(modsEl);
 
     syncBeatmapModGridCloneHighlights(modsEl);
     syncBeatmapScoreboardModResetButton(modsEl);
@@ -6462,23 +8527,22 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    * @returns {Promise<function(): void>}
    */
   async function setupBeatmapScoreboardModGrid() {
+    if (!settings.isEnabled(SCOREBOARD_MOD_GRID_ID)) {
+      return () => {};
+    }
     ensureModGridStyles();
 
     let modsEl = null;
-    /** @type {MutationObserver|null} */
-    let mo = null;
-    /** @type {MutationObserver|null} */
-    let modStateMo = null;
-    let modStateDebounceId = 0;
-    let debounceId = 0;
+    /** @type {{ mo: MutationObserver|null, modStateMo: MutationObserver|null, debounceId: number, modStateDebounceId: number }|null} */
+    let handles = null;
 
     function scheduleApply() {
-      window.clearTimeout(debounceId);
-      debounceId = window.setTimeout(() => {
-        debounceId = 0;
+      if (!handles || !modsEl) return;
+      window.clearTimeout(handles.debounceId);
+      handles.debounceId = window.setTimeout(() => {
+        handles.debounceId = 0;
         if (!modsEl || !document.body.contains(modsEl)) return;
         try {
-          // Only re-apply when React has added new (unhidden) buttons.
           if (
             modsEl.querySelector(
               ":scope > .beatmap-scoreboard-mod:not([data-oep-mod-hidden])",
@@ -6498,23 +8562,32 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
     if (!document.body.contains(modsEl)) return () => {};
 
-    mo = new MutationObserver(scheduleApply);
-    mo.observe(modsEl, { childList: true });
+    handles = {
+      mo: null,
+      modStateMo: null,
+      debounceId: 0,
+      modStateDebounceId: 0,
+    };
+    beatmapModGridLiveHandles.set(modsEl, handles);
+
+    handles.mo = new MutationObserver(scheduleApply);
+    handles.mo.observe(modsEl, { childList: true });
     applyBeatmapModGrid(modsEl, el);
 
     if (!modsEl.hasAttribute(MOD_RESET_BTN_SYNC_ATTR)) {
       modsEl.setAttribute(MOD_RESET_BTN_SYNC_ATTR, "1");
       const scheduleModStateSync = () => {
-        window.clearTimeout(modStateDebounceId);
-        modStateDebounceId = window.setTimeout(() => {
-          modStateDebounceId = 0;
+        if (!handles || !modsEl) return;
+        window.clearTimeout(handles.modStateDebounceId);
+        handles.modStateDebounceId = window.setTimeout(() => {
+          handles.modStateDebounceId = 0;
           if (modsEl && document.body.contains(modsEl)) {
             syncBeatmapModGridCloneHighlights(modsEl);
             syncBeatmapScoreboardModResetButton(modsEl);
           }
         }, 0);
       };
-      modStateMo = new MutationObserver((records) => {
+      handles.modStateMo = new MutationObserver((records) => {
         const hidden = modsEl.querySelectorAll(
           ":scope > .beatmap-scoreboard-mod[data-oep-mod-hidden]",
         );
@@ -6535,7 +8608,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         });
         if (touchesHiddenOriginal) scheduleModStateSync();
       });
-      modStateMo.observe(modsEl, {
+      handles.modStateMo.observe(modsEl, {
         subtree: true,
         attributes: true,
         attributeFilter: ["class", "aria-pressed", "aria-disabled", "title"],
@@ -6544,360 +8617,39 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       });
     }
 
-    return () => {
-      window.clearTimeout(debounceId);
-      window.clearTimeout(modStateDebounceId);
-      mo?.disconnect();
-      mo = null;
-      modStateMo?.disconnect();
-      modStateMo = null;
-      if (modsEl && document.body.contains(modsEl)) {
-        modsEl.removeAttribute(MOD_RESET_BTN_SYNC_ATTR);
-        teardownBeatmapModGrid(modsEl);
+    const onCredsChange = () => {
+      if (!auth.isConfigured() && modsEl) {
+        clearWildcardState();
+        const scoreboardRoot = modsEl.closest(".beatmapset-scoreboard");
+        if (scoreboardRoot instanceof HTMLElement) {
+          clearWildcardMergedLeaderboard(scoreboardRoot);
+        }
+        syncBeatmapModGridCloneHighlights(modsEl);
+        syncBeatmapScoreboardModResetButton(modsEl);
       }
+    };
+    window.addEventListener("oep-osu-api-credentials-changed", onCredsChange);
+
+    return () => {
+      window.removeEventListener(
+        "oep-osu-api-credentials-changed",
+        onCredsChange,
+      );
+      clearWildcardState();
+      if (modsEl && document.body.contains(modsEl)) {
+        stopBeatmapScoreboardModGridLive(modsEl);
+      } else if (handles) {
+        window.clearTimeout(handles.debounceId);
+        window.clearTimeout(handles.modStateDebounceId);
+        handles.mo?.disconnect();
+        handles.modStateMo?.disconnect();
+        if (modsEl) beatmapModGridLiveHandles.delete(modsEl);
+      }
+      handles = null;
       modsEl = null;
     };
   }
 
-  // Scoreboard: age highlight (same period UI as profile top ranks)
-  const SCORES_DATE_HIGHLIGHT_STYLE_ID = "osu-expertplus-ranks-date-highlight";
-  const SCORES_DATE_FILTER_CLASS = "oep-ranks-date-filter";
-  const SCORES_DATE_HIGHLIGHT_CLASS = "oep-ranks-date-highlight";
-  const SCORES_DATE_FILTER_MARKER = "data-oep-beatmap-scores-period-filter";
-  /** ended_at ms — title is cleared after tooltip bind */
-  const SCORE_ROW_ENDED_MS_ATTR = "data-oep-score-ended-ms";
-  const MS_PER_DAY_SCORES = 24 * 60 * 60 * 1000;
-  const MS_PER_WEEK_SCORES = 7 * MS_PER_DAY_SCORES;
-  const MS_PER_AVG_MONTH_SCORES = (365.25 / 12) * MS_PER_DAY_SCORES;
-  const SCORES_PERIOD_IDX_MIN = 0;
-  const SCORES_PERIOD_IDX_MAX = 36;
-  const SCORES_PERIOD_IDX_DEFAULT = 0;
-  const SCORES_PERIOD_IDX_WEEK_END = 4;
-  const SCORES_PERIOD_IDX_MONTH_END = 28;
-  const SCORES_PERIOD_YEAR_START_IDX = 29;
-  const SCORES_PERIOD_FIRST_YEAR = 3;
-  const SCORES_PERIOD_LAST_YEAR = 10;
-
-  /** Beats osu-web `__body-row:hover .__cell` so highlight survives hover. */
-  const SCORES_TABLE_HIGHLIGHT_TD = `.beatmap-scoreboard-table__body > tr.beatmap-scoreboard-table__body-row.${SCORES_DATE_HIGHLIGHT_CLASS} > td.beatmap-scoreboard-table__cell`;
-
-  const SCORES_DATE_HIGHLIGHT_CSS = `
-    .${SCORES_DATE_FILTER_CLASS} {
-      box-sizing: border-box;
-      margin: 0 0 1rem 0;
-      padding: 0.75rem 1rem;
-      border-radius: 6px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      max-width: 34rem;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__text {
-      margin: 0 0 0.45rem 0;
-      font-size: 0.9375rem;
-      line-height: 1.45;
-      color: rgba(255, 255, 255, 0.88);
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__period {
-      color: #66ccff;
-      font-weight: 600;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__tail {
-      color: rgba(255, 255, 255, 0.55);
-      font-weight: 400;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__row {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 0.65rem;
-      margin-bottom: 0.45rem;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__row .oep-ranks-date-filter__text {
-      margin: 0;
-      flex: 1;
-      min-width: 0;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__actions {
-      display: flex;
-      align-items: center;
-      gap: 0.45rem;
-      flex-shrink: 0;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__btn {
-      flex-shrink: 0;
-      margin: 0;
-      font: inherit;
-      font-size: 0.8125rem;
-      line-height: 1.3;
-      padding: 0.28rem 0.55rem;
-      border-radius: 4px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      background: rgba(255, 255, 255, 0.06);
-      color: rgba(255, 255, 255, 0.82);
-      cursor: pointer;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__btn:hover {
-      border-color: rgba(255, 255, 255, 0.28);
-      color: rgba(255, 255, 255, 0.92);
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__btn:focus-visible {
-      outline: 2px solid rgba(102, 204, 255, 0.35);
-      outline-offset: 1px;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__reverse.oep-ranks-date-filter__reverse--on {
-      border-color: rgba(102, 204, 255, 0.45);
-      background: rgba(102, 204, 255, 0.1);
-      color: #8fd4ff;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__range {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 100%;
-      height: 22px;
-      margin: 0;
-      background: transparent;
-      cursor: pointer;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__range:focus {
-      outline: none;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__range:focus-visible {
-      outline: 2px solid rgba(102, 204, 255, 0.4);
-      outline-offset: 2px;
-      border-radius: 4px;
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__range::-webkit-slider-runnable-track {
-      height: 5px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.14);
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__range::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 15px;
-      height: 15px;
-      margin-top: -5px;
-      border-radius: 50%;
-      background: #66ccff;
-      border: 2px solid rgba(255, 255, 255, 0.92);
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__range::-moz-range-track {
-      height: 5px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.14);
-    }
-    .${SCORES_DATE_FILTER_CLASS} .oep-ranks-date-filter__range::-moz-range-thumb {
-      width: 13px;
-      height: 13px;
-      border-radius: 50%;
-      border: 2px solid rgba(255, 255, 255, 0.92);
-      background: #66ccff;
-    }
-    .play-detail.${SCORES_DATE_HIGHLIGHT_CLASS} {
-      position: relative;
-      border-radius: 6px;
-    }
-    .play-detail.${SCORES_DATE_HIGHLIGHT_CLASS}::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      background: rgba(102, 204, 255, 0.14);
-      box-shadow: inset 0 0 0 2px rgba(102, 204, 255, 0.88);
-      pointer-events: none;
-      z-index: 2;
-    }
-    /* osu-web beatmap leaderboard: rounded row highlight; right cap is nth-last-child(2) (before popup), same as osu-web */
-    ${SCORES_TABLE_HIGHLIGHT_TD},
-    .beatmap-scoreboard-table__body > tr.beatmap-scoreboard-table__body-row.${SCORES_DATE_HIGHLIGHT_CLASS}:hover > td.beatmap-scoreboard-table__cell {
-      background-color: rgba(102, 204, 255, 0.14);
-    }
-    ${SCORES_TABLE_HIGHLIGHT_TD}:not(:first-child):not(:last-child):not(:nth-last-child(2)) {
-      box-shadow:
-        inset 0 2px 0 0 rgba(102, 204, 255, 0.88),
-        inset 0 -2px 0 0 rgba(102, 204, 255, 0.88);
-    }
-    ${SCORES_TABLE_HIGHLIGHT_TD}:last-child:not(:only-child):not(:nth-last-child(2)) {
-      box-shadow:
-        inset 0 2px 0 0 rgba(102, 204, 255, 0.88),
-        inset 0 -2px 0 0 rgba(102, 204, 255, 0.88);
-    }
-    ${SCORES_TABLE_HIGHLIGHT_TD}:first-child:not(:last-child) {
-      border-top-left-radius: 6px;
-      border-bottom-left-radius: 6px;
-      box-shadow:
-        inset 2px 0 0 0 rgba(102, 204, 255, 0.88),
-        inset 0 2px 0 0 rgba(102, 204, 255, 0.88),
-        inset 0 -2px 0 0 rgba(102, 204, 255, 0.88);
-    }
-    ${SCORES_TABLE_HIGHLIGHT_TD}:nth-last-child(2):not(:first-child) {
-      border-top-right-radius: 6px;
-      border-bottom-right-radius: 6px;
-      box-shadow:
-        inset -2px 0 0 0 rgba(102, 204, 255, 0.88),
-        inset 0 2px 0 0 rgba(102, 204, 255, 0.88),
-        inset 0 -2px 0 0 rgba(102, 204, 255, 0.88);
-    }
-    .beatmap-scoreboard-table__body > tr.beatmap-scoreboard-table__body-row.${SCORES_DATE_HIGHLIGHT_CLASS}:not(:has(> td:nth-child(3))) > td.beatmap-scoreboard-table__cell:last-child:not(:first-child) {
-      border-top-right-radius: 6px;
-      border-bottom-right-radius: 6px;
-      box-shadow:
-        inset -2px 0 0 0 rgba(102, 204, 255, 0.88),
-        inset 0 2px 0 0 rgba(102, 204, 255, 0.88),
-        inset 0 -2px 0 0 rgba(102, 204, 255, 0.88);
-    }
-    ${SCORES_TABLE_HIGHLIGHT_TD}:only-child {
-      border-radius: 6px;
-      box-shadow: inset 0 0 0 2px rgba(102, 204, 255, 0.88);
-    }
-  `;
-
-  /**
-   * @param {unknown} n
-   * @returns {number}
-   */
-  function clampScoresPeriodIndex(n) {
-    let x = Math.round(Number(n));
-    if (!Number.isFinite(x)) x = SCORES_PERIOD_IDX_DEFAULT;
-    return Math.min(SCORES_PERIOD_IDX_MAX, Math.max(SCORES_PERIOD_IDX_MIN, x));
-  }
-
-  /**
-   * @param {number} idx
-   * @returns {number}
-   */
-  function scoresPeriodIndexToLookbackMs(idx) {
-    const i = clampScoresPeriodIndex(idx);
-    if (i <= 0) return 0;
-    if (i <= SCORES_PERIOD_IDX_WEEK_END) return i * MS_PER_WEEK_SCORES;
-    if (i <= SCORES_PERIOD_IDX_MONTH_END)
-      return (i - SCORES_PERIOD_IDX_WEEK_END) * MS_PER_AVG_MONTH_SCORES;
-    const years = i - SCORES_PERIOD_YEAR_START_IDX + SCORES_PERIOD_FIRST_YEAR;
-    return years * 12 * MS_PER_AVG_MONTH_SCORES;
-  }
-
-  /**
-   * @param {number} idx
-   * @returns {string}
-   */
-  function formatScoresPeriodShortLabel(idx) {
-    const i = clampScoresPeriodIndex(idx);
-    if (i <= 0) return "No highlight";
-    if (i <= SCORES_PERIOD_IDX_WEEK_END)
-      return i === 1 ? "1 week" : `${i} weeks`;
-    if (i <= SCORES_PERIOD_IDX_MONTH_END) {
-      const mo = i - SCORES_PERIOD_IDX_WEEK_END;
-      return mo === 1 ? "1 month" : `${mo} months`;
-    }
-    const y = i - SCORES_PERIOD_YEAR_START_IDX + SCORES_PERIOD_FIRST_YEAR;
-    return `${y} years`;
-  }
-
-  /**
-   * @returns {number}
-   */
-  function readStoredScoresPeriodIndex() {
-    // Score-date filter should not persist between navigations.
-    // Always default to "off" so nothing is highlighted on page open.
-    return SCORES_PERIOD_IDX_DEFAULT;
-  }
-
-  /**
-   * @param {HTMLElement} statusEl
-   * @param {HTMLElement} tailEl
-   * @param {number} periodIdx
-   * @param {boolean} reversed
-   */
-  function setScoresFilterBarLabels(statusEl, tailEl, periodIdx, reversed) {
-    const i = clampScoresPeriodIndex(periodIdx);
-    if (i === 0) {
-      statusEl.textContent = "No highlight";
-      tailEl.textContent = " — drag to set a period.";
-    } else {
-      statusEl.textContent = formatScoresPeriodShortLabel(i);
-      tailEl.textContent = reversed
-        ? " · older scores highlighted"
-        : " · recent scores highlighted";
-    }
-  }
-
-  /**
-   * @param {Element} rowEl
-   * @returns {number|null}
-   */
-  function getBeatmapScoreRowTimeMs(rowEl) {
-    if (rowEl instanceof HTMLElement) {
-      const cached = rowEl.getAttribute(SCORE_ROW_ENDED_MS_ATTR);
-      if (cached != null && cached !== "") {
-        const parsed = Number(cached);
-        if (Number.isFinite(parsed)) return parsed;
-      }
-    }
-    const t =
-      rowEl.querySelector("time.js-tooltip-time") ||
-      rowEl.querySelector(".play-detail__time time[datetime]") ||
-      rowEl.querySelector("time.js-timeago") ||
-      rowEl.querySelector("time.timeago") ||
-      rowEl.querySelector("time[datetime]");
-    if (!t) return null;
-    const iso =
-      t.getAttribute("datetime") || t.getAttribute("title")?.trim() || null;
-    if (!iso) return null;
-    const ms = Date.parse(iso);
-    if (!Number.isFinite(ms)) return null;
-    if (rowEl instanceof HTMLElement) {
-      rowEl.setAttribute(SCORE_ROW_ENDED_MS_ATTR, String(ms));
-    }
-    return ms;
-  }
-
-  const scoresDateStyle = manageStyle(
-    SCORES_DATE_HIGHLIGHT_STYLE_ID,
-    SCORES_DATE_HIGHLIGHT_CSS,
-  );
-
-  function injectBeatmapScoresDateHighlightStyles() {
-    scoresDateStyle.inject();
-  }
-
-  /**
-   * @param {ParentNode} scoreboardRoot
-   * @param {number} periodIdx
-   * @param {boolean} reversed
-   */
-  function applyBeatmapScoresDateHighlights(
-    scoreboardRoot,
-    periodIdx,
-    reversed,
-  ) {
-    const i = clampScoresPeriodIndex(periodIdx);
-    const rows = scoreboardRoot.querySelectorAll(
-      ".play-detail-list > .play-detail, .beatmap-scoreboard-table__body > tr.beatmap-scoreboard-table__body-row",
-    );
-    if (i === 0) {
-      rows.forEach((row) => {
-        row.classList.remove(SCORES_DATE_HIGHLIGHT_CLASS);
-        row.removeAttribute(SCORE_ROW_ENDED_MS_ATTR);
-      });
-      return;
-    }
-    const lookback = scoresPeriodIndexToLookbackMs(i);
-    const cutoff = Date.now() - lookback;
-    rows.forEach((row) => {
-      const t = getBeatmapScoreRowTimeMs(row);
-      if (t == null) {
-        row.classList.remove(SCORES_DATE_HIGHLIGHT_CLASS);
-        return;
-      }
-      const inWindow = t >= cutoff;
-      const highlight = reversed ? !inWindow : inWindow;
-      row.classList.toggle(SCORES_DATE_HIGHLIGHT_CLASS, highlight);
-    });
-  }
-
-  /**
-   * @returns {HTMLElement|null}
-   */
   function findBeatmapScoreboardRoot() {
     const mods = document.querySelector(".beatmapset-scoreboard__mods");
     if (mods instanceof HTMLElement) {
@@ -6918,13 +8670,50 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
+   * Turn scoreboard cell `<a>` wrappers into `<span>` so the row is not navigable,
+   * except `a.beatmap-scoreboard-table__user-link` (profile URL).
+   * @param {HTMLTableRowElement} tr
+   */
+  function demoteBeatmapUserSearchResultRowLinks(tr) {
+    if (!(tr instanceof HTMLTableRowElement)) return;
+    for (const a of tr.querySelectorAll("a")) {
+      if (!(a instanceof HTMLAnchorElement)) continue;
+      if (a.classList.contains("beatmap-scoreboard-table__user-link")) continue;
+      const href = a.getAttribute("href") || "";
+      if (
+        /\/rankings\/[^/]+\/performance\?country=/i.test(href) &&
+        a.classList.contains("beatmap-scoreboard-table__cell-content")
+      ) {
+        continue;
+      }
+      if (/\/teams\/[^/?#]+/i.test(href) && a.querySelector(".flag-team")) {
+        continue;
+      }
+      const span = document.createElement("span");
+      span.className = a.className;
+      for (const attr of [...a.attributes]) {
+        const n = attr.name;
+        if (n === "href" || n === "target" || n === "download" || n === "rel") {
+          continue;
+        }
+        span.setAttribute(n, attr.value);
+      }
+      while (a.firstChild) span.appendChild(a.firstChild);
+      a.replaceWith(span);
+    }
+  }
+
+  /**
+   * Place the search bar directly after `.beatmapset-scoreboard__mods` so it
+   * appears right below the mod filter strip. Falls back to inserting before
+   * `__main` (or before the scoreboard's first child) when `__mods` is absent.
    * @param {HTMLElement} scoreboardRoot
    * @param {HTMLElement} wrap
    */
-  function insertBeatmapScoresDateFilterBar(scoreboardRoot, wrap) {
-    const firstList = scoreboardRoot.querySelector(".play-detail-list");
-    if (firstList?.parentNode) {
-      firstList.parentNode.insertBefore(wrap, firstList);
+  function insertBeatmapScoreUserSearchBar(scoreboardRoot, wrap) {
+    const modsEl = scoreboardRoot.querySelector(".beatmapset-scoreboard__mods");
+    if (modsEl) {
+      modsEl.after(wrap);
       return;
     }
     const main = scoreboardRoot.querySelector(".beatmapset-scoreboard__main");
@@ -6932,215 +8721,416 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       main.insertBefore(wrap, main.firstChild);
       return;
     }
-    const tableWrap = scoreboardRoot.querySelector(".beatmap-scoreboard-table");
-    if (tableWrap?.parentNode) {
-      tableWrap.parentNode.insertBefore(wrap, tableWrap);
-      return;
-    }
     scoreboardRoot.insertBefore(wrap, scoreboardRoot.firstChild);
   }
 
   /**
-   * @param {HTMLElement} scoreboardRoot
+   * Global rank for a score row when the API includes it; otherwise unknown.
+   * @param {object} score
+   * @returns {number|null}
    */
-  function ensureBeatmapScoresDateFilterBar(scoreboardRoot) {
-    if (scoreboardRoot.querySelector(`[${SCORES_DATE_FILTER_MARKER}]`)) return;
-
-    const periodIdx = readStoredScoresPeriodIndex();
-    const reversedStored = false;
-
-    const statusEl = el("strong", { class: "oep-ranks-date-filter__period" });
-    const tailEl = el("span", { class: "oep-ranks-date-filter__tail" });
-    setScoresFilterBarLabels(statusEl, tailEl, periodIdx, reversedStored);
-
-    const resetBtn = el(
-      "button",
-      {
-        type: "button",
-        class: "oep-ranks-date-filter__btn oep-ranks-date-filter__reset",
-        "aria-label": "Reset period and reverse filter",
-      },
-      "Reset",
-    );
-
-    const revBtn = el(
-      "button",
-      {
-        type: "button",
-        class: `oep-ranks-date-filter__btn oep-ranks-date-filter__reverse${reversedStored ? " oep-ranks-date-filter__reverse--on" : ""}`,
-        "aria-pressed": reversedStored ? "true" : "false",
-        "aria-label": "Reverse highlight to older scores outside the period",
-      },
-      "Reverse",
-    );
-
-    const range = el("input", {
-      type: "range",
-      class: "oep-ranks-date-filter__range",
-      min: String(SCORES_PERIOD_IDX_MIN),
-      max: String(SCORES_PERIOD_IDX_MAX),
-      step: "1",
-      value: String(periodIdx),
-    });
-    range.setAttribute(
-      "aria-label",
-      "Highlight window: off, then weeks, months, and years",
-    );
-
-    const readReversed = () => revBtn.getAttribute("aria-pressed") === "true";
-
-    const wrap = el(
-      "div",
-      {
-        class: SCORES_DATE_FILTER_CLASS,
-        [SCORES_DATE_FILTER_MARKER]: "1",
-      },
-      el(
-        "div",
-        { class: "oep-ranks-date-filter__row" },
-        el("p", { class: "oep-ranks-date-filter__text" }, statusEl, tailEl),
-        el(
-          "div",
-          { class: "oep-ranks-date-filter__actions" },
-          resetBtn,
-          revBtn,
-        ),
-      ),
-      range,
-    );
-    insertBeatmapScoresDateFilterBar(scoreboardRoot, wrap);
-
-    range.addEventListener("input", () => {
-      const idx = clampScoresPeriodIndex(range.value);
-      setScoresFilterBarLabels(statusEl, tailEl, idx, readReversed());
-      applyBeatmapScoresDateHighlights(scoreboardRoot, idx, readReversed());
-    });
-
-    revBtn.addEventListener("click", () => {
-      const next = revBtn.getAttribute("aria-pressed") !== "true";
-      revBtn.setAttribute("aria-pressed", next ? "true" : "false");
-      revBtn.classList.toggle("oep-ranks-date-filter__reverse--on", next);
-      const idx = clampScoresPeriodIndex(range.value);
-      setScoresFilterBarLabels(statusEl, tailEl, idx, next);
-      applyBeatmapScoresDateHighlights(scoreboardRoot, idx, next);
-    });
-
-    resetBtn.addEventListener("click", () => {
-      range.value = String(SCORES_PERIOD_IDX_DEFAULT);
-      revBtn.setAttribute("aria-pressed", "false");
-      revBtn.classList.remove("oep-ranks-date-filter__reverse--on");
-      setScoresFilterBarLabels(
-        statusEl,
-        tailEl,
-        SCORES_PERIOD_IDX_DEFAULT,
-        false,
-      );
-      applyBeatmapScoresDateHighlights(
-        scoreboardRoot,
-        SCORES_PERIOD_IDX_DEFAULT,
-        false,
-      );
-    });
+  function beatmapUserSearchGlobalRank(score) {
+    const r = Number(score?.rank_global);
+    if (Number.isFinite(r) && r > 0) return r;
+    return null;
   }
 
   /**
+   * Paint player-lookup scores into the same main leaderboard tbody as osu-web (and wildcard),
+   * hiding native rows so there is only one table.
    * @param {HTMLElement} scoreboardRoot
+   * @param {object[]} scores
+   * @param {object|null|undefined} userTeam
+   * @returns {boolean}
    */
-  function syncBeatmapScoresDateHighlight(scoreboardRoot) {
-    ensureBeatmapScoresDateFilterBar(scoreboardRoot);
-    const wrap = scoreboardRoot.querySelector(`[${SCORES_DATE_FILTER_MARKER}]`);
-    const range =
-      wrap instanceof HTMLElement
-        ? wrap.querySelector('input[type="range"]')
-        : null;
-    const idx = range
-      ? clampScoresPeriodIndex(/** @type {HTMLInputElement} */ (range).value)
-      : readStoredScoresPeriodIndex();
-    if (
-      range instanceof HTMLInputElement &&
-      String(range.value) !== String(idx)
-    ) {
-      range.value = String(idx);
+  function renderUserSearchMergedLeaderboard(
+    scoreboardRoot,
+    scores,
+    userTeam,
+  ) {
+    if (!Array.isArray(scores) || scores.length === 0) return false;
+
+    const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
+    if (!(realTable instanceof HTMLTableElement)) return false;
+
+    const tbody = realTable.querySelector(
+      "tbody.beatmap-scoreboard-table__body",
+    );
+    if (!tbody) return false;
+
+    const templateRow = tbody.querySelector(
+      "tr.beatmap-scoreboard-table__body-row",
+    );
+    if (!(templateRow instanceof HTMLTableRowElement)) return false;
+
+    const colMap = buildBeatmapScoreboardColumnMap(templateRow, realTable);
+    const modTemplateBtn =
+      resolveBeatmapScoreboardModTemplateEl(scoreboardRoot);
+    const beatmapId = getBeatmapPageBeatmapId();
+    const mapFullCombo = beatmapId
+      ? getBeatmapFullComboFromBeatmapsetJson(beatmapId)
+      : null;
+
+    window.clearTimeout(wildcardDebounceTimer);
+    wildcardDebounceTimer = 0;
+    if (wildcardAbortCtrl) {
+      wildcardAbortCtrl.abort();
+      wildcardAbortCtrl = null;
     }
-    const revBtn =
-      wrap instanceof HTMLElement
-        ? wrap.querySelector(".oep-ranks-date-filter__reverse")
-        : null;
-    const reversed =
-      revBtn instanceof HTMLElement
-        ? revBtn.getAttribute("aria-pressed") === "true"
-        : false;
-    applyBeatmapScoresDateHighlights(scoreboardRoot, idx, reversed);
+    const tableWrapClear = scoreboardRoot.querySelector(
+      ".beatmap-scoreboard-table",
+    );
+    if (tableWrapClear instanceof HTMLElement) {
+      tableWrapClear.classList.remove(WILDCARD_LOADING_CLASS);
+    }
+
+    tbody
+      .querySelectorAll(`tr[${EXTENDED_SCORE_ROW_ATTR}]`)
+      .forEach((r) => r.remove());
+    tbody
+      .querySelectorAll(`tr[${WILDCARD_MERGED_ROW_ATTR}]`)
+      .forEach((r) => r.remove());
+    tbody
+      .querySelectorAll(`tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`)
+      .forEach((r) => r.remove());
+
+    const nativeRows = [
+      ...tbody.querySelectorAll("tr.beatmap-scoreboard-table__body-row"),
+    ];
+    for (const nr of nativeRows) nr.style.display = "none";
+    const firstNative = nativeRows[0] ?? null;
+
+    let inserted = 0;
+    for (const score of scores) {
+      if (!score || typeof score !== "object") continue;
+      const resultRow = /** @type {HTMLTableRowElement} */ (
+        templateRow.cloneNode(true)
+      );
+      resultRow.setAttribute(SCORE_USER_SEARCH_RESULT_ATTR, "1");
+      resultRow.style.display = "";
+      resultRow.classList.remove(
+        "beatmap-scoreboard-table__body-row--friend",
+        "beatmap-scoreboard-table__body-row--first",
+        "beatmap-scoreboard-table__body-row--self",
+      );
+
+      if (colMap.user != null) {
+        const playerTd = resultRow.cells[colMap.user];
+        if (playerTd) {
+          for (const teamLink of playerTd.querySelectorAll(
+            'a[href*="/teams/"]',
+          )) {
+            teamLink.remove();
+          }
+          if (userTeam?.id && userTeam.flag_url) {
+            const teamA = document.createElement("a");
+            teamA.className = "u-contents u-hover";
+            teamA.href = `https://osu.ppy.sh/teams/${userTeam.id}`;
+            const teamSpan = document.createElement("span");
+            teamSpan.className = "flag-team";
+            teamSpan.style.backgroundImage = `url("${userTeam.flag_url}")`;
+            teamSpan.title = userTeam.name ?? "";
+            teamA.appendChild(teamSpan);
+            const userLink = playerTd.querySelector(
+              "a.beatmap-scoreboard-table__user-link, a[href*='/users/']",
+            );
+            if (userLink) {
+              userLink.insertAdjacentElement("beforebegin", teamA);
+            } else {
+              playerTd.prepend(teamA);
+            }
+          }
+        }
+      }
+
+      const position = beatmapUserSearchGlobalRank(score);
+      applyApiScoreToBeatmapScoreRow(
+        resultRow,
+        score,
+        position ?? 0,
+        colMap,
+        realTable,
+        templateRow,
+        modTemplateBtn,
+        mapFullCombo,
+      );
+      demoteBeatmapUserSearchResultRowLinks(resultRow);
+      resultRow.removeAttribute(EXTENDED_SCORE_ROW_ATTR);
+
+      if (colMap.user != null) {
+        const uid = score.user?.id ?? score.user_id;
+        const playerTd = resultRow.cells[colMap.user];
+        const card = playerTd?.querySelector(".js-usercard");
+        if (card instanceof HTMLElement && uid != null) {
+          card.setAttribute("data-user-id", String(uid));
+        }
+      }
+
+      if (position == null && colMap.rank != null) {
+        const rankTd = [...resultRow.cells][colMap.rank];
+        if (rankTd) {
+          const shell = rankTd.querySelector(
+            ".beatmap-scoreboard-table__cell-content",
+          );
+          if (shell) shell.textContent = "?";
+          else rankTd.textContent = "?";
+        }
+      }
+
+      tbody.insertBefore(resultRow, firstNative);
+      inserted += 1;
+    }
+
+    if (!inserted) return false;
+
+    refreshBeatmapScoreboardTableEnhancements(scoreboardRoot);
+    return true;
   }
 
   /**
+   * Mounts and manages the username search bar on the beatmap scoreboard.
    * @param {RegExp} pathRe
-   * @returns {function(): void}
+   * @returns {() => void}
    */
-  function startBeatmapScoresDateHighlightManager(pathRe) {
-    injectBeatmapScoresDateHighlightStyles();
+  function startBeatmapScoreUserSearchManager(pathRe) {
+    const MARKER_ATTR = "data-oep-beatmap-user-search";
+    const NO_API_STATUS =
+      "Add osu! API OAuth credentials in Expert+ settings to search players.";
     let debounceTimer = 0;
 
-    const clearBeatmapScoreHighlights = () => {
-      const clearIn = (root) => {
-        root
-          .querySelectorAll(
-            `.play-detail.${SCORES_DATE_HIGHLIGHT_CLASS}, tr.${SCORES_DATE_HIGHLIGHT_CLASS}`,
-          )
-          .forEach((row) => {
-            row.classList.remove(SCORES_DATE_HIGHLIGHT_CLASS);
-            row.removeAttribute(SCORE_ROW_ENDED_MS_ATTR);
-          });
+    const cleanup = () => {
+      document.querySelectorAll(".beatmapset-scoreboard").forEach((el) => {
+        if (el instanceof HTMLElement) {
+          clearUserSearchMergedLeaderboard(
+            el,
+            el.querySelector(".beatmapset-scoreboard__mods"),
+            false,
+          );
+        }
+      });
+      document.querySelectorAll(`[${MARKER_ATTR}]`).forEach((n) => n.remove());
+    };
+
+    const syncPlayerLookupSearchBarApiState = (wrap) => {
+      if (!(wrap instanceof HTMLElement)) return;
+      const input = wrap.querySelector(".oep-user-search__input");
+      const goBtn = wrap.querySelector(".oep-user-search__btn--go");
+      const resetBtn = wrap.querySelector(".oep-user-search__btn--reset");
+      const statusEl = wrap.querySelector(".oep-user-search__status");
+      const resultEl = wrap.querySelector(".oep-user-search__result");
+      const configured = auth.isConfigured();
+      wrap.classList.toggle("oep-user-search--no-api", !configured);
+      if (input instanceof HTMLInputElement) {
+        input.disabled = !configured;
+      }
+      if (goBtn instanceof HTMLButtonElement) {
+        goBtn.disabled = !configured;
+      }
+      if (!configured) {
+        if (resetBtn instanceof HTMLElement) resetBtn.hidden = true;
+        if (resultEl) resultEl.replaceChildren();
+        if (input instanceof HTMLInputElement) input.value = "";
+        if (statusEl) statusEl.textContent = NO_API_STATUS;
+        const boardRoot = findBeatmapScoreboardRoot();
+        const mods = boardRoot?.querySelector(".beatmapset-scoreboard__mods");
+        clearUserSearchMergedLeaderboard(boardRoot, mods, false);
+      } else if (statusEl && statusEl.textContent === NO_API_STATUS) {
+        statusEl.textContent = "";
+      }
+    };
+
+    const ensureSearchBar = (root) => {
+      const modsEl = root.querySelector(".beatmapset-scoreboard__mods");
+      const existing = root.querySelector(`[${MARKER_ATTR}]`);
+      if (existing) {
+        // If the bar has drifted to a wrong position, move it back after __mods.
+        if (modsEl && existing.previousElementSibling !== modsEl) {
+          modsEl.after(existing);
+        }
+        syncPlayerLookupSearchBarApiState(
+          /** @type {HTMLElement} */ (existing),
+        );
+        return;
+      }
+
+      const searchInput = el("input", {
+        type: "text",
+        class: "oep-user-search__input",
+        placeholder: "Look up a player…",
+        "aria-label": "Search player on leaderboard",
+        autocomplete: "off",
+        spellcheck: "false",
+      });
+
+      const searchBtn = el(
+        "button",
+        {
+          type: "button",
+          class: "oep-user-search__btn oep-user-search__btn--go",
+        },
+        "Search",
+      );
+
+      const resetBtn = el(
+        "button",
+        {
+          type: "button",
+          class: "oep-user-search__btn oep-user-search__btn--reset",
+          hidden: "",
+          "aria-label": "Clear search result",
+        },
+        "Reset",
+      );
+
+      const statusEl = el("div", {
+        class: "oep-user-search__status",
+        "aria-live": "polite",
+      });
+
+      const resultEl = el("div", { class: "oep-user-search__result" });
+
+      const wrap = el(
+        "div",
+        { class: "oep-user-search", [MARKER_ATTR]: "1" },
+        el(
+          "div",
+          { class: "oep-user-search__bar" },
+          searchInput,
+          searchBtn,
+          resetBtn,
+        ),
+        statusEl,
+        resultEl,
+      );
+
+      const doReset = () => {
+        const boardRoot = findBeatmapScoreboardRoot();
+        const mods = boardRoot?.querySelector(".beatmapset-scoreboard__mods");
+        clearUserSearchMergedLeaderboard(boardRoot, mods);
+        resultEl.replaceChildren();
+        searchInput.value = "";
+        statusEl.textContent = "";
+        resetBtn.hidden = true;
+        searchInput.focus();
       };
-      document
-        .querySelectorAll(`[${SCORES_DATE_FILTER_MARKER}]`)
-        .forEach((wrap) => {
-          const root = wrap.parentElement;
-          if (root) clearIn(root);
-        });
-      document
-        .querySelectorAll(".beatmapset-scoreboard")
-        .forEach((board) => clearIn(board));
+
+      const doSearch = async () => {
+        const username = searchInput.value.trim();
+        if (!username) return;
+
+        if (!auth.isConfigured()) {
+          statusEl.textContent =
+            "API credentials required. Configure them in the settings (Client ID + Secret).";
+          resetBtn.hidden = false;
+          return;
+        }
+
+        const beatmapId = getBeatmapPageBeatmapId();
+        if (!beatmapId) return;
+
+        searchBtn.disabled = true;
+        resultEl.replaceChildren();
+        statusEl.textContent = "Searching…";
+
+        try {
+          const user = await OsuExpertPlus.api.getUser(username);
+          if (!user?.id) throw new Error("user not found");
+
+          const ruleset = getBeatmapPageRuleset();
+          const scoreboardRoot = findBeatmapScoreboardRoot();
+          const data = await OsuExpertPlus.api.getBeatmapUserScoresAll(
+            beatmapId,
+            user.id,
+            { ruleset, legacy_only: 0 },
+          );
+          const rawList = Array.isArray(data?.scores) ? data.scores : [];
+          if (!rawList.length) throw new Error("no score");
+
+          const userCompact = {
+            id: user.id,
+            username: user.username,
+            country_code: user.country_code,
+            country: user.country,
+          };
+          const scores = rawList.map((s) =>
+            s && typeof s === "object" && !s.user
+              ? { ...s, user: userCompact }
+              : s,
+          );
+
+          resultEl.replaceChildren();
+          const ok =
+            scoreboardRoot instanceof HTMLElement &&
+            renderUserSearchMergedLeaderboard(
+              scoreboardRoot,
+              scores,
+              user.team,
+            );
+          if (ok) {
+            statusEl.textContent = "";
+          } else {
+            statusEl.textContent =
+              "Scores found but leaderboard is not ready yet.";
+          }
+          resetBtn.hidden = false;
+        } catch (_) {
+          statusEl.textContent = "No score found on this difficulty.";
+          resetBtn.hidden = false;
+        } finally {
+          searchBtn.disabled = false;
+        }
+      };
+
+      searchBtn.addEventListener("click", doSearch);
+      resetBtn.addEventListener("click", doReset);
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") doSearch();
+      });
+
+      insertBeatmapScoreUserSearchBar(root, wrap);
+      syncPlayerLookupSearchBarApiState(wrap);
     };
 
     const run = () => {
       if (!pathRe.test(location.pathname)) {
-        clearBeatmapScoreHighlights();
-        document
-          .querySelectorAll(`[${SCORES_DATE_FILTER_MARKER}]`)
-          .forEach((n) => n.remove());
+        cleanup();
+        return;
+      }
+      if (!settings.isEnabled(SCOREBOARD_PLAYER_LOOKUP_ID)) {
+        cleanup();
         return;
       }
       const root = findBeatmapScoreboardRoot();
       if (!(root instanceof HTMLElement)) return;
-      syncBeatmapScoresDateHighlight(root);
-      syncBeatmapScoreboardPpDecimals(root);
-      syncBeatmapScoreboardHitstatColors(root);
-      syncBeatmapScoreboardPpValueColor(root);
+      ensureSearchBar(root);
     };
 
     const schedule = () => {
       window.clearTimeout(debounceTimer);
-      debounceTimer = window.setTimeout(run, 64);
+      debounceTimer = window.setTimeout(run, 16);
     };
+
+    const OSU_API_CREDS_CHANGE = "oep-osu-api-credentials-changed";
+    const onOsuApiCredsChange = () => schedule();
+    window.addEventListener(OSU_API_CREDS_CHANGE, onOsuApiCredsChange);
+
+    const unsubLookup = settings.onChange(SCOREBOARD_PLAYER_LOOKUP_ID, () =>
+      schedule(),
+    );
 
     const obs = new MutationObserver(schedule);
     obs.observe(document.documentElement, {
       childList: true,
       subtree: true,
-      attributes: true,
-      attributeFilter: ["class", "style", "hidden", "aria-hidden"],
     });
     schedule();
 
     return () => {
+      unsubLookup();
+      window.removeEventListener(OSU_API_CREDS_CHANGE, onOsuApiCredsChange);
       window.clearTimeout(debounceTimer);
       obs.disconnect();
-      clearBeatmapScoreHighlights();
-      document
-        .querySelectorAll(`[${SCORES_DATE_FILTER_MARKER}]`)
-        .forEach((n) => n.remove());
-      scoresDateStyle.remove();
+      cleanup();
     };
   }
 
@@ -7864,8 +9854,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         const isReplyComposer =
           root.classList.contains("beatmap-discussion-post--new-reply") ||
           root.classList.contains("beatmap-discussion-reply-box");
-        const isNewDiscussionRoot =
-          root.classList.contains("beatmap-discussion-new");
+        const isNewDiscussionRoot = root.classList.contains(
+          "beatmap-discussion-new",
+        );
         const hasTextNow =
           ta instanceof HTMLTextAreaElement &&
           String(ta.value || "").trim().length > 0;
@@ -8574,24 +10565,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
-   * @param {HTMLTableCellElement|null|undefined} td
-   * @param {string|number|null|undefined} scoreId
-   */
-  function setScoreboardTdScoreLink(td, scoreId) {
-    if (!td || scoreId == null) return;
-    const id = String(scoreId);
-    td.querySelectorAll("a.beatmap-scoreboard-table__cell-content").forEach(
-      (a) => {
-        if (a instanceof HTMLAnchorElement) {
-          a.href = `https://osu.ppy.sh/scores/${id}`;
-        }
-      },
-    );
-  }
-
-  /**
-   * Extended leaderboard scores: prefer the real score id field for links.
-   * Some API variants omit `id` and use `score_id` instead.
+   * Stable numeric id for sorting extended score rows.
    * @param {object|null|undefined} score
    * @returns {string|null}
    */
@@ -8599,13 +10573,11 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     if (!score || typeof score !== "object") return null;
     const raw =
       score.id ??
-      score.best_id ??
       score.legacy_score_id ??
       score.score_id ??
       score.scoreId ??
       score.scoreID ??
       score.score?.id ??
-      score.score?.best_id ??
       score.score?.legacy_score_id ??
       score.score?.score_id ??
       null;
@@ -8711,6 +10683,19 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
+   * API v2 Score (solo) uses `is_perfect_combo` / `legacy_perfect`; some payloads still expose `perfect`.
+   * @param {object} score
+   * @returns {boolean}
+   */
+  function scoreApiIndicatesComboPerfect(score) {
+    if (!score || typeof score !== "object") return false;
+    if (score.perfect === true) return true;
+    if (score.is_perfect_combo === true) return true;
+    if (score.legacy_perfect === true) return true;
+    return false;
+  }
+
+  /**
    * @param {HTMLTableCellElement|null|undefined} td
    * @param {HTMLTableCellElement|null|undefined} refTd
    * @param {object} score
@@ -8737,11 +10722,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     );
     const mapFull = mapFullCombo != null ? Number(mapFullCombo) : NaN;
     const hasMapFull = Number.isFinite(mapFull) && mapFull > 0;
-    const perfect = hasMapFull
+    const inferredPerfect = hasMapFull
       ? maxCombo > 0 && maxCombo === mapFull
       : Number.isFinite(maxComboFromStats) &&
         maxComboFromStats > 0 &&
         maxCombo === maxComboFromStats;
+    const perfect = scoreApiIndicatesComboPerfect(score) || inferredPerfect;
     a.className = toggleScoreboardCellPerfectClass(refA.className, perfect);
     const refChild = refA.firstElementChild;
     if (refChild instanceof HTMLElement) {
@@ -8811,31 +10797,27 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       return;
     }
     const ppNumber = Number(pp);
-    const ppText = String(Math.round(ppNumber * 1000) / 1000).replace(
-      /\.0+$/,
-      "",
-    );
+    const titleStr = String(pp).replace(/,/g, "").trim();
+    const displayStr = String(Math.round(ppNumber));
     if (refSpan) {
       const s = /** @type {HTMLSpanElement} */ (refSpan.cloneNode(false));
-      s.textContent = ppText;
-      s.setAttribute("title", ppText);
-      s.setAttribute("data-orig-title", ppText);
+      s.textContent = displayStr;
+      s.setAttribute("title", titleStr);
+      s.setAttribute("data-orig-title", titleStr);
       a.replaceChildren(s);
     } else {
-      a.replaceChildren(document.createTextNode(ppText));
+      a.replaceChildren(document.createTextNode(displayStr));
     }
   }
 
   /**
    * Native scoreboard rows keep full pp in `span[title]` while visible text is integer.
-   * Mirror user-profile behavior for this page when score-list details are enabled.
+   * Mirror user-profile behavior when “PP decimals on scores” is enabled.
    * @param {HTMLElement|null|undefined} scoreboardRoot
    */
   function syncBeatmapScoreboardPpDecimals(scoreboardRoot) {
     if (!(scoreboardRoot instanceof HTMLElement)) return;
-    const showPpDecimals = Boolean(
-      settings?.isEnabled?.(SCORE_LIST_DETAILS_ID),
-    );
+    const showPpDecimals = Boolean(settings?.isEnabled?.(SCORE_PP_DECIMALS_ID));
     const tables = scoreboardRoot.querySelectorAll(SCOREBOARD_HTML_TABLE_SEL);
     for (const table of tables) {
       if (!(table instanceof HTMLTableElement)) continue;
@@ -8852,7 +10834,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         const td = row.cells?.[colMap.pp];
         if (!td) continue;
         const span = td.querySelector(
-          "a.beatmap-scoreboard-table__cell-content > span[title]",
+          "a.beatmap-scoreboard-table__cell-content > span[title], span.beatmap-scoreboard-table__cell-content > span[title]",
         );
         if (!(span instanceof HTMLSpanElement)) continue;
         const textNode = Array.from(span.childNodes).find(
@@ -8938,6 +10920,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
   /**
    * Color GREAT/OK/MEH/MISS (and 300/100/50) leaderboard headers + counts; palette matches profile score card.
+   * Always applied on beatmapset scoreboards (not gated by profile “hit statistics” setting).
    * @param {HTMLElement|null|undefined} scoreboardRoot
    */
   function syncBeatmapScoreboardHitstatColors(scoreboardRoot) {
@@ -9006,6 +10989,63 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         target.classList.add(SCOREBOARD_PP_VALUE_CLASS);
       }
     }
+  }
+
+  /**
+   * PP decimals, hit-stat header/cell colors, and PP column tint for the main HTML table
+   * (native osu-web rows and our API-rendered rows).
+   * @param {HTMLElement|null|undefined} scoreboardRoot
+   */
+  function refreshBeatmapScoreboardTableEnhancements(scoreboardRoot) {
+    syncBeatmapScoreboardPpDecimals(scoreboardRoot);
+    syncBeatmapScoreboardHitstatColors(scoreboardRoot);
+    syncBeatmapScoreboardPpValueColor(scoreboardRoot);
+  }
+
+  /**
+   * React injects leaderboard rows after first paint (and re-injects on every mod change /
+   * difficulty switch). Re-apply styling whenever actual scoreboard body rows are added.
+   * @param {RegExp} pathRe
+   * @returns {() => void}
+   */
+  function startBeatmapScoreboardTableEnhancementsLive(pathRe) {
+    let debounceTimer = 0;
+    const run = () => {
+      debounceTimer = 0;
+      if (!pathRe.test(location.pathname)) return;
+      const root = findBeatmapScoreboardRoot();
+      if (root instanceof HTMLElement) {
+        refreshBeatmapScoreboardTableEnhancements(root);
+      }
+    };
+    const schedule = () => {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(run, 32);
+    };
+
+    const containsScoreRow = (node) => {
+      if (!(node instanceof HTMLElement)) return false;
+      if (node.classList.contains("beatmap-scoreboard-table__body-row"))
+        return true;
+      return node.querySelector(".beatmap-scoreboard-table__body-row") !== null;
+    };
+
+    const obs = new MutationObserver((records) => {
+      for (const r of records) {
+        for (const node of r.addedNodes) {
+          if (containsScoreRow(node)) {
+            schedule();
+            return;
+          }
+        }
+      }
+    });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+    schedule();
+    return () => {
+      window.clearTimeout(debounceTimer);
+      obs.disconnect();
+    };
   }
 
   /**
@@ -9352,13 +11392,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         wrap.appendChild(modEl);
       }
     }
-    const bg = td.querySelector(
-      "a.beatmap-scoreboard-table__cell-content.bg-link",
-    );
-    const scoreId = leaderboardScoreId(score);
-    if (bg instanceof HTMLAnchorElement && scoreId != null) {
-      bg.href = `https://osu.ppy.sh/scores/${scoreId}`;
-    }
   }
 
   /**
@@ -9578,7 +11611,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    */
   function applyScoreboardGradeCell(td, refTd, score) {
     if (!td) return;
-    const scoreId = leaderboardScoreId(score);
     const r =
       typeof score.rank === "string"
         ? score.rank
@@ -9604,7 +11636,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     if (div) {
       div.className = `score-rank score-rank--tiny score-rank--${rankKey}`;
     }
-    setScoreboardTdScoreLink(td, scoreId);
   }
 
   /**
@@ -9629,7 +11660,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     tr.setAttribute(EXTENDED_SCORE_ROW_ATTR, "1");
     // Use real table cell indices (works with colspans and hidden columns).
     const tds = [...tr.cells];
-    const scoreId = leaderboardScoreId(score);
     const uid = score.user?.id ?? score.user_id;
     const username = score.user?.username ?? String(uid);
     const userObj = score.user || { country_code: null, country: null };
@@ -9647,7 +11677,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         scoreboardRefTd(templateRow, colMap.rank),
         `#${oneBasedRank}`,
       );
-      setScoreboardTdScoreLink(tds[colMap.rank], scoreId);
     }
 
     if (colMap.grade != null) {
@@ -9664,7 +11693,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         scoreboardRefTd(templateRow, colMap.score),
         scoreStr,
       );
-      setScoreboardTdScoreLink(tds[colMap.score], scoreId);
     }
 
     if (colMap.accuracy != null) {
@@ -9673,7 +11701,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         scoreboardRefTd(templateRow, colMap.accuracy),
         score,
       );
-      setScoreboardTdScoreLink(tds[colMap.accuracy], scoreId);
     }
 
     if (colMap.flag != null) {
@@ -9697,12 +11724,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           userA;
         label.textContent = username;
       }
-      const bg = td.querySelector(
-        "a.beatmap-scoreboard-table__cell-content.bg-link",
-      );
-      if (bg && scoreId != null) {
-        bg.href = `https://osu.ppy.sh/scores/${scoreId}`;
-      }
     }
 
     if (colMap.combo != null) {
@@ -9712,7 +11733,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         score,
         mapFullCombo,
       );
-      setScoreboardTdScoreLink(tds[colMap.combo], scoreId);
     }
 
     for (const i of colMap.hitstatIndices || []) {
@@ -9723,7 +11743,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         refHit,
         hitstatTextFromHeaderLabel(label, score),
       );
-      setScoreboardTdScoreLink(tds[i], scoreId);
     }
 
     if (colMap.pp != null && tds[colMap.pp]) {
@@ -9732,11 +11751,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         scoreboardRefTd(templateRow, colMap.pp),
         score,
       );
-      setScoreboardTdScoreLink(tds[colMap.pp], scoreId);
     }
 
     if (colMap.time != null && tds[colMap.time] && iso) {
-      setScoreboardTdScoreLink(tds[colMap.time], scoreId);
       applyScoreboardTimeCell(
         tds[colMap.time],
         scoreboardRefTd(templateRow, colMap.time),
@@ -9857,22 +11874,16 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
-   * Destroy osu-web qtip on the favourite stat so the native user-list popup does not appear.
+   * Destroy osu-web qtip on the favourite stat (only used when Expert+ replaces it with the API popover).
    * @param {HTMLElement|null} el
    */
   function destroyFavouriteStatQtip(el) {
-    try {
-      const $ = typeof window !== "undefined" && window.$;
-      if (!$ || !el || !$.fn?.qtip) return;
-      const $el = $(el);
-      if ($el.data("qtip")) $el.qtip("destroy");
-    } catch (_) {
-      void 0;
-    }
+    destroyOsuWebQtipIfBound(el);
   }
 
   /**
-   * Hover popover on the favourite count (heart) with API recent_favourites; replaces osu! qtip list.
+   * Hover popover on the favourite count (heart) with API `recent_favourites` (avatar + username).
+   * Replaces osu! qtip; only used when OAuth client id/secret are set in Expert+ (see auth.isConfigured).
    * @param {HTMLElement} header
    * @param {string} beatmapsetId
    * @param {RegExp} pathRe
@@ -10833,6 +12844,19 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     };
   }
 
+  function teardownBeatmapDescriptionHeadingLayout(descRow) {
+    if (!(descRow instanceof HTMLElement)) return;
+    descRow.classList.remove(`${ROOT_CLASS}__description-heading-row`);
+    const headWrap = descRow.querySelector(
+      `:scope > .${ROOT_CLASS}__description-sticky-head`,
+    );
+    if (headWrap) {
+      const h = headWrap.querySelector(":scope > h3.beatmapset-info__header");
+      if (h) descRow.insertBefore(h, headWrap);
+      headWrap.remove();
+    }
+  }
+
   /**
    * osu!direct / supporter “direct” entry in `.beatmapset-header__buttons`.
    * @param {HTMLElement} buttonsEl
@@ -11088,12 +13112,24 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    * @param {object|undefined} entry
    * @param {{ bindTrigger: (trigger: HTMLElement, rows: { score: number, count: number }[]) => void }|null} [distUi]
    * @param {HTMLElement|null} [header]  `.beatmapset-header` for ranked year from DOM
+   * @param {boolean} [difficultyBlacklistedOnOmdb]  Successful set JSON but this beatmap omitted (OMDB blacklist)
    */
-  function renderOmdbRatingRowBody(bodyEl, entry, distUi, header) {
+  function renderOmdbRatingRowBody(
+    bodyEl,
+    entry,
+    distUi,
+    header,
+    difficultyBlacklistedOnOmdb,
+  ) {
     bodyEl.classList.remove(
       `${OEP_OMDB_ROW_CLASS}__body--muted`,
       `${OEP_OMDB_ROW_CLASS}__body--error`,
     );
+    if (difficultyBlacklistedOnOmdb) {
+      bodyEl.textContent = "This difficulty is blacklisted on OMDB.";
+      bodyEl.classList.add(`${OEP_OMDB_ROW_CLASS}__body--muted`);
+      return;
+    }
     if (entry == null) {
       bodyEl.textContent = "No ratings for this difficulty on OMDB.";
       bodyEl.classList.add(`${OEP_OMDB_ROW_CLASS}__body--muted`);
@@ -11208,6 +13244,176 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     if (!href) return null;
     const m = href.match(/#([a-z]+)\/(\d+)\s*$/i);
     return m ? Number(m[2]) : null;
+  }
+
+  /**
+   * Nomod star rating in the header difficulty line: always visible with a star icon
+   * (osu-web only mounts the native span while hovering the picker).
+   * @param {HTMLElement} header
+   * @param {RegExp} pathRe
+   * @returns {() => void}
+   */
+  function startBeatmapHeaderNomodStarLine(header, pathRe) {
+    const picker = header.querySelector(".beatmapset-beatmap-picker");
+    if (!(picker instanceof HTMLElement)) return () => {};
+
+    let hoveredBeatmapId = /** @type {number|null} */ (null);
+    let disposed = false;
+    let raf = 0;
+
+    function getActiveBeatmapIdFromPicker() {
+      const a = picker.querySelector(
+        "a.beatmapset-beatmap-picker__beatmap--active",
+      );
+      if (!(a instanceof HTMLAnchorElement)) return null;
+      const fromHash = parseBeatmapIdFromPickerLink(a);
+      if (fromHash != null) return fromHash;
+      const href = a.getAttribute("href") || "";
+      const m = href.match(/\/beatmaps\/(\d+)/);
+      return m ? Number(m[1]) : null;
+    }
+
+    function currentDisplayedBeatmapId() {
+      if (hoveredBeatmapId != null) return hoveredBeatmapId;
+      const fromPicker = getActiveBeatmapIdFromPicker();
+      if (fromPicker != null) return fromPicker;
+      const s = getBeatmapPageBeatmapId();
+      return s != null ? Number(s) : null;
+    }
+
+    function getDifficultyRatingForBeatmap(beatmapId) {
+      const data = readBeatmapsetJson();
+      if (!data?.beatmaps?.length) return null;
+      const n = Number(beatmapId);
+      const bm = data.beatmaps.find((b) => Number(b.id) === n);
+      const x = Number(bm?.difficulty_rating);
+      return Number.isFinite(x) ? x : null;
+    }
+
+    /**
+     * @param {number} n
+     */
+    function formatHeaderStarRating(n) {
+      const v = Number(n);
+      if (!Number.isFinite(v)) return "";
+      const floored = Math.floor(v * 100) / 100;
+      return floored.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    }
+
+    function buildStarSpan() {
+      const attrs = {
+        class:
+          "beatmapset-header__diff-extra beatmapset-header__diff-extra--star-difficulty",
+        title: "Star rating",
+      };
+      attrs[HEADER_NOMOD_STAR_ATTR] = "1";
+      return el(
+        "span",
+        attrs,
+        el("i", { class: "fas fa-star", "aria-hidden": "true" }),
+        "",
+      );
+    }
+
+    /** @type {Text|null} */
+    let ratingTextNode = null;
+
+    function ensureAttached() {
+      if (disposed || !pathRe.test(location.pathname)) return null;
+      const diffName = header.querySelector(".beatmapset-header__diff-name");
+      const row = diffName?.parentElement;
+      if (!(diffName instanceof HTMLElement) || !(row instanceof HTMLElement))
+        return null;
+
+      let span = row.querySelector(`[${HEADER_NOMOD_STAR_ATTR}="1"]`);
+      if (!(span instanceof HTMLSpanElement)) span = buildStarSpan();
+      diffName.insertAdjacentElement("afterend", span);
+
+      const icon = span.querySelector(".fa-star");
+      const tn = icon?.nextSibling;
+      ratingTextNode = tn instanceof Text ? tn : null;
+      return span;
+    }
+
+    function syncContent() {
+      if (disposed || !pathRe.test(location.pathname)) return;
+      const span = ensureAttached();
+      if (!span || !ratingTextNode) return;
+      const id = currentDisplayedBeatmapId();
+      const r = id != null ? getDifficultyRatingForBeatmap(id) : null;
+      if (r == null) {
+        span.style.display = "none";
+        ratingTextNode.textContent = "";
+        return;
+      }
+      span.style.display = "";
+      ratingTextNode.textContent = ` ${formatHeaderStarRating(r)}`;
+    }
+
+    function scheduleSync() {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        syncContent();
+      });
+    }
+
+    /**
+     * @param {MouseEvent} e
+     */
+    function onPickerMouseOver(e) {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      const a = t.closest("a.beatmapset-beatmap-picker__beatmap");
+      if (!(a instanceof HTMLAnchorElement) || !picker.contains(a)) return;
+      const id = parseBeatmapIdFromPickerLink(a);
+      if (id != null) {
+        hoveredBeatmapId = id;
+        scheduleSync();
+        return;
+      }
+      const href = a.getAttribute("href") || "";
+      const m = href.match(/\/beatmaps\/(\d+)/);
+      if (m) {
+        hoveredBeatmapId = Number(m[1]);
+        scheduleSync();
+      }
+    }
+
+    function onPickerMouseLeave() {
+      hoveredBeatmapId = null;
+      scheduleSync();
+    }
+
+    function onRouteHashSignal() {
+      hoveredBeatmapId = null;
+      scheduleSync();
+    }
+
+    syncContent();
+
+    picker.addEventListener("mouseover", onPickerMouseOver);
+    picker.addEventListener("mouseleave", onPickerMouseLeave);
+    window.addEventListener("hashchange", onRouteHashSignal, { passive: true });
+    window.addEventListener("popstate", onRouteHashSignal, { passive: true });
+
+    const mo = new MutationObserver(scheduleSync);
+    mo.observe(header, { subtree: true, childList: true });
+
+    return () => {
+      disposed = true;
+      if (raf) window.cancelAnimationFrame(raf);
+      raf = 0;
+      picker.removeEventListener("mouseover", onPickerMouseOver);
+      picker.removeEventListener("mouseleave", onPickerMouseLeave);
+      window.removeEventListener("hashchange", onRouteHashSignal);
+      window.removeEventListener("popstate", onRouteHashSignal);
+      mo.disconnect();
+      header.querySelector(`[${HEADER_NOMOD_STAR_ATTR}="1"]`)?.remove();
+    };
   }
 
   /**
@@ -11480,6 +13686,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     wrap.appendChild(voteRow);
     box.insertBefore(wrap, diffName);
 
+    const beatmapIdsInSet = new Set();
+    for (const b of readBeatmapsetJson()?.beatmaps ?? []) {
+      if (b?.id != null) beatmapIdsInSet.add(Number(b.id));
+    }
+    let omdbSetFetchSucceeded = false;
+
     /** @type {Map<number, object>} */
     let byBeatmapId = new Map();
     let hoveredBeatmapId = null;
@@ -11500,6 +13712,14 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
     function currentDisplayedBeatmapId() {
       return hoveredBeatmapId ?? getActiveBeatmapIdFromPicker();
+    }
+
+    function isOmdbDifficultyBlacklisted(beatmapId) {
+      if (!omdbSetFetchSucceeded || beatmapId == null) return false;
+      if (byBeatmapId.size === 0) return false;
+      const n = Number(beatmapId);
+      if (!Number.isFinite(n) || !beatmapIdsInSet.has(n)) return false;
+      return !byBeatmapId.has(n);
     }
 
     function setVoteBusy(on) {
@@ -11543,7 +13763,13 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         `${OEP_OMDB_ROW_CLASS}__body--muted`,
         `${OEP_OMDB_ROW_CLASS}__body--error`,
       );
-      renderOmdbRatingRowBody(bodyEl, byBeatmapId.get(id), omdbDistUi, header);
+      renderOmdbRatingRowBody(
+        bodyEl,
+        byBeatmapId.get(id),
+        omdbDistUi,
+        header,
+        isOmdbDifficultyBlacklisted(id),
+      );
       syncVoteStars();
     }
 
@@ -11610,6 +13836,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         const bid = item?.BeatmapID ?? item?.beatmapID ?? item?.beatmap_id;
         if (bid != null) byBeatmapId.set(Number(bid), item);
       }
+      omdbSetFetchSucceeded = true;
       syncDisplay();
     }
 
@@ -11666,6 +13893,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           const bid = item?.BeatmapID ?? item?.beatmapID ?? item?.beatmap_id;
           if (bid != null) byBeatmapId.set(Number(bid), item);
         }
+        omdbSetFetchSucceeded = true;
         bodyEl.classList.remove(`${OEP_OMDB_ROW_CLASS}__body--error`);
         voteRow.style.display = "";
         syncDisplay();
@@ -11774,6 +14002,69 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     };
   }
 
+  /**
+   * Square header control opening `https://b.ppy.sh/preview/{id}.mp3` (osu! preview stream).
+   * @param {HTMLElement} header  `.beatmapset-header`
+   * @param {string} beatmapsetId
+   * @returns {() => void}
+   */
+  function mountBeatmapsetPreviewAudioButton(header, beatmapsetId) {
+    const buttons = header.querySelector(".beatmapset-header__buttons");
+    if (!buttons) return () => {};
+
+    if (buttons.querySelector("[data-oep-beatmapset-preview-audio]")) {
+      return () => {};
+    }
+
+    const id = Number(beatmapsetId);
+    if (!Number.isFinite(id)) return () => {};
+
+    const previewLink = el(
+      "a",
+      {
+        class: "btn-osu-big btn-osu-big--beatmapset-header-square",
+        href: `https://b.ppy.sh/preview/${id}.mp3`,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        "data-oep-beatmapset-preview-audio": "",
+        title: "Open preview audio",
+        "aria-label": "Open preview audio",
+      },
+      el(
+        "span",
+        { class: "btn-osu-big__content btn-osu-big__content--center" },
+        el(
+          "span",
+          { class: "btn-osu-big__icon" },
+          el(
+            "span",
+            { class: "fa fa-fw" },
+            el("span", { class: "fas fa-volume-up", "aria-hidden": "true" }),
+          ),
+        ),
+      ),
+    );
+
+    const mp3 = buttons.querySelector("[data-oep-beatmapset-mp3]");
+    const bg = buttons.querySelector("[data-oep-beatmapset-bg]");
+    if (mp3 instanceof HTMLElement) {
+      mp3.insertAdjacentElement("afterend", previewLink);
+    } else if (bg instanceof HTMLElement) {
+      bg.insertAdjacentElement("afterend", previewLink);
+    } else {
+      const directBtn = findBeatmapsetOsuDirectButton(buttons);
+      if (directBtn) {
+        directBtn.insertAdjacentElement("afterend", previewLink);
+      } else {
+        buttons.appendChild(previewLink);
+      }
+    }
+
+    return () => {
+      previewLink.remove();
+    };
+  }
+
   // Attribute set on .beatmapset-header elements we have already processed.
   const BEATMAPSET_HEADER_PROCESSED_ATTR = "data-oep-processed";
   const BEATMAPSET_HEADER_STALE_SEL = `.beatmapset-header[${BEATMAPSET_HEADER_PROCESSED_ATTR}]`;
@@ -11804,16 +14095,17 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     let metadataInfoModal = null;
     /** @type {{ dispose: () => void } | null} */
     let descriptionInfoModal = null;
+    /** @type {HTMLElement|null} */
+    let descriptionHeadingDescRow = null;
+    /** @type {HTMLElement|null} */
+    let header = null;
     /** @type {null|(() => void)} */
     let modGridCleanup = null;
+    let modGridSetupGen = 0;
 
     const bag = createCleanupBag();
 
-    const cleanup = () => {
-      try {
-        modGridCleanup?.();
-      } catch (_) {}
-      modGridCleanup = null;
+    function disposeBeatmapInfoModalButtons() {
       try {
         metadataInfoModal?.dispose();
       } catch (_) {}
@@ -11822,13 +14114,137 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         descriptionInfoModal?.dispose();
       } catch (_) {}
       descriptionInfoModal = null;
-      /* After modal buttons are removed from the DOM; bag may unwrap description markup. */
+      if (descriptionHeadingDescRow instanceof HTMLElement) {
+        teardownBeatmapDescriptionHeadingLayout(descriptionHeadingDescRow);
+        descriptionHeadingDescRow = null;
+      }
+    }
+
+    function refreshBeatmapInfoModalButtons() {
+      if (!(header instanceof HTMLElement) || !document.body.contains(header))
+        return;
+      if (!pathRe.test(location.pathname)) return;
+
+      if (!settings.isEnabled(METADATA_DESCRIPTION_MODAL_BUTTONS_ID)) {
+        disposeBeatmapInfoModalButtons();
+        return;
+      }
+
+      const data = readBeatmapsetJson();
+
+      const artistEl = header.querySelector(
+        ".beatmapset-header__details-text--artist",
+      );
+      if (
+        !metadataInfoModal &&
+        artistEl instanceof HTMLElement &&
+        !header.querySelector("[data-oep-beatmapset-metadata]")
+      ) {
+        metadataInfoModal = attachBeatmapsetInfoModal(el, ROOT_CLASS, {
+          title: "Beatmap metadata",
+          titleId: `${ROOT_CLASS}-metadata-title`,
+          buttonText: "Show metadata",
+          buttonIconClass: "fas fa-clipboard-list",
+          buttonExtraClass: `${ROOT_CLASS}__action-btn--under-artist`,
+          mountButton: (btn) => {
+            btn.setAttribute("data-oep-beatmapset-metadata", "");
+            artistEl.insertAdjacentElement("afterend", btn);
+          },
+          buildModalTitleExtra: (elFn) =>
+            buildBeatmapMetadataOsuOpenButton(elFn, getBeatmapPageBeatmapId),
+          buildBody: () => buildModalBody(data, el),
+        });
+      }
+
+      const infoCol = document.querySelector(".beatmapset-info");
+      const firstBox = infoCol?.querySelector(":scope > .beatmapset-info__box");
+      const scrollEl = firstBox?.querySelector(
+        ":scope > .beatmapset-info__scrollable",
+      );
+      const descRow =
+        scrollEl?.querySelector(
+          ":scope > .beatmapset-info__row:has(.beatmapset-info__description)",
+        ) ??
+        scrollEl?.querySelector(
+          ":scope > .beatmapset-info__row:first-child:has(> h3.beatmapset-info__header)",
+        );
+      const descHeading = descRow?.querySelector(
+        ":scope > h3.beatmapset-info__header",
+      );
+      if (
+        !descriptionInfoModal &&
+        descRow instanceof HTMLElement &&
+        descHeading instanceof HTMLElement &&
+        !descRow.querySelector("[data-oep-beatmapset-desc]")
+      ) {
+        descRow.classList.add(`${ROOT_CLASS}__description-heading-row`);
+        descriptionHeadingDescRow = descRow;
+        descriptionInfoModal = attachBeatmapsetInfoModal(el, ROOT_CLASS, {
+          title: "Beatmap description",
+          titleId: `${ROOT_CLASS}-description-title`,
+          buttonText: "Full description",
+          buttonIconClass: "fas fa-align-left",
+          buttonExtraClass: `${ROOT_CLASS}__action-btn--description-heading`,
+          modalExtraClass: `${ROOT_CLASS}__modal--description`,
+          mountButton: (btn) => {
+            btn.setAttribute("data-oep-beatmapset-desc", "");
+            const headWrap = el("div", {
+              class: `${ROOT_CLASS}__description-sticky-head`,
+            });
+            descRow.insertBefore(headWrap, descHeading);
+            headWrap.appendChild(descHeading);
+            headWrap.appendChild(btn);
+          },
+          buildBody: () => buildDescriptionModalBody(data, el),
+        });
+      }
+    }
+
+    function refreshBeatmapScoreboardModGrid() {
+      try {
+        modGridCleanup?.();
+      } catch (_) {}
+      modGridCleanup = null;
+      modGridSetupGen += 1;
+      const gen = modGridSetupGen;
+      if (!settings.isEnabled(SCOREBOARD_MOD_GRID_ID)) {
+        const modsStrip = document.querySelector(
+          ".beatmapset-scoreboard__mods",
+        );
+        if (modsStrip instanceof HTMLElement) {
+          stopBeatmapScoreboardModGridLive(modsStrip);
+        }
+        return;
+      }
+      setupBeatmapScoreboardModGrid().then((dispose) => {
+        if (gen !== modGridSetupGen) {
+          try {
+            dispose();
+          } catch (_) {}
+          return;
+        }
+        if (!pathRe.test(location.pathname)) {
+          try {
+            dispose();
+          } catch (_) {}
+          return;
+        }
+        modGridCleanup = dispose;
+      });
+    }
+
+    const cleanup = () => {
+      try {
+        modGridCleanup?.();
+      } catch (_) {}
+      modGridCleanup = null;
+      modGridSetupGen += 1;
+      disposeBeatmapInfoModalButtons();
       bag.dispose();
     };
 
     await waitForStaleElementToLeave(BEATMAPSET_HEADER_STALE_SEL);
 
-    let header;
     try {
       header = await waitForElement(".beatmapset-header", 15000);
     } catch (_) {
@@ -11841,10 +14257,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
     if (!pathRe.test(location.pathname)) return cleanup;
 
-    bag.add(startBeatmapScoresDateHighlightManager(pathRe));
+    bag.add(startBeatmapScoreUserSearchManager(pathRe));
+    bag.add(startBeatmapScoreboardTableEnhancementsLive(pathRe));
     bag.add(startBeatmapDiscussionPreviewManager(pathRe));
     bag.add(startDiscussionTabLinkPatcher(beatmapsetId));
     bag.add(startBeatmapsetFavouriteButtonPinkIndicator(header));
+    bag.add(startBeatmapHeaderNomodStarLine(header, pathRe));
 
     /** @type {null|(() => void)} */
     let beatconnectCleanup = null;
@@ -11858,7 +14276,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         document.body.contains(header) &&
         settings.isEnabled(BEATCONNECT_DOWNLOAD_BUTTON_ID)
       ) {
-        beatconnectCleanup = mountBeatconnectDownloadSplit(header, beatmapsetId);
+        beatconnectCleanup = mountBeatconnectDownloadSplit(
+          header,
+          beatmapsetId,
+        );
       }
     }
     refreshBeatconnectDownloadButton();
@@ -11904,58 +14325,45 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     });
 
     bag.add(
-      settings.onChange(SCORE_LIST_DETAILS_ID, () => {
+      settings.onChange(SCORE_PP_DECIMALS_ID, () => {
         const root = findBeatmapScoreboardRoot();
-        if (root instanceof HTMLElement) syncBeatmapScoreboardPpDecimals(root);
+        if (root instanceof HTMLElement) {
+          refreshBeatmapScoreboardTableEnhancements(root);
+        }
       }),
     );
 
-    setupBeatmapScoreboardModGrid().then((fn) => {
-      if (!pathRe.test(location.pathname)) {
-        try {
-          fn();
-        } catch (_) {}
-        return;
-      }
-      modGridCleanup = fn;
-    });
-
-    const data = readBeatmapsetJson();
-
+    refreshBeatmapScoreboardModGrid();
     bag.add(
-      setupBeatmapsetFavouriteHoverPopover(
-        header,
-        beatmapsetId,
-        pathRe,
-        data?.favourite_count,
+      settings.onChange(
+        SCOREBOARD_MOD_GRID_ID,
+        refreshBeatmapScoreboardModGrid,
       ),
     );
 
-    const artistEl = header.querySelector(
-      ".beatmapset-header__details-text--artist",
-    );
-    if (
-      artistEl instanceof HTMLElement &&
-      !header.querySelector("[data-oep-beatmapset-metadata]")
-    ) {
-      metadataInfoModal = attachBeatmapsetInfoModal(el, ROOT_CLASS, {
-        title: "Beatmap metadata",
-        titleId: `${ROOT_CLASS}-metadata-title`,
-        buttonText: "Show metadata",
-        buttonIconClass: "fas fa-clipboard-list",
-        buttonExtraClass: `${ROOT_CLASS}__action-btn--under-artist`,
-        mountButton: (btn) => {
-          btn.setAttribute("data-oep-beatmapset-metadata", "");
-          artistEl.insertAdjacentElement("afterend", btn);
-        },
-        buildModalTitleExtra: (elFn) =>
-          buildBeatmapMetadataOsuOpenButton(elFn, getBeatmapPageBeatmapId),
-        buildBody: () => buildModalBody(data, el),
-      });
+    const data = readBeatmapsetJson();
+
+    if (auth.isConfigured()) {
+      bag.add(
+        setupBeatmapsetFavouriteHoverPopover(
+          header,
+          beatmapsetId,
+          pathRe,
+          data?.favourite_count,
+        ),
+      );
     }
 
+    refreshBeatmapInfoModalButtons();
+    bag.add(
+      settings.onChange(
+        METADATA_DESCRIPTION_MODAL_BUTTONS_ID,
+        refreshBeatmapInfoModalButtons,
+      ),
+    );
+
     try {
-      const infoRoot = await waitForElement(".beatmapset-info", 12000);
+      await waitForElement(".beatmapset-info", 12000);
       if (pathRe.test(location.pathname) && document.body.contains(header)) {
         // Between `.beatmapset-header` and `.beatmapset-info` (sibling in `.osu-page--generic-compact`).
         /** @type {null|(() => void)} */
@@ -12009,62 +14417,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           beatmapPreviewCleanup = null;
         });
 
-        const firstBox = infoRoot.querySelector(
-          ":scope > .beatmapset-info__box",
-        );
-        const scrollEl = firstBox?.querySelector(
-          ":scope > .beatmapset-info__scrollable",
-        );
-        // osu-web used to wrap description HTML in `.beatmapset-info__description`; current
-        // `info.tsx` uses a classless div, so fall back to the first row in the first box.
-        const descRow =
-          scrollEl?.querySelector(
-            ":scope > .beatmapset-info__row:has(.beatmapset-info__description)",
-          ) ??
-          scrollEl?.querySelector(
-            ":scope > .beatmapset-info__row:first-child:has(> h3.beatmapset-info__header)",
-          );
-        const descHeading = descRow?.querySelector(
-          ":scope > h3.beatmapset-info__header",
-        );
-        if (
-          descRow instanceof HTMLElement &&
-          descHeading instanceof HTMLElement &&
-          !descRow.querySelector("[data-oep-beatmapset-desc]")
-        ) {
-          descRow.classList.add(`${ROOT_CLASS}__description-heading-row`);
-          bag.add(() => {
-            descRow.classList.remove(`${ROOT_CLASS}__description-heading-row`);
-            const headWrap = descRow.querySelector(
-              `:scope > .${ROOT_CLASS}__description-sticky-head`,
-            );
-            if (headWrap) {
-              const h = headWrap.querySelector(
-                ":scope > h3.beatmapset-info__header",
-              );
-              if (h) descRow.insertBefore(h, headWrap);
-              headWrap.remove();
-            }
-          });
-          descriptionInfoModal = attachBeatmapsetInfoModal(el, ROOT_CLASS, {
-            title: "Beatmap description",
-            titleId: `${ROOT_CLASS}-description-title`,
-            buttonText: "Full description",
-            buttonIconClass: "fas fa-align-left",
-            buttonExtraClass: `${ROOT_CLASS}__action-btn--description-heading`,
-            modalExtraClass: `${ROOT_CLASS}__modal--description`,
-            mountButton: (btn) => {
-              btn.setAttribute("data-oep-beatmapset-desc", "");
-              const headWrap = el("div", {
-                class: `${ROOT_CLASS}__description-sticky-head`,
-              });
-              descRow.insertBefore(headWrap, descHeading);
-              headWrap.appendChild(descHeading);
-              headWrap.appendChild(btn);
-            },
-            buildBody: () => buildDescriptionModalBody(data, el),
-          });
-        }
+        refreshBeatmapInfoModalButtons();
       }
     } catch (_) {
       /* beatmapset info column not present (layout edge case) */
@@ -12079,8 +14432,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       const bgLink = el(
         "a",
         {
-          class:
-            "btn-osu-big btn-osu-big--beatmapset-header-square",
+          class: "btn-osu-big btn-osu-big--beatmapset-header-square",
           href: backgroundUrl,
           target: "_blank",
           rel: "noopener noreferrer",
@@ -12143,6 +14495,38 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       });
     }
 
+    /** @type {null|(() => void)} */
+    let previewAudioCleanup = null;
+    function refreshBeatmapsetPreviewAudioButton() {
+      try {
+        previewAudioCleanup?.();
+      } catch (_) {}
+      previewAudioCleanup = null;
+      if (
+        pathRe.test(location.pathname) &&
+        document.body.contains(header) &&
+        settings.isEnabled(BEATMAPSET_PREVIEW_AUDIO_BUTTON_ID)
+      ) {
+        previewAudioCleanup = mountBeatmapsetPreviewAudioButton(
+          header,
+          beatmapsetId,
+        );
+      }
+    }
+    refreshBeatmapsetPreviewAudioButton();
+    bag.add(
+      settings.onChange(
+        BEATMAPSET_PREVIEW_AUDIO_BUTTON_ID,
+        refreshBeatmapsetPreviewAudioButton,
+      ),
+    );
+    bag.add(() => {
+      try {
+        previewAudioCleanup?.();
+      } catch (_) {}
+      previewAudioCleanup = null;
+    });
+
     return cleanup;
   }
 
@@ -12194,7 +14578,9 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   // Score lists: PP from span title → 2dp; hit-stat row from API (fetchScores)
-  const SCORE_LIST_DETAILS_ID = IDS.SCORE_LIST_DETAILS;
+  const SCORE_PP_DECIMALS_ID = IDS.SCORE_PP_DECIMALS;
+  const SCORE_HIT_STATISTICS_ID = IDS.SCORE_HIT_STATISTICS;
+  const SCORE_PERIOD_HIGHLIGHT_ID = IDS.SCORE_PERIOD_HIGHLIGHT;
   const RECENT_SCORES_SHOW_FAILS_ID = IDS.RECENT_SCORES_SHOW_FAILS;
   const PP_DECIMALS_ATTR = "data-oep-pp-original";
 
@@ -12236,6 +14622,8 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   /** On `.play-detail-list`: enables our desktop column widths; remove when feature off. */
   const SCORE_LIST_LAYOUT_CLASS = "oep-score-list-details-layout";
+  /** Wider PP column track when "PP decimals on scores" is on (layout list only). */
+  const SCORE_LIST_PP_DECIMALS_CLASS = "oep-score-list-pp-decimals";
   const SCORE_LIST_LAYOUT_SEL = `.play-detail-list.${SCORE_LIST_LAYOUT_CLASS}`;
 
   /** Desktop `.play-detail` flex tracks (mods / pp / accuracy / combo+stats). */
@@ -12334,6 +14722,10 @@ OsuExpertPlus.pages.userProfile = (() => {
         --oep-mid-gap: ${PLAY_DETAIL_DESKTOP_TUNING.midGap};
         --oep-score-detail-pad-x: 20px;
         --oep-score-detail-gap: 10px;
+        --oep-pp-track: ${PLAY_DETAIL_DESKTOP_TUNING.ppDesktopWidth};
+      }
+
+      ${SCORE_LIST_LAYOUT_SEL}.${SCORE_LIST_PP_DECIMALS_CLASS} .play-detail__group--bottom {
         --oep-pp-track: ${PLAY_DETAIL_DESKTOP_TUNING.ppColWidth};
       }
 
@@ -12718,22 +15110,29 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   /**
    * Identify what type of score section a .play-detail-list belongs to by
-   * inspecting the preceding h3 title element.
+   * inspecting the nearest preceding subsection h3 (osu may insert nodes between h3 and list).
    * @returns {'pinned'|'best'|'firsts'|null}
    */
   function _getSectionType(listEl) {
-    const h3 = listEl.previousElementSibling;
-    if (!h3) return null;
-    const text = h3.textContent.toLowerCase();
-    if (text.includes("pinned")) return "pinned";
-    if (text.includes("best performance")) return "best";
-    if (text.includes("first place")) return "firsts";
+    let n = listEl.previousElementSibling;
+    while (n) {
+      if (
+        n instanceof HTMLElement &&
+        n.matches("h3.title.title--page-extra-small")
+      ) {
+        const text = n.textContent.toLowerCase();
+        if (text.includes("pinned")) return "pinned";
+        if (text.includes("best performance")) return "best";
+        if (text.includes("first place")) return "firsts";
+        return null;
+      }
+      n = n.previousElementSibling;
+    }
     return null;
   }
 
   /**
-   * Beatmap max combo: prefer API beatmap.max_combo; else lazer osu!std uses
-   * maximum_statistics.great + legacy_combo_increase (see solo_score JSON).
+
    * @param {Object} score
    * @returns {number|null}
    */
@@ -12743,6 +15142,31 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     const ms = score?.maximum_statistics;
     if (!ms || typeof ms !== "object") return null;
+
+    const rulesetId = Number(score?.ruleset_id);
+    if (
+      rulesetId === 0 &&
+      ms.great != null &&
+      Number.isFinite(Number(ms.great))
+    ) {
+      const great = Number(ms.great);
+      if (
+        ms.legacy_combo_increase != null &&
+        Number.isFinite(Number(ms.legacy_combo_increase))
+      ) {
+        return great + Number(ms.legacy_combo_increase);
+      }
+      let n = great;
+      for (const key of [
+        "large_tick_hit",
+        "small_tick_hit",
+        "slider_tail_hit",
+      ]) {
+        const v = ms[key];
+        if (v != null && Number.isFinite(Number(v))) n += Number(v);
+      }
+      return n;
+    }
 
     if (ms.great != null && Number.isFinite(Number(ms.great))) {
       const g = Number(ms.great);
@@ -12812,7 +15236,10 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     const achieved = score?.max_combo ?? 0;
     const maxCombo = _beatmapMaxComboFromScore(score);
-    const maxStr = maxCombo != null ? String(maxCombo) : "—";
+    const maxStr =
+      maxCombo != null && Number.isFinite(Number(maxCombo))
+        ? String(maxCombo)
+        : "0";
 
     const achN = Number(achieved);
     const maxN =
@@ -12839,10 +15266,8 @@ OsuExpertPlus.pages.userProfile = (() => {
       ),
       "x/",
       el("span", { class: maxNumClass("oep-combo-inline__num") }, maxStr),
+      "x",
     ];
-    if (maxCombo != null && Number.isFinite(Number(maxCombo))) {
-      comboParts.push("x");
-    }
     const comboSpan = el("span", { class: "oep-combo-inline" }, ...comboParts);
 
     const accCol = el("div", { class: "oep-accuracy-col" });
@@ -13113,8 +15538,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     );
     badge.style.backgroundColor =
       OsuExpertPlus.difficultyColours.getDiffColour(sr);
-    badge.style.color =
-      OsuExpertPlus.difficultyColours.getDiffTextColour(sr);
+    badge.style.color = OsuExpertPlus.difficultyColours.getDiffTextColour(sr);
     parent.insertBefore(badge, beatmapSpan);
   }
 
@@ -13184,21 +15608,38 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   const SCORE_PLACE_NUMBER_ID = IDS.SCORE_CARD_PLACE_NUMBER;
   const SCORE_PLACE_CLASS = "oep-score-place";
+  const SCORE_TITLE_ROW_CLASS = "oep-score-title-row";
   const SCORE_PLACE_NUMBER_STYLE_ID = "osu-expertplus-score-place-number";
   const SCORE_PLACE_NUMBER_CSS = `
-    .${SCORE_PLACE_CLASS} {
-      display: inline-flex;
-      align-items: center;
-      justify-content: flex-end;
-      font-size: 0.75rem;
-      font-weight: 700;
-      color: hsl(var(--hsl-c1));
-      opacity: 0.65;
-      min-width: 2.2em;
-      padding-right: 4px;
-      white-space: nowrap;
+    .${SCORE_TITLE_ROW_CLASS} {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: flex-start;
+      gap: 0.45em 0.55em;
+      min-width: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .${SCORE_TITLE_ROW_CLASS} .play-detail__title {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .${SCORE_TITLE_ROW_CLASS} .${SCORE_PLACE_CLASS} {
+      align-self: flex-start;
+      box-sizing: border-box;
+      color: hsl(220, 10%, 68%);
+      display: block;
       flex-shrink: 0;
-      line-height: 1;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: inherit;
+      letter-spacing: inherit;
+      line-height: normal;
+      margin: 0;
+      opacity: 0.78;
+      padding: 0;
+      white-space: nowrap;
     }
   `;
   const scorePlaceNumberStyle = manageStyle(
@@ -13209,23 +15650,66 @@ OsuExpertPlus.pages.userProfile = (() => {
   function applyPlaceNumbers(listEl) {
     const rows = Array.from(listEl.querySelectorAll(".play-detail"));
     rows.forEach((rowEl, i) => {
-      if (rowEl.querySelector(`.${SCORE_PLACE_CLASS}`)) return;
-      const topGroup = rowEl.querySelector(".play-detail__group--top");
-      if (!topGroup) return;
-      const iconMain = topGroup.querySelector(".play-detail__icon--main");
-      if (!iconMain) return;
-      topGroup.insertBefore(
-        el("div", { class: SCORE_PLACE_CLASS }, `#${i + 1}`),
-        iconMain,
+      const detail = rowEl.querySelector(".play-detail__detail");
+      if (!(detail instanceof HTMLElement)) return;
+
+      const titleRow = detail.querySelector(
+        `:scope > .${SCORE_TITLE_ROW_CLASS}`,
       );
+      const placeInRow = titleRow?.querySelector(`.${SCORE_PLACE_CLASS}`);
+      const titleInRow = titleRow?.querySelector("a.play-detail__title");
+
+      if (
+        titleRow &&
+        placeInRow &&
+        titleInRow &&
+        titleInRow.parentElement === titleRow
+      ) {
+        const expected = `#${i + 1}`;
+        if (placeInRow.textContent !== expected) {
+          placeInRow.textContent = expected;
+        }
+        return;
+      }
+
+      rowEl
+        .querySelectorAll(`.${SCORE_PLACE_CLASS}`)
+        .forEach((n) => n.remove());
+      detail
+        .querySelectorAll(`:scope > .${SCORE_TITLE_ROW_CLASS}`)
+        .forEach((tr) => {
+          const t = tr.querySelector("a.play-detail__title");
+          if (t instanceof HTMLElement && tr.parentElement === detail) {
+            detail.insertBefore(t, tr);
+          }
+          tr.remove();
+        });
+
+      const title = detail.querySelector(":scope > a.play-detail__title");
+      if (!(title instanceof HTMLElement)) return;
+
+      const row = el("div", { class: SCORE_TITLE_ROW_CLASS });
+      const place = el("div", { class: SCORE_PLACE_CLASS }, `#${i + 1}`);
+      detail.insertBefore(row, title);
+      row.appendChild(place);
+      row.appendChild(title);
     });
   }
 
   function revertPlaceNumbers(listEl) {
+    listEl.querySelectorAll(`.${SCORE_TITLE_ROW_CLASS}`).forEach((wrap) => {
+      const detail = wrap.parentElement;
+      const title = wrap.querySelector("a.play-detail__title");
+      if (detail instanceof HTMLElement && title instanceof HTMLElement) {
+        detail.insertBefore(title, wrap);
+      }
+      wrap.remove();
+    });
     listEl.querySelectorAll(`.${SCORE_PLACE_CLASS}`).forEach((n) => n.remove());
   }
 
   const SCORE_SECTION_TYPES = ["pinned", "best", "firsts"];
+  const SCORE_PLACE_SECTION_TYPE = "best";
 
   function setScoreListLayoutClass(sections, enabled) {
     sections.forEach(({ listEl }) => {
@@ -13233,7 +15717,14 @@ OsuExpertPlus.pages.userProfile = (() => {
     });
   }
 
-  // Mark lists we touched so stale wait targets only our DOM, not Inertia’s fresh paint
+  function syncScoreListPpDecimalsWidthClass(listEl) {
+    listEl.classList.toggle(
+      SCORE_LIST_PP_DECIMALS_CLASS,
+      settings.isEnabled(SCORE_PP_DECIMALS_ID),
+    );
+  }
+
+  // Mark lists we enhance so stale-element waits target our DOM until Inertia replaces it.
   const PLAY_DETAIL_LIST_PROCESSED_ATTR = "data-oep-processed";
   const PLAY_DETAIL_LIST_STALE_SEL = `.play-detail-list[${PLAY_DETAIL_LIST_PROCESSED_ATTR}]`;
 
@@ -13272,15 +15763,31 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     setScoreListLayoutClass(
       scoreSections,
-      settings.isEnabled(SCORE_LIST_DETAILS_ID),
+      settings.isEnabled(SCORE_HIT_STATISTICS_ID),
+    );
+    scoreSections.forEach(({ listEl }) =>
+      syncScoreListPpDecimalsWidthClass(listEl),
     );
 
-    scoreSections.forEach(({ listEl }) => {
-      if (settings.isEnabled(SCORE_LIST_DETAILS_ID)) applyPpDecimals(listEl);
+    scoreSections.forEach(({ listEl, type }) => {
+      if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
       applyHideWeightedPp(listEl);
-      if (settings.isEnabled(SCORE_PLACE_NUMBER_ID)) applyPlaceNumbers(listEl);
+      if (settings.isEnabled(SCORE_PLACE_NUMBER_ID)) {
+        if (type === SCORE_PLACE_SECTION_TYPE) {
+          applyPlaceNumbers(listEl);
+        } else {
+          revertPlaceNumbers(listEl);
+        }
+      } else {
+        revertPlaceNumbers(listEl);
+      }
     });
-    if (settings.isEnabled(SCORE_PLACE_NUMBER_ID)) scorePlaceNumberStyle.inject();
+    if (
+      settings.isEnabled(SCORE_PLACE_NUMBER_ID) &&
+      scoreSections.some((s) => s.type === SCORE_PLACE_SECTION_TYPE)
+    ) {
+      scorePlaceNumberStyle.inject();
+    }
 
     if (settings.isEnabled(MODDED_SR_ID)) {
       initSrObserver();
@@ -13300,48 +15807,61 @@ OsuExpertPlus.pages.userProfile = (() => {
       );
     }
 
-    if (settings.isEnabled(SCORE_LIST_DETAILS_ID)) {
+    if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
       await Promise.all(scoreSections.map(_loadAndApplyStats));
     }
 
     // Per-section MutationObserver for "load more" rows.
     scoreSections.forEach((section) => {
       const { listEl, type } = section;
+      let sectionObsBusy = false;
 
       const obs = new MutationObserver((mutations) => {
-        const affectsRows = mutations.some((m) => {
-          if (m.target instanceof Element && m.target.closest(".play-detail"))
-            return true;
+        if (sectionObsBusy) return;
+
+        const hasNewRows = mutations.some((m) => {
           for (const node of m.addedNodes) {
             if (!(node instanceof Element)) continue;
             if (
               node.matches(".play-detail") ||
-              node.querySelector(".play-detail") ||
-              node.closest(".play-detail")
+              node.querySelector(".play-detail")
             )
               return true;
           }
           return false;
         });
-        if (!affectsRows) return;
+        if (!hasNewRows) return;
 
-        if (settings.isEnabled(SCORE_LIST_DETAILS_ID)) applyPpDecimals(listEl);
-        applyHideWeightedPp(listEl);
-        if (settings.isEnabled(SCORE_PLACE_NUMBER_ID)) applyPlaceNumbers(listEl);
+        sectionObsBusy = true;
+        try {
+          if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
+          applyHideWeightedPp(listEl);
+          if (
+            settings.isEnabled(SCORE_PLACE_NUMBER_ID) &&
+            type === SCORE_PLACE_SECTION_TYPE
+          ) {
+            applyPlaceNumbers(listEl);
+          }
 
-        const allEls = Array.from(listEl.querySelectorAll(".play-detail"));
-        if (settings.isEnabled(SCORE_LIST_DETAILS_ID) && scoresMap.has(type)) {
-          const scores = scoresMap.get(type);
-          allEls.forEach((rowEl, i) => {
-            const needsReinjection =
-              !rowEl.hasAttribute(SCORE_STATS_ATTR) ||
-              !rowEl.querySelector(".oep-score-stats");
-            if (!needsReinjection) return;
-            rowEl.removeAttribute(SCORE_STATS_ATTR);
-            const score = scores[i];
-            if (!score) return;
-            injectStatsRow(rowEl, score);
-          });
+          const allEls = Array.from(listEl.querySelectorAll(".play-detail"));
+          if (
+            settings.isEnabled(SCORE_HIT_STATISTICS_ID) &&
+            scoresMap.has(type)
+          ) {
+            const scores = scoresMap.get(type);
+            allEls.forEach((rowEl, i) => {
+              const needsReinjection =
+                !rowEl.hasAttribute(SCORE_STATS_ATTR) ||
+                !rowEl.querySelector(".oep-score-stats");
+              if (!needsReinjection) return;
+              rowEl.removeAttribute(SCORE_STATS_ATTR);
+              const score = scores[i];
+              if (!score) return;
+              injectStatsRow(rowEl, score);
+            });
+          }
+        } finally {
+          sectionObsBusy = false;
         }
       });
 
@@ -13353,10 +15873,11 @@ OsuExpertPlus.pages.userProfile = (() => {
 
       const classObs = new MutationObserver(() => {
         if (
-          settings.isEnabled(SCORE_LIST_DETAILS_ID) &&
+          settings.isEnabled(SCORE_HIT_STATISTICS_ID) &&
           !listEl.classList.contains(SCORE_LIST_LAYOUT_CLASS)
         ) {
           listEl.classList.add(SCORE_LIST_LAYOUT_CLASS);
+          syncScoreListPpDecimalsWidthClass(listEl);
         }
       });
       classObs.observe(listEl, {
@@ -13367,18 +15888,25 @@ OsuExpertPlus.pages.userProfile = (() => {
     });
 
     cleanupFns.push(
-      settings.onChange(SCORE_LIST_DETAILS_ID, async (enabled) => {
-        if (enabled) {
-          setScoreListLayoutClass(scoreSections, true);
-        }
+      settings.onChange(SCORE_PP_DECIMALS_ID, (enabled) => {
         scoreSections.forEach(({ listEl }) => {
+          syncScoreListPpDecimalsWidthClass(listEl);
           enabled ? applyPpDecimals(listEl) : revertPpDecimals(listEl);
         });
+      }),
+      settings.onChange(SCORE_HIT_STATISTICS_ID, async (enabled) => {
         if (enabled) {
+          setScoreListLayoutClass(scoreSections, true);
+          scoreSections.forEach(({ listEl }) =>
+            syncScoreListPpDecimalsWidthClass(listEl),
+          );
           await Promise.all(scoreSections.map(_loadAndApplyStats));
         } else {
           scoreSections.forEach(({ listEl }) => revertStatsRows(listEl));
           setScoreListLayoutClass(scoreSections, false);
+          scoreSections.forEach(({ listEl }) =>
+            listEl.classList.remove(SCORE_LIST_PP_DECIMALS_CLASS),
+          );
         }
       }),
       settings.onChange(MODDED_SR_ID, (enabled) => {
@@ -13387,8 +15915,16 @@ OsuExpertPlus.pages.userProfile = (() => {
       }),
       settings.onChange(SCORE_PLACE_NUMBER_ID, (enabled) => {
         if (enabled) {
-          scorePlaceNumberStyle.inject();
-          scoreSections.forEach(({ listEl }) => applyPlaceNumbers(listEl));
+          if (scoreSections.some((s) => s.type === SCORE_PLACE_SECTION_TYPE)) {
+            scorePlaceNumberStyle.inject();
+          }
+          scoreSections.forEach(({ listEl, type }) => {
+            if (type === SCORE_PLACE_SECTION_TYPE) {
+              applyPlaceNumbers(listEl);
+            } else {
+              revertPlaceNumbers(listEl);
+            }
+          });
         } else {
           scoreSections.forEach(({ listEl }) => revertPlaceNumbers(listEl));
           scorePlaceNumberStyle.remove();
@@ -13458,6 +15994,7 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   const RECENT_FAILS_WRAP_CLASS = "oep-recent-scores-with-fails";
+  const RECENT_FAILS_HEADER_CLASS = "oep-recent-fails-header";
   const RECENT_FAILS_EMPTY_MSG = "No scores found.";
   const RECENT_FAILS_EMPTY_FILTERED_MSG =
     "No passing scores in this list (fails hidden).";
@@ -13466,7 +16003,9 @@ OsuExpertPlus.pages.userProfile = (() => {
   const recentScoresFullCache = new WeakMap();
 
   function apiScoreIsFail(score) {
-    return Boolean(score && typeof score === "object" && score.passed === false);
+    return Boolean(
+      score && typeof score === "object" && score.passed === false,
+    );
   }
 
   function filterScoresForRecentDisplay(scores, showFails) {
@@ -13483,6 +16022,27 @@ OsuExpertPlus.pages.userProfile = (() => {
     const h3s = page.querySelectorAll("h3.title.title--page-extra-small");
     for (const h3 of h3s) {
       if (!/\brecent\b/i.test(h3.textContent)) continue;
+      const next = h3.nextElementSibling;
+      if (
+        next instanceof HTMLElement &&
+        next.classList.contains("play-detail-list")
+      ) {
+        return next;
+      }
+    }
+    return null;
+  }
+
+  /** Historical → “Most Watched Replays” (osu `score_replay_stats`) play-detail list. */
+  function findMostWatchedReplaysListRoot() {
+    const page = document.querySelector(
+      'div.js-sortable--page[data-page-id="historical"]',
+    );
+    if (!page) return null;
+
+    const h3s = page.querySelectorAll("h3.title.title--page-extra-small");
+    for (const h3 of h3s) {
+      if (!/most\s+watched/i.test(h3.textContent || "")) continue;
       const next = h3.nextElementSibling;
       if (
         next instanceof HTMLElement &&
@@ -13725,7 +16285,12 @@ OsuExpertPlus.pages.userProfile = (() => {
     if (score.pp != null && Number(score.pp) > 0) {
       const rawN = Number(score.pp);
       const raw = String(score.pp);
-      const shown = Number.isFinite(rawN) ? rawN.toFixed(2) : raw;
+      const showPpDecimals = settings.isEnabled(SCORE_PP_DECIMALS_ID);
+      const shown = Number.isFinite(rawN)
+        ? showPpDecimals
+          ? rawN.toFixed(2)
+          : String(Math.round(rawN))
+        : raw;
       ppInner = el(
         "span",
         { title: raw },
@@ -13924,6 +16489,11 @@ OsuExpertPlus.pages.userProfile = (() => {
     emptyMessage,
   ) {
     innerList.textContent = "";
+    innerList.classList.toggle(
+      SCORE_LIST_LAYOUT_CLASS,
+      settings.isEnabled(SCORE_HIT_STATISTICS_ID),
+    );
+    syncScoreListPpDecimalsWidthClass(innerList);
     if (!scores.length) {
       innerList.appendChild(
         el("p", { class: "oep-recent-fails-empty" }, emptyMessage),
@@ -13934,8 +16504,10 @@ OsuExpertPlus.pages.userProfile = (() => {
     const rows = scores.map((s) => buildPlayDetailRowFromApiScore(s, tpl));
     rows.forEach((r) => innerList.appendChild(r));
     applyHideWeightedPp(innerList);
-    if (settings.isEnabled(SCORE_LIST_DETAILS_ID)) {
+    if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) {
       applyPpDecimals(innerList);
+    }
+    if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
       processElements(rows, scores);
       enrichPlayDetailRowsMaxComboFromAttributes(rows, scores).catch(() => {});
     }
@@ -13948,7 +16520,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       rows.forEach(_observeRow);
     }
     if (settings.isEnabled(RANKS_CARD_BG_FEATURE_ID)) {
-      injectRanksDateHighlightStyles();
+      injectRanksCardBgLayoutStyles();
       applyRanksCardBackgrounds(innerList);
     }
   }
@@ -13995,13 +16567,9 @@ OsuExpertPlus.pages.userProfile = (() => {
     ensurePlayDetailStylesForRecent();
 
     const wrap = el("div", { class: RECENT_FAILS_WRAP_CLASS });
-    const header = el("div", { class: "oep-recent-fails-header" });
+    const header = el("div", { class: RECENT_FAILS_HEADER_CLASS });
     header.appendChild(
-      el(
-        "h3",
-        { class: "title title--page-extra-small" },
-        "Recent scores",
-      ),
+      el("h3", { class: "title title--page-extra-small" }, "Recent scores"),
     );
     const showFailsCb = document.createElement("input");
     showFailsCb.type = "checkbox";
@@ -14019,9 +16587,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       ),
     );
     wrap.appendChild(header);
-    const innerList = el("div", {
-      class: `play-detail-list ${SCORE_LIST_LAYOUT_CLASS}`,
-    });
+    const innerList = el("div", { class: "play-detail-list" });
     innerList.appendChild(
       el("p", { class: "oep-recent-fails-loading" }, "Loading…"),
     );
@@ -14087,14 +16653,30 @@ OsuExpertPlus.pages.userProfile = (() => {
     const unsubRecentFailsShow = settings.onChange(
       RECENT_SCORES_SHOW_FAILS_ID,
       () => {
-        document.querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`).forEach((w) => {
-          if (!(w instanceof HTMLElement)) return;
-          const input = w.querySelector("input.oep-recent-show-fails");
-          const on = settings.isEnabled(RECENT_SCORES_SHOW_FAILS_ID);
-          if (input instanceof HTMLInputElement) input.checked = on;
-          repopulateRecentScoresWrap(w);
-        });
+        document
+          .querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`)
+          .forEach((w) => {
+            if (!(w instanceof HTMLElement)) return;
+            const input = w.querySelector("input.oep-recent-show-fails");
+            const on = settings.isEnabled(RECENT_SCORES_SHOW_FAILS_ID);
+            if (input instanceof HTMLInputElement) input.checked = on;
+            repopulateRecentScoresWrap(w);
+          });
       },
+    );
+
+    const repopulateRecentOnScoreDisplayChange = () => {
+      document.querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`).forEach((w) => {
+        if (w instanceof HTMLElement) repopulateRecentScoresWrap(w);
+      });
+    };
+    const unsubRecentPpDecimals = settings.onChange(
+      SCORE_PP_DECIMALS_ID,
+      repopulateRecentOnScoreDisplayChange,
+    );
+    const unsubRecentHitStatistics = settings.onChange(
+      SCORE_HIT_STATISTICS_ID,
+      repopulateRecentOnScoreDisplayChange,
     );
 
     const run = () => {
@@ -14123,6 +16705,8 @@ OsuExpertPlus.pages.userProfile = (() => {
       cancelled = true;
       clearTimeout(_recentFailsDebounce);
       unsubRecentFailsShow();
+      unsubRecentPpDecimals();
+      unsubRecentHitStatistics();
       obs.disconnect();
       document
         .querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`)
@@ -14130,8 +16714,12 @@ OsuExpertPlus.pages.userProfile = (() => {
     };
   }
 
-  // Top ranks: age highlight (slider 0=off; weeks → months → years) + optional reverse
-  const RANKS_DATE_HIGHLIGHT_STYLE_ID = "osu-expertplus-ranks-date-highlight";
+  // Top ranks: period highlight vs card-bg layout are separate style tags so turning off
+  // "Score age period highlight" does not strip CSS required for score-card backgrounds.
+  const RANKS_PERIOD_HIGHLIGHT_STYLE_ID =
+    "osu-expertplus-profile-ranks-period-highlight";
+  const RANKS_CARD_BG_LAYOUT_STYLE_ID =
+    "osu-expertplus-profile-ranks-card-bg-layout";
   const RANKS_PAGE_SELECTOR = 'div.js-sortable--page[data-page-id="top_ranks"]';
   const RANKS_DATE_FILTER_CLASS = "oep-ranks-date-filter";
   const RANKS_DATE_HIGHLIGHT_CLASS = "oep-ranks-date-highlight";
@@ -14160,7 +16748,7 @@ OsuExpertPlus.pages.userProfile = (() => {
   const RANKS_PERIOD_FIRST_YEAR = 3;
   const RANKS_PERIOD_LAST_YEAR = 10;
 
-  const RANKS_DATE_HIGHLIGHT_CSS = `
+  const RANKS_PERIOD_HIGHLIGHT_CSS = `
     .${RANKS_DATE_FILTER_CLASS} {
       box-sizing: border-box;
       margin: 0 0 1rem 0;
@@ -14290,6 +16878,20 @@ OsuExpertPlus.pages.userProfile = (() => {
       z-index: 2;
       box-sizing: border-box;
     }
+    ${RANKS_CARD_BG_SELECTOR}.${RANKS_DATE_HIGHLIGHT_CLASS}::after {
+      border: 2px solid rgba(102, 204, 255, 0.9);
+      box-shadow: inset 0 0 14px rgba(102, 204, 255, 0.1);
+      background: rgba(102, 204, 255, 0.12);
+      opacity: 1;
+      box-sizing: border-box;
+    }
+    ${RANKS_CARD_BG_SELECTOR}.${RANKS_DATE_HIGHLIGHT_CLASS}:hover::after,
+    ${RANKS_CARD_BG_SELECTOR}.${RANKS_DATE_HIGHLIGHT_CLASS}:focus-within::after {
+      background: rgba(102, 204, 255, 0.2);
+      opacity: 1;
+    }
+  `;
+  const RANKS_CARD_BG_LAYOUT_CSS = `
     ${RANKS_CARD_BG_SELECTOR} {
       position: relative;
       isolation: isolate;
@@ -14380,18 +16982,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     ${RANKS_CARD_BG_SELECTOR}:focus-within::after {
       opacity: 1;
     }
-    ${RANKS_CARD_BG_SELECTOR}.${RANKS_DATE_HIGHLIGHT_CLASS}::after {
-      border: 2px solid rgba(102, 204, 255, 0.9);
-      box-shadow: inset 0 0 14px rgba(102, 204, 255, 0.1);
-      background: rgba(102, 204, 255, 0.12);
-      opacity: 1;
-      box-sizing: border-box;
-    }
-    ${RANKS_CARD_BG_SELECTOR}.${RANKS_DATE_HIGHLIGHT_CLASS}:hover::after,
-    ${RANKS_CARD_BG_SELECTOR}.${RANKS_DATE_HIGHLIGHT_CLASS}:focus-within::after {
-      background: rgba(102, 204, 255, 0.2);
-      opacity: 1;
-    }
     ${RANKS_CARD_BG_SELECTOR} .play-detail__group--top,
     ${RANKS_CARD_BG_SELECTOR} .play-detail__group--bottom,
     ${RANKS_CARD_BG_SELECTOR} .play-detail__detail,
@@ -14400,6 +16990,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     ${RANKS_CARD_BG_SELECTOR} .play-detail__mods,
     ${RANKS_CARD_BG_SELECTOR} .play-detail__beatmap-and-time,
     ${RANKS_CARD_BG_SELECTOR} .play-detail__title,
+    ${RANKS_CARD_BG_SELECTOR} .${SCORE_PLACE_CLASS},
     ${RANKS_CARD_BG_SELECTOR} .play-detail__time {
       background: transparent !important;
     }
@@ -14425,9 +17016,13 @@ OsuExpertPlus.pages.userProfile = (() => {
       z-index: 3;
     }
   `;
-  const ranksDateStyle = manageStyle(
-    RANKS_DATE_HIGHLIGHT_STYLE_ID,
-    RANKS_DATE_HIGHLIGHT_CSS,
+  const ranksPeriodHighlightStyle = manageStyle(
+    RANKS_PERIOD_HIGHLIGHT_STYLE_ID,
+    RANKS_PERIOD_HIGHLIGHT_CSS,
+  );
+  const ranksCardBgLayoutStyle = manageStyle(
+    RANKS_CARD_BG_LAYOUT_STYLE_ID,
+    RANKS_CARD_BG_LAYOUT_CSS,
   );
 
   /**
@@ -14514,8 +17109,12 @@ OsuExpertPlus.pages.userProfile = (() => {
     return Number.isFinite(ms) ? ms : null;
   }
 
-  function injectRanksDateHighlightStyles() {
-    ranksDateStyle.inject();
+  function injectRanksPeriodHighlightStyles() {
+    ranksPeriodHighlightStyle.inject();
+  }
+
+  function injectRanksCardBgLayoutStyles() {
+    ranksCardBgLayoutStyle.inject();
   }
 
   /**
@@ -14613,63 +17212,61 @@ OsuExpertPlus.pages.userProfile = (() => {
     }
 
     queryPlayDetailScoreRows(topRanksRoot).forEach((rowEl) => {
-        const beatmapsetId = getRanksRowBeatmapsetId(rowEl);
-        if (!beatmapsetId) {
-          ranksCardBgObserver?.unobserve(rowEl);
-          rowEl.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`)?.remove();
-          rowEl.removeAttribute(RANKS_CARD_BG_ATTR);
-          rowEl.removeAttribute(RANKS_CARD_BG_BEATMAPSET_ATTR);
-          rowEl.style.removeProperty(RANKS_CARD_BG_URL_VAR);
-          rowEl.style.removeProperty(RANKS_CARD_BASE_BG_VAR);
-          rowEl.style.removeProperty(RANKS_CARD_PP_BG_VAR);
-          rowEl.style.removeProperty(RANKS_CARD_STATS_BG_VAR);
-          return;
-        }
-        const bgCandidate = pickBaseBg(rowEl);
-        const ppEl = rowEl.querySelector(".play-detail__pp");
-        const ppBg =
-          ppEl instanceof Element ? getComputedStyle(ppEl).backgroundColor : "";
-        const scoreDetailEl = rowEl.querySelector(".play-detail__score-detail");
-        const statsBg =
-          scoreDetailEl instanceof Element
-            ? getComputedStyle(scoreDetailEl).backgroundColor
-            : "";
-        rowEl.setAttribute(RANKS_CARD_BG_ATTR, "1");
-        rowEl.setAttribute(RANKS_CARD_BG_BEATMAPSET_ATTR, beatmapsetId);
-        if (bgCandidate) {
-          rowEl.style.setProperty(RANKS_CARD_BASE_BG_VAR, bgCandidate);
-        }
-        if (
-          ppBg &&
-          ppBg !== "transparent" &&
-          !/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)/.test(ppBg)
-        ) {
-          rowEl.style.setProperty(RANKS_CARD_PP_BG_VAR, ppBg);
-        }
-        if (
-          statsBg &&
-          statsBg !== "transparent" &&
-          !/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)/.test(
-            statsBg,
-          )
-        ) {
-          rowEl.style.setProperty(RANKS_CARD_STATS_BG_VAR, statsBg);
-        }
-        let imgEl = rowEl.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`);
-        if (!imgEl) {
-          imgEl = document.createElement("img");
-          imgEl.className = RANKS_CARD_BG_IMG_CLASS;
-          imgEl.decoding = "async";
-          imgEl.alt = "";
-          rowEl.insertBefore(imgEl, rowEl.firstChild);
-        }
-        if (ranksCardBgObserver) {
-          ranksCardBgObserver.observe(rowEl);
-          if (!rowEl.isConnected) ranksCardBgObserver.unobserve(rowEl);
-        } else {
-          imgEl.src = `https://assets.ppy.sh/beatmaps/${beatmapsetId}/covers/card@2x.jpg`;
-        }
-      });
+      const beatmapsetId = getRanksRowBeatmapsetId(rowEl);
+      if (!beatmapsetId) {
+        ranksCardBgObserver?.unobserve(rowEl);
+        rowEl.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`)?.remove();
+        rowEl.removeAttribute(RANKS_CARD_BG_ATTR);
+        rowEl.removeAttribute(RANKS_CARD_BG_BEATMAPSET_ATTR);
+        rowEl.style.removeProperty(RANKS_CARD_BG_URL_VAR);
+        rowEl.style.removeProperty(RANKS_CARD_BASE_BG_VAR);
+        rowEl.style.removeProperty(RANKS_CARD_PP_BG_VAR);
+        rowEl.style.removeProperty(RANKS_CARD_STATS_BG_VAR);
+        return;
+      }
+      const bgCandidate = pickBaseBg(rowEl);
+      const ppEl = rowEl.querySelector(".play-detail__pp");
+      const ppBg =
+        ppEl instanceof Element ? getComputedStyle(ppEl).backgroundColor : "";
+      const scoreDetailEl = rowEl.querySelector(".play-detail__score-detail");
+      const statsBg =
+        scoreDetailEl instanceof Element
+          ? getComputedStyle(scoreDetailEl).backgroundColor
+          : "";
+      rowEl.setAttribute(RANKS_CARD_BG_ATTR, "1");
+      rowEl.setAttribute(RANKS_CARD_BG_BEATMAPSET_ATTR, beatmapsetId);
+      if (bgCandidate) {
+        rowEl.style.setProperty(RANKS_CARD_BASE_BG_VAR, bgCandidate);
+      }
+      if (
+        ppBg &&
+        ppBg !== "transparent" &&
+        !/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)/.test(ppBg)
+      ) {
+        rowEl.style.setProperty(RANKS_CARD_PP_BG_VAR, ppBg);
+      }
+      if (
+        statsBg &&
+        statsBg !== "transparent" &&
+        !/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)/.test(statsBg)
+      ) {
+        rowEl.style.setProperty(RANKS_CARD_STATS_BG_VAR, statsBg);
+      }
+      let imgEl = rowEl.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`);
+      if (!imgEl) {
+        imgEl = document.createElement("img");
+        imgEl.className = RANKS_CARD_BG_IMG_CLASS;
+        imgEl.decoding = "async";
+        imgEl.alt = "";
+        rowEl.insertBefore(imgEl, rowEl.firstChild);
+      }
+      if (ranksCardBgObserver) {
+        ranksCardBgObserver.observe(rowEl);
+        if (!rowEl.isConnected) ranksCardBgObserver.unobserve(rowEl);
+      } else {
+        imgEl.src = `https://assets.ppy.sh/beatmaps/${beatmapsetId}/covers/card@2x.jpg`;
+      }
+    });
   }
 
   function insertRanksDateFilterBar(topRanksRoot, wrap) {
@@ -14822,25 +17419,28 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   function syncRanksDateHighlightForPage(topRanksRoot) {
-    ensureRanksDateFilterBar(topRanksRoot);
+    if (settings.isEnabled(SCORE_PERIOD_HIGHLIGHT_ID)) {
+      ensureRanksDateFilterBar(topRanksRoot);
+      const range = topRanksRoot.querySelector(
+        `.${RANKS_DATE_FILTER_CLASS} input[type="range"]`,
+      );
+      const idx = range
+        ? clampRanksPeriodIndex(range.value)
+        : readStoredRanksPeriodIndex();
+      if (range && String(range.value) !== String(idx))
+        range.value = String(idx);
+      const revBtn = topRanksRoot.querySelector(
+        ".oep-ranks-date-filter__reverse",
+      );
+      const reversed =
+        revBtn instanceof HTMLElement
+          ? revBtn.getAttribute("aria-pressed") === "true"
+          : false;
+      applyRanksDateHighlights(topRanksRoot, idx, reversed);
+    }
     if (settings.isEnabled(RANKS_CARD_BG_FEATURE_ID)) {
       applyRanksCardBackgrounds(topRanksRoot);
     }
-    const range = topRanksRoot.querySelector(
-      `.${RANKS_DATE_FILTER_CLASS} input[type="range"]`,
-    );
-    const idx = range
-      ? clampRanksPeriodIndex(range.value)
-      : readStoredRanksPeriodIndex();
-    if (range && String(range.value) !== String(idx)) range.value = String(idx);
-    const revBtn = topRanksRoot.querySelector(
-      ".oep-ranks-date-filter__reverse",
-    );
-    const reversed =
-      revBtn instanceof HTMLElement
-        ? revBtn.getAttribute("aria-pressed") === "true"
-        : false;
-    applyRanksDateHighlights(topRanksRoot, idx, reversed);
   }
 
   /**
@@ -14849,23 +17449,88 @@ OsuExpertPlus.pages.userProfile = (() => {
    * @returns {function}
    */
   function startRanksDateHighlightManager() {
-    injectRanksDateHighlightStyles();
     let debounceTimer = 0;
+    /** @type {MutationObserver[]} */
+    let rankPlayListObservers = [];
+
+    function disconnectRankPlayListObservers() {
+      rankPlayListObservers.forEach((o) => o.disconnect());
+      rankPlayListObservers = [];
+    }
+
+    function connectRankPlayListObservers(scheduleFn) {
+      disconnectRankPlayListObservers();
+      const roots = [];
+      const ranksPage = document.querySelector(RANKS_PAGE_SELECTOR);
+      if (ranksPage instanceof HTMLElement) roots.push(ranksPage);
+      document.querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`).forEach((w) => {
+        if (w instanceof HTMLElement) roots.push(w);
+      });
+      for (const root of roots) {
+        root.querySelectorAll(".play-detail-list").forEach((listEl) => {
+          if (!(listEl instanceof HTMLElement)) return;
+          const o = new MutationObserver(() => {
+            scheduleFn();
+          });
+          o.observe(listEl, { childList: true });
+          rankPlayListObservers.push(o);
+        });
+      }
+      const mostWatchedList = findMostWatchedReplaysListRoot();
+      if (mostWatchedList instanceof HTMLElement) {
+        const o = new MutationObserver(() => {
+          scheduleFn();
+        });
+        o.observe(mostWatchedList, { childList: true });
+        rankPlayListObservers.push(o);
+      }
+    }
 
     const run = () => {
-      const page = document.querySelector(RANKS_PAGE_SELECTOR);
-      if (page instanceof HTMLElement) syncRanksDateHighlightForPage(page);
-      else {
+      const periodOn = settings.isEnabled(SCORE_PERIOD_HIGHLIGHT_ID);
+      const cardBgOn = settings.isEnabled(RANKS_CARD_BG_FEATURE_ID);
+
+      if (!periodOn) {
+        document
+          .querySelectorAll(`.${RANKS_DATE_FILTER_CLASS}`)
+          .forEach((n) => n.remove());
         document
           .querySelectorAll(`.${RANKS_DATE_HIGHLIGHT_CLASS}`)
           .forEach((row) => row.classList.remove(RANKS_DATE_HIGHLIGHT_CLASS));
+        ranksPeriodHighlightStyle.remove();
+      } else {
+        injectRanksPeriodHighlightStyles();
+        const page = document.querySelector(RANKS_PAGE_SELECTOR);
+        if (page instanceof HTMLElement) syncRanksDateHighlightForPage(page);
+        else {
+          document
+            .querySelectorAll(`.${RANKS_DATE_HIGHLIGHT_CLASS}`)
+            .forEach((row) => row.classList.remove(RANKS_DATE_HIGHLIGHT_CLASS));
+        }
       }
-      if (settings.isEnabled(RANKS_CARD_BG_FEATURE_ID)) {
+
+      if (cardBgOn) {
+        injectRanksCardBgLayoutStyles();
+        const ranksPage = document.querySelector(RANKS_PAGE_SELECTOR);
+        if (ranksPage instanceof HTMLElement)
+          applyRanksCardBackgrounds(ranksPage);
         document
           .querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS} .play-detail-list`)
           .forEach((listEl) => {
-            if (listEl instanceof HTMLElement) applyRanksCardBackgrounds(listEl);
+            if (listEl instanceof HTMLElement)
+              applyRanksCardBackgrounds(listEl);
           });
+        const mostWatchedList = findMostWatchedReplaysListRoot();
+        if (mostWatchedList instanceof HTMLElement)
+          applyRanksCardBackgrounds(mostWatchedList);
+      } else {
+        ranksCardBgLayoutStyle.remove();
+      }
+
+      if (periodOn || cardBgOn) {
+        connectRankPlayListObservers(schedule);
+      } else {
+        disconnectRankPlayListObservers();
       }
     };
 
@@ -14878,7 +17543,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       if (
         mutationsIncludeSelector(
           mutations,
-          `${RANKS_PAGE_SELECTOR}, h3.title.title--page-extra-small, .play-detail-list, .play-detail`,
+          `${RANKS_PAGE_SELECTOR}, h3.title.title--page-extra-small`,
         )
       ) {
         schedule();
@@ -14893,24 +17558,36 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     const unsubBg = settings.onChange(RANKS_CARD_BG_FEATURE_ID, (enabled) => {
       if (enabled) {
-        injectRanksDateHighlightStyles();
+        injectRanksCardBgLayoutStyles();
         const page = document.querySelector(RANKS_PAGE_SELECTOR);
         if (page instanceof HTMLElement) applyRanksCardBackgrounds(page);
         document
           .querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS} .play-detail-list`)
           .forEach((listEl) => {
-            if (listEl instanceof HTMLElement) applyRanksCardBackgrounds(listEl);
+            if (listEl instanceof HTMLElement)
+              applyRanksCardBackgrounds(listEl);
           });
+        const mostWatchedList = findMostWatchedReplaysListRoot();
+        if (mostWatchedList instanceof HTMLElement)
+          applyRanksCardBackgrounds(mostWatchedList);
       } else {
         revertRanksCardBackgrounds();
+        ranksCardBgLayoutStyle.remove();
       }
     });
 
+    const unsubPeriod = settings.onChange(SCORE_PERIOD_HIGHLIGHT_ID, () =>
+      schedule(),
+    );
+
     return () => {
+      unsubPeriod();
       unsubBg();
       clearTimeout(debounceTimer);
+      disconnectRankPlayListObservers();
       obs.disconnect();
-      ranksDateStyle.remove();
+      ranksPeriodHighlightStyle.remove();
+      ranksCardBgLayoutStyle.remove();
       document
         .querySelectorAll(`.${RANKS_DATE_FILTER_CLASS}`)
         .forEach((n) => n.remove());
@@ -15891,10 +18568,9 @@ OsuExpertPlus.pages.userProfile = (() => {
       placeholder:
         "[imagemap]\nhttps://example.com/image.png\n0 0 25 25 https://osu.ppy.sh\n[/imagemap]",
     });
-    const manualImportActions = el(
-      "div",
-      { style: "display:flex;flex-wrap:wrap;gap:8px;align-items:center;" },
-    );
+    const manualImportActions = el("div", {
+      style: "display:flex;flex-wrap:wrap;gap:8px;align-items:center;",
+    });
     const manualImportApplyBtn = el(
       "button",
       { type: "button", class: BBHELP_BTN_CLASS },
@@ -16109,7 +18785,9 @@ OsuExpertPlus.pages.userProfile = (() => {
     function setManualImportOpen(open) {
       manualImportOpen = open;
       manualImportPanel.style.display = open ? "flex" : "none";
-      importManualBtn.textContent = open ? "Hide manual import" : "Manual import";
+      importManualBtn.textContent = open
+        ? "Hide manual import"
+        : "Manual import";
       if (open) manualImportTa.focus();
     }
 
@@ -16204,7 +18882,9 @@ OsuExpertPlus.pages.userProfile = (() => {
     function refreshCode() {
       const code = generateBbcode();
       insertBtn.disabled = !code;
-      actionsWarn.classList.remove(`${BBHELP_MODAL_CLASS}__actions-warn--error`);
+      actionsWarn.classList.remove(
+        `${BBHELP_MODAL_CLASS}__actions-warn--error`,
+      );
       if (code) {
         codeEl.textContent = formatBbcodeForSingleLineDisplay(code);
         copyCodeBtn.disabled = false;
@@ -16216,7 +18896,9 @@ OsuExpertPlus.pages.userProfile = (() => {
       const imgUrl = String(urlInput.value || "").trim();
       const anyArea = hotspots.length > 0;
       const anyTextUrl = hotspots.some((hs) => String(hs.url || "").trim());
-      const accepted = hotspots.some((hs) => normalizeImapLinkUrlForOsu(hs.url));
+      const accepted = hotspots.some((hs) =>
+        normalizeImapLinkUrlForOsu(hs.url),
+      );
       if (anyArea && anyTextUrl && !accepted) {
         actionsWarn.classList.add(`${BBHELP_MODAL_CLASS}__actions-warn--error`);
         actionsWarn.textContent =
@@ -16504,7 +19186,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       syncSelectionVisuals();
     }
 
-
     function pctRawFromEvent(ev, bounds) {
       if (!bounds.width || !bounds.height) return null;
       return {
@@ -16612,9 +19293,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       if (!drawState) return;
       const bounds = imgEl.getBoundingClientRect();
       const raw =
-        bounds.width && bounds.height
-          ? pctRawFromEvent(ev, bounds)
-          : null;
+        bounds.width && bounds.height ? pctRawFromEvent(ev, bounds) : null;
       const endX = raw ? raw.x : drawState.startX;
       const endY = raw ? raw.y : drawState.startY;
       const r = selectionRectFromDragPct(
@@ -16638,7 +19317,6 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     document.addEventListener("mousemove", onGlobalMouseMove);
     document.addEventListener("mouseup", onGlobalMouseUp);
-
 
     const loadImage = () => {
       const safe = _sanitizeHttpPreviewUrl(String(urlInput.value || "").trim());
@@ -16715,7 +19393,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       setManualImportOpen(false);
     });
 
-
     const close = () => {
       document.removeEventListener("mousemove", onGlobalMouseMove);
       document.removeEventListener("mouseup", onGlobalMouseUp);
@@ -16741,7 +19418,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       _replaceTextareaRange(textarea, start, end, code);
       close();
     });
-
 
     card.appendChild(titleRow);
     card.appendChild(manualImportPanel);
@@ -17585,8 +20261,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     obs.observe(document.documentElement, {
       childList: true,
       subtree: true,
-      attributes: true,
-      attributeFilter: ["class", "style", "hidden"],
     });
 
     return () => {
@@ -17597,10 +20271,9 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   const CONTENTS_REORDER_STYLE_ID = "osu-expertplus-profile-contents-reorder";
   const CONTENTS_REORDER_ANCHOR_ATTR = "data-oep-contents-reorder-anchor";
-  const CONTENTS_REORDER_HINT_ATTR = "data-oep-contents-reorder-hint";
   const CONTENTS_REORDER_DRAGGING_CLASS = "oep-contents-reorder--dragging";
   const CONTENTS_REORDER_DRAGOVER_CLASS = "oep-contents-reorder--dragover";
-  const CONTENTS_REORDER_HINT_CLASS = "oep-contents-reorder__hint";
+  const CONTENTS_REORDER_DRAG_THRESHOLD_PX = 12;
 
   const CONTENTS_REORDER_CSS = `
     a[${CONTENTS_REORDER_ANCHOR_ATTR}] {
@@ -17609,18 +20282,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       display: inline-flex;
       align-items: center;
     }
-    a[${CONTENTS_REORDER_ANCHOR_ATTR}]::before {
-      content: "::";
-      display: inline-block;
-      margin-right: 0.35em;
-      opacity: 0.95;
-      color: hsl(var(--hsl-c1));
-      font-size: 0.78em;
-      font-weight: 700;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      letter-spacing: -0.02em;
-      vertical-align: middle;
-    }
     a[${CONTENTS_REORDER_ANCHOR_ATTR}].${CONTENTS_REORDER_DRAGGING_CLASS} {
       opacity: 0.7;
       cursor: grabbing;
@@ -17628,22 +20289,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     a[${CONTENTS_REORDER_ANCHOR_ATTR}].${CONTENTS_REORDER_DRAGOVER_CLASS} {
       outline: 1px dashed currentColor;
       outline-offset: 2px;
-    }
-    .${CONTENTS_REORDER_HINT_CLASS}[${CONTENTS_REORDER_HINT_ATTR}] {
-      font-size: 0.72rem;
-      line-height: 1.2;
-      color: hsl(var(--hsl-c2));
-      margin-left: 0 !important;
-      margin-right: 0 !important;
-      margin-bottom: 0 !important;
-      padding-bottom: 0 !important;
-      letter-spacing: 0.01em;
-      display: block;
-      width: 100%;
-      max-width: none;
-      box-sizing: border-box;
-      background-color: hsl(var(--hsl-b5));
-      position: relative;
     }
   `;
 
@@ -17753,11 +20398,9 @@ OsuExpertPlus.pages.userProfile = (() => {
     return groups[0] || [];
   }
 
-  function cleanupContentsHintAndIcons() {
+  function cleanupContentsReorderHints() {
     document
-      .querySelectorAll(
-        `.${CONTENTS_REORDER_HINT_CLASS}[${CONTENTS_REORDER_HINT_ATTR}]`,
-      )
+      .querySelectorAll("[data-oep-contents-reorder-hint]")
       .forEach((n) => n.remove());
   }
 
@@ -17808,6 +20451,431 @@ OsuExpertPlus.pages.userProfile = (() => {
     });
   }
 
+  const PROFILE_SUBSECTIONS_COLLAPSED_GM_KEY =
+    "userProfile.profileSubsectionsCollapsed";
+  /** Same as section collapse `SECTION_COLLAPSE_SUBTITLE_SELECTOR` (defined below). */
+  const PROFILE_PAGE_SUBTITLE_H3_SELECTOR = "h3.title.title--page-extra-small";
+  /** osu `ProfileExtraPage` ids (`data-page-id`) where we skip h3 subsection UI (single block, no sub-titles). */
+  const PROFILE_SUBSECTION_SKIP_PAGE_IDS = new Set(["medals"]);
+  const SUBSECTION_COLLAPSE_STYLE_ID =
+    "osu-expertplus-profile-subsection-collapse";
+  const SUBSECTION_BODY_HIDDEN_CLASS =
+    "oep-profile-subsection-body--collapsed-hidden";
+  const SUBSECTION_TITLE_CLASS = "oep-profile-subsection-title";
+  const SUBSECTION_TITLE_COLLAPSED_CLASS =
+    "oep-profile-subsection-title--collapsed";
+  const SUBSECTION_TITLE_MAIN_CLASS = "oep-profile-subsection-title__main";
+  const SUBSECTION_TITLE_LABEL_CLASS = "oep-profile-subsection-title__label";
+  const SUBSECTION_DONE_ATTR = "data-oep-subsection-collapse";
+  const SUBSECTION_BODY_FOR_ATTR = "data-oep-subsection-for";
+  const SUBSECTION_TOGGLE_ATTR = "data-oep-profile-subsection-collapse-toggle";
+  const SUBSECTION_TOGGLE_FOR_ATTR = "data-oep-profile-subsection-for";
+  const SUBSECTION_LABEL_ATTR = "data-oep-subsection-label";
+  /** Collapsed dim: title label and `.title__count` pill. */
+  const SUBSECTION_COLLAPSED_DIM_OPACITY = "0.64";
+
+  const SUBSECTION_COLLAPSE_CSS = `
+    .${SUBSECTION_BODY_HIDDEN_CLASS} {
+      display: none !important;
+    }
+    h3.${SUBSECTION_TITLE_CLASS}.title.title--page-extra-small {
+      position: relative;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.35em;
+      cursor: pointer;
+      line-height: normal;
+      padding: 10px 0;
+      margin: 0;
+      isolation: isolate;
+    }
+    h3.${SUBSECTION_TITLE_CLASS}.title.title--page-extra-small::before {
+      z-index: 0;
+    }
+    h3.${SUBSECTION_TITLE_CLASS}.title.title--page-extra-small::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: -8px;
+      bottom: 0;
+      left: -1.8rem;
+      border-radius: 6px;
+      background-color: transparent;
+      transition: background-color 120ms ease;
+      pointer-events: none;
+      z-index: 1;
+    }
+    h3.${SUBSECTION_TITLE_CLASS}.title.title--page-extra-small:hover::after {
+      background-color: rgba(255, 255, 255, 0.07);
+    }
+    h3.${SUBSECTION_TITLE_CLASS}.title.title--page-extra-small > * {
+      position: relative;
+      z-index: 2;
+    }
+    h3.${SUBSECTION_TITLE_CLASS} .${SUBSECTION_TITLE_MAIN_CLASS} {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0 10px;
+      min-width: 0;
+      flex: 1 1 auto;
+      line-height: inherit;
+    }
+    h3.${SUBSECTION_TITLE_CLASS} .${SUBSECTION_TITLE_LABEL_CLASS} {
+      transition: opacity 120ms ease;
+      line-height: inherit;
+    }
+    h3.${SUBSECTION_TITLE_CLASS}.${SUBSECTION_TITLE_COLLAPSED_CLASS} .${SUBSECTION_TITLE_LABEL_CLASS} {
+      opacity: ${SUBSECTION_COLLAPSED_DIM_OPACITY};
+    }
+    h3.${SUBSECTION_TITLE_CLASS} .${SUBSECTION_TITLE_MAIN_CLASS} .title__count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0 10px;
+      height: 1.85em;
+      min-width: 1.85em;
+      font-size: 0.8em;
+      font-variant-numeric: tabular-nums;
+      transition: opacity 120ms ease;
+    }
+    h3.${SUBSECTION_TITLE_CLASS}.${SUBSECTION_TITLE_COLLAPSED_CLASS} .${SUBSECTION_TITLE_MAIN_CLASS} .title__count {
+      opacity: ${SUBSECTION_COLLAPSED_DIM_OPACITY};
+    }
+    button.oep-profile-subsection-collapse-toggle {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    button.oep-profile-subsection-collapse-toggle:focus-visible {
+      clip-path: none;
+      width: auto;
+      height: auto;
+      margin: 0;
+      padding: 2px 6px;
+      overflow: visible;
+      outline: 1px solid hsl(var(--hsl-l2));
+      outline-offset: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      color: hsl(var(--hsl-l1));
+      font-size: 0.75rem;
+      z-index: 1;
+    }
+  `;
+
+  const subsectionCollapseStyle = manageStyle(
+    SUBSECTION_COLLAPSE_STYLE_ID,
+    SUBSECTION_COLLAPSE_CSS,
+  );
+
+  /** @returns {Set<string>} */
+  function readProfileSubsectionsCollapsedSet() {
+    try {
+      const raw = GM_getValue(PROFILE_SUBSECTIONS_COLLAPSED_GM_KEY, "");
+      if (raw == null || raw === "") return new Set();
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (Array.isArray(parsed)) {
+        return new Set(parsed.filter((x) => typeof x === "string" && x));
+      }
+      if (parsed && typeof parsed === "object") {
+        return new Set(Object.keys(parsed).filter((k) => parsed[k] === true));
+      }
+    } catch (_) {}
+    return new Set();
+  }
+
+  /** @param {Set<string>} set */
+  function writeProfileSubsectionsCollapsedSet(set) {
+    const obj = /** @type {Record<string, true>} */ ({});
+    set.forEach((id) => {
+      if (id) obj[id] = true;
+    });
+    if (!Object.keys(obj).length) {
+      GM_deleteValue(PROFILE_SUBSECTIONS_COLLAPSED_GM_KEY);
+      return;
+    }
+    GM_setValue(PROFILE_SUBSECTIONS_COLLAPSED_GM_KEY, JSON.stringify(obj));
+  }
+
+  /**
+   * @param {string} text
+   * @param {Set<string>} usedSlugs
+   * @returns {string}
+   */
+  function subsectionSlugFromTitle(text, usedSlugs) {
+    let base = String(text || "")
+      .trim()
+      .toLowerCase()
+      .replace(/['']/g, "")
+      .replace(/[^a-z0-9]+/gi, "_")
+      .replace(/^_+|_+$/g, "");
+    if (!base) base = "subsection";
+    let slug = base;
+    let n = 0;
+    while (usedSlugs.has(slug)) {
+      n += 1;
+      slug = `${base}_${n}`;
+    }
+    usedSlugs.add(slug);
+    return slug;
+  }
+
+  /**
+   * @param {HTMLElement} h3
+   * @returns {HTMLElement[]}
+   */
+  function collectSubsectionBodyElements(h3) {
+    const recentHeader = h3.closest(`.${RECENT_FAILS_HEADER_CLASS}`);
+    if (recentHeader instanceof HTMLElement && recentHeader.contains(h3)) {
+      const bodies = [];
+      let n = h3.nextElementSibling;
+      while (n instanceof HTMLElement) {
+        bodies.push(n);
+        n = n.nextElementSibling;
+      }
+      let p = recentHeader.nextElementSibling;
+      while (p instanceof HTMLElement) {
+        if (p.matches(PROFILE_PAGE_SUBTITLE_H3_SELECTOR)) break;
+        bodies.push(p);
+        p = p.nextElementSibling;
+      }
+      return bodies;
+    }
+
+    const bodies = [];
+    let n = h3.nextElementSibling;
+    while (
+      n instanceof HTMLElement &&
+      !n.matches(PROFILE_PAGE_SUBTITLE_H3_SELECTOR)
+    ) {
+      bodies.push(n);
+      n = n.nextElementSibling;
+    }
+    return bodies;
+  }
+
+  /**
+   * Wraps title text (and segments between counts) so collapsed opacity applies only to the name,
+   * not the count pill. Keeps `.title__count` in an inline-flex row for vertical alignment.
+   * @param {HTMLElement} h3
+   * @param {HTMLElement} btn
+   */
+  function wrapSubsectionTitleContent(h3, btn) {
+    if (h3.querySelector(`:scope > .${SUBSECTION_TITLE_MAIN_CLASS}`)) return;
+    if (!btn.nextSibling) return;
+    const main = el("span", { class: SUBSECTION_TITLE_MAIN_CLASS });
+    let n = btn.nextSibling;
+    let label = el("span", { class: SUBSECTION_TITLE_LABEL_CLASS });
+    while (n) {
+      const next = n.nextSibling;
+      if (n instanceof HTMLElement && n.classList.contains("title__count")) {
+        if (label.childNodes.length) main.appendChild(label);
+        main.appendChild(n);
+        label = el("span", { class: SUBSECTION_TITLE_LABEL_CLASS });
+      } else {
+        label.appendChild(n);
+      }
+      n = next;
+    }
+    if (label.childNodes.length) main.appendChild(label);
+    if (!main.childNodes.length) return;
+    btn.insertAdjacentElement("afterend", main);
+  }
+
+  /**
+   * @param {HTMLElement} h3
+   */
+  function unwrapSubsectionTitleMain(h3) {
+    const main = h3.querySelector(`:scope > .${SUBSECTION_TITLE_MAIN_CLASS}`);
+    if (!(main instanceof HTMLElement)) return;
+    while (main.firstChild) {
+      h3.insertBefore(main.firstChild, main);
+    }
+    main.remove();
+  }
+
+  /** @param {string} key */
+  function toggleProfileSubsectionCollapsedKey(key) {
+    if (!key) return;
+    const set = readProfileSubsectionsCollapsedSet();
+    if (set.has(key)) set.delete(key);
+    else set.add(key);
+    writeProfileSubsectionsCollapsedSet(set);
+    applyProfileSubsectionCollapseState(set);
+  }
+
+  /** @param {Set<string>} collapsed */
+  function applyProfileSubsectionCollapseState(collapsed) {
+    document.querySelectorAll(`[${SUBSECTION_BODY_FOR_ATTR}]`).forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      const key = el.getAttribute(SUBSECTION_BODY_FOR_ATTR);
+      if (!key) return;
+      if (collapsed.has(key)) el.classList.add(SUBSECTION_BODY_HIDDEN_CLASS);
+      else el.classList.remove(SUBSECTION_BODY_HIDDEN_CLASS);
+    });
+    document
+      .querySelectorAll(`button[${SUBSECTION_TOGGLE_ATTR}]`)
+      .forEach((btn) => {
+        if (!(btn instanceof HTMLButtonElement)) return;
+        const key = btn.getAttribute(SUBSECTION_TOGGLE_FOR_ATTR);
+        if (!key) return;
+        const isCollapsed = collapsed.has(key);
+        btn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+        const label = btn.getAttribute(SUBSECTION_LABEL_ATTR) || key;
+        btn.title = isCollapsed ? `Expand ${label}` : `Collapse ${label}`;
+        btn.setAttribute(
+          "aria-label",
+          isCollapsed ? `Expand ${label}` : `Collapse ${label}`,
+        );
+        const h3El = btn.closest("h3");
+        if (h3El) {
+          h3El.classList.toggle(SUBSECTION_TITLE_COLLAPSED_CLASS, isCollapsed);
+        }
+      });
+  }
+
+  function teardownProfileSubsectionCollapse() {
+    document.querySelectorAll(`[${SUBSECTION_BODY_FOR_ATTR}]`).forEach((el) => {
+      el.removeAttribute(SUBSECTION_BODY_FOR_ATTR);
+      el.classList.remove(SUBSECTION_BODY_HIDDEN_CLASS);
+    });
+    document.querySelectorAll(`h3[${SUBSECTION_DONE_ATTR}]`).forEach((h3) => {
+      if (!(h3 instanceof HTMLElement)) return;
+      const wrap =
+        /** @type {HTMLElement & { _oepSubsectionAc?: AbortController }} */ (
+          h3
+        );
+      wrap._oepSubsectionAc?.abort();
+      delete wrap._oepSubsectionAc;
+      unwrapSubsectionTitleMain(h3);
+      h3.querySelector(`button[${SUBSECTION_TOGGLE_ATTR}]`)?.remove();
+      h3.removeAttribute(SUBSECTION_DONE_ATTR);
+      h3.classList.remove(
+        SUBSECTION_TITLE_CLASS,
+        SUBSECTION_TITLE_COLLAPSED_CLASS,
+      );
+    });
+  }
+
+  /**
+   * @param {HTMLElement} pageEl  div.js-sortable--page
+   */
+  function enhanceSortablePageSubsections(pageEl) {
+    const pageId = pageEl.getAttribute("data-page-id");
+    if (!pageId) return;
+    if (PROFILE_SUBSECTION_SKIP_PAGE_IDS.has(pageId)) return;
+    const usedSlugs = new Set();
+    const h3s = pageEl.querySelectorAll(PROFILE_PAGE_SUBTITLE_H3_SELECTOR);
+    for (const h3 of h3s) {
+      if (!(h3 instanceof HTMLElement)) continue;
+      if (h3.closest(".js-sortable--page") !== pageEl) continue;
+      if (h3.hasAttribute(SUBSECTION_DONE_ATTR)) continue;
+
+      const label = String(h3.textContent || "").trim() || pageId;
+      const slug = subsectionSlugFromTitle(label, usedSlugs);
+      const key = `${pageId}::${slug}`;
+
+      const bodies = collectSubsectionBodyElements(h3);
+      bodies.forEach((b) => b.setAttribute(SUBSECTION_BODY_FOR_ATTR, key));
+
+      const collapsedSet = readProfileSubsectionsCollapsedSet();
+      const isCollapsed = collapsedSet.has(key);
+
+      const btn = el("button", {
+        type: "button",
+        class: "oep-profile-subsection-collapse-toggle",
+        [SUBSECTION_TOGGLE_ATTR]: "1",
+        [SUBSECTION_TOGGLE_FOR_ATTR]: key,
+        [SUBSECTION_LABEL_ATTR]: label,
+        "aria-expanded": isCollapsed ? "false" : "true",
+        title: isCollapsed ? `Expand ${label}` : `Collapse ${label}`,
+        "aria-label": isCollapsed ? `Expand ${label}` : `Collapse ${label}`,
+      });
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleProfileSubsectionCollapsedKey(key);
+      });
+
+      const subsectionAc = new AbortController();
+      /** @type {HTMLElement & { _oepSubsectionAc?: AbortController }} */
+      (h3)._oepSubsectionAc = subsectionAc;
+      h3.addEventListener(
+        "click",
+        (ev) => {
+          const t = ev.target;
+          if (!(t instanceof Element)) return;
+          if (t.closest(`button[${SUBSECTION_TOGGLE_ATTR}]`)) return;
+          if (t.closest("a[href]")) return;
+          toggleProfileSubsectionCollapsedKey(key);
+        },
+        { signal: subsectionAc.signal },
+      );
+
+      h3.insertBefore(btn, h3.firstChild);
+      wrapSubsectionTitleContent(h3, btn);
+      h3.classList.add(SUBSECTION_TITLE_CLASS);
+      if (isCollapsed) h3.classList.add(SUBSECTION_TITLE_COLLAPSED_CLASS);
+      h3.setAttribute(SUBSECTION_DONE_ATTR, "1");
+    }
+  }
+
+  function scanProfileSubsections() {
+    teardownProfileSubsectionCollapse();
+    getSectionPageNodes().forEach((page) => {
+      if (page instanceof HTMLElement) enhanceSortablePageSubsections(page);
+    });
+    applyProfileSubsectionCollapseState(readProfileSubsectionsCollapsedSet());
+  }
+
+  /** @returns {function} */
+  function startProfileSubsectionCollapseManager() {
+    subsectionCollapseStyle.inject();
+
+    let debounceTimer = 0;
+    const schedule = () => {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        scanProfileSubsections();
+      }, 80);
+    };
+
+    scanProfileSubsections();
+
+    const obs = new MutationObserver((mutations) => {
+      if (
+        mutationsIncludeSelector(
+          mutations,
+          `div.js-sortable--page[data-page-id], ${PROFILE_PAGE_SUBTITLE_H3_SELECTOR}, .${RECENT_FAILS_WRAP_CLASS}`,
+        )
+      ) {
+        schedule();
+      }
+    });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+
+    return () => {
+      window.clearTimeout(debounceTimer);
+      obs.disconnect();
+      teardownProfileSubsectionCollapse();
+      subsectionCollapseStyle.remove();
+    };
+  }
+
   const PROFILE_SECTIONS_COLLAPSED_GM_KEY =
     "userProfile.profileSectionsCollapsed";
   const SECTION_COLLAPSE_PAGE_CLASS = "oep-profile-section--collapsed";
@@ -17816,61 +20884,163 @@ OsuExpertPlus.pages.userProfile = (() => {
   const SECTION_COLLAPSE_MAIN_TITLE_SELECTOR = "h2.title.title--page-extra";
   const SECTION_COLLAPSE_SUBTITLE_SELECTOR = "h3.title.title--page-extra-small";
   const SECTION_TAB_COLLAPSED_CLASS = "oep-profile-section-tab--collapsed";
-  const SECTION_COLLAPSE_TOGGLE_ATTR = "data-oep-profile-section-collapse-toggle";
-  const SECTION_COLLAPSE_FOR_ATTR = "data-oep-profile-section-for";
+  const SECTION_PAGE_TITLE_CLICK_ATTR =
+    "data-oep-profile-section-page-title-click";
+  const SECTION_TAB_CHEVRON_BTN_ATTR = "data-oep-section-tab-chevron-btn";
+  const SECTION_CONTENTS_ROW_CLASS = "oep-profile-contents-row";
+  const SECTION_PAGE_TITLE_TOGGLE_CLASS =
+    "oep-profile-section-page-title--toggle";
+  const SECTION_PAGE_TITLE_LABEL_CLASS =
+    "oep-profile-section-page-title__label";
   const SECTION_COLLAPSE_STYLE_ID = "osu-expertplus-profile-section-collapse";
 
   const SECTION_COLLAPSE_CSS = `
     .${SECTION_COLLAPSE_BODY_HIDDEN_CLASS} {
       display: none !important;
     }
+    h2.${SECTION_PAGE_TITLE_TOGGLE_CLASS}.title.title--page-extra {
+      cursor: pointer;
+      user-select: none;
+      position: relative;
+      isolation: isolate;
+    }
+    h2.${SECTION_PAGE_TITLE_TOGGLE_CLASS}.title.title--page-extra > .${SECTION_PAGE_TITLE_LABEL_CLASS} {
+      position: relative;
+      z-index: 2;
+    }
+    h2.${SECTION_PAGE_TITLE_TOGGLE_CLASS}.title.title--page-extra::after {
+      content: "";
+      position: absolute;
+      top: -0.25em;
+      right: -0.55em;
+      bottom: -0.25em;
+      left: -1.5em;
+      border-radius: 6px;
+      background-color: transparent;
+      transition: background-color 120ms ease;
+      pointer-events: none;
+      z-index: 1;
+    }
+    div.js-sortable--page:not(.${SECTION_COLLAPSE_PAGE_CLASS})
+      h2.${SECTION_PAGE_TITLE_TOGGLE_CLASS}.title.title--page-extra:hover::after {
+      background-color: rgba(255, 255, 255, 0.07);
+    }
     div.js-sortable--page.${SECTION_COLLAPSE_PAGE_CLASS}
-      h2.title.title--page-extra::after {
+      h2.title.title--page-extra.${SECTION_PAGE_TITLE_TOGGLE_CLASS}:hover
+      > .${SECTION_PAGE_TITLE_LABEL_CLASS} {
+      background-color: rgba(255, 255, 255, 0.07);
+      border-radius: 6px;
+      padding: 0.12em 0.45em;
+      margin: -0.12em -0.45em;
+    }
+    h2.${SECTION_PAGE_TITLE_TOGGLE_CLASS}.title.title--page-extra::before {
+      -moz-osx-font-smoothing: grayscale;
+      -webkit-font-smoothing: antialiased;
+      display: inline-block;
+      font-style: normal;
+      font-variant: normal;
+      text-rendering: auto;
+      font-family: "Font Awesome 6 Free", "Font Awesome 5 Free";
+      font-weight: 900;
+      content: "\\f077";
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translate(calc(-100% - 0.7em), -50%);
+      font-size: 0.65em;
+      line-height: 1;
+      color: hsl(var(--hsl-c1));
+      opacity: 0.9;
+      pointer-events: none;
+      transition: opacity 120ms ease;
+      z-index: 2;
+    }
+    div.js-sortable--page.${SECTION_COLLAPSE_PAGE_CLASS}
+      h2.title.title--page-extra.${SECTION_PAGE_TITLE_TOGGLE_CLASS}::before {
+      content: "\\f078";
+      opacity: 0.8;
+    }
+    div.js-sortable--page.${SECTION_COLLAPSE_PAGE_CLASS}
+      h2.title.title--page-extra.${SECTION_PAGE_TITLE_TOGGLE_CLASS}::after {
       content: " (Collapsed)";
+      position: static;
+      inset: auto;
+      background-color: transparent;
+      border-radius: 0;
+      transition: none;
+      pointer-events: auto;
+      z-index: auto;
       font-weight: 600;
       font-size: 0.88em;
-      opacity: 0.82;
+      opacity: 0.9;
     }
     a.${SECTION_TAB_COLLAPSED_CLASS} .page-mode-link,
     a.${SECTION_TAB_COLLAPSED_CLASS} .fake-bold {
       color: hsl(var(--hsl-l2)) !important;
-      opacity: 0.6;
+      opacity: 0.78;
     }
     a.${SECTION_TAB_COLLAPSED_CLASS}:not(:has(.page-mode-link)):not(:has(.fake-bold)) {
       color: hsl(var(--hsl-l2)) !important;
-      opacity: 0.6;
+      opacity: 0.78;
     }
-    button.oep-profile-section-collapse-toggle {
+    .page-mode.page-mode--profile-page-extra {
+      gap: 0 !important;
+      column-gap: 0 !important;
+      row-gap: 0 !important;
+    }
+    .${SECTION_CONTENTS_ROW_CLASS} > a[href^="#"] {
+      margin-right: 0.85em !important;
+      padding: 0.22em 0.5em;
+      border-radius: 5px;
+      box-sizing: border-box;
+      transition: background-color 120ms ease;
+    }
+    .${SECTION_CONTENTS_ROW_CLASS} > a[href^="#"]:hover {
+      background-color: rgba(255, 255, 255, 0.07);
+    }
+    .${SECTION_CONTENTS_ROW_CLASS} > a[href^="#"]:last-child {
+      margin-right: 0 !important;
+    }
+    button.oep-profile-section-contents-tab-chevron {
       appearance: none;
       border: none;
       background: transparent;
-      color: hsl(var(--hsl-c1));
-      padding: 0;
-      margin: 0 0 0 -0.12em;
       cursor: pointer;
-      vertical-align: middle;
-      line-height: 1;
-      font-size: 0.65rem;
-      opacity: 0.88;
-      border-radius: 3px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 16px;
-      min-height: 18px;
+      font-size: 0.82em;
+      line-height: 1;
+      margin-right: 0;
+      margin-left: 0;
+      padding: 0.16em 0.25em;
+      min-width: 1.2em;
+      min-height: 1.2em;
+      box-sizing: border-box;
+      flex-shrink: 0;
+      vertical-align: middle;
+      border-radius: 5px;
+      color: hsl(var(--hsl-c1));
+      opacity: 0.9;
+      transition: color 120ms ease, opacity 120ms ease;
     }
-    a.${SECTION_TAB_COLLAPSED_CLASS} + button.oep-profile-section-collapse-toggle {
-      color: hsl(var(--hsl-l2));
-      opacity: 0.58;
+    .${SECTION_CONTENTS_ROW_CLASS}
+      button.oep-profile-section-contents-tab-chevron:first-child {
+      margin-left: 0;
     }
-    button.oep-profile-section-collapse-toggle:hover {
+    button.oep-profile-section-contents-tab-chevron + a {
+      padding-left: 0.2em;
+    }
+    button.oep-profile-section-contents-tab-chevron:hover {
       opacity: 1;
       color: hsl(var(--hsl-l1));
-      background: rgba(255, 255, 255, 0.08);
     }
-    button.oep-profile-section-collapse-toggle:focus-visible {
-      outline: 1px solid hsl(var(--hsl-l2));
-      outline-offset: 1px;
+    button.oep-profile-section-contents-tab-chevron.${SECTION_TAB_COLLAPSED_CLASS} {
+      opacity: 0.8;
+    }
+    button.oep-profile-section-contents-tab-chevron.${SECTION_TAB_COLLAPSED_CLASS}:hover {
+      opacity: 1;
+      color: hsl(var(--hsl-l1));
     }
   `;
 
@@ -17889,9 +21059,7 @@ OsuExpertPlus.pages.userProfile = (() => {
         return new Set(parsed.filter((x) => typeof x === "string" && x));
       }
       if (parsed && typeof parsed === "object") {
-        return new Set(
-          Object.keys(parsed).filter((k) => parsed[k] === true),
-        );
+        return new Set(Object.keys(parsed).filter((k) => parsed[k] === true));
       }
     } catch (_) {}
     return new Set();
@@ -17913,9 +21081,7 @@ OsuExpertPlus.pages.userProfile = (() => {
   function clearProfileSectionCollapseBodyHidden(page) {
     page
       .querySelectorAll(`.${SECTION_COLLAPSE_BODY_HIDDEN_CLASS}`)
-      .forEach((el) =>
-        el.classList.remove(SECTION_COLLAPSE_BODY_HIDDEN_CLASS),
-      );
+      .forEach((el) => el.classList.remove(SECTION_COLLAPSE_BODY_HIDDEN_CLASS));
     page.classList.remove(SECTION_COLLAPSE_BODY_HIDDEN_CLASS);
   }
 
@@ -17947,9 +21113,7 @@ OsuExpertPlus.pages.userProfile = (() => {
    */
   function markProfileSectionBodyCollapsed(pageEl, depth) {
     if (depth > 4) return false;
-    const kids = [...pageEl.children].filter(
-      (n) => n instanceof HTMLElement,
-    );
+    const kids = [...pageEl.children].filter((n) => n instanceof HTMLElement);
     if (!kids.length) return false;
     const hasKept = kids.some(profileSectionCollapseKeepsChildVisible);
     if (hasKept) {
@@ -17982,58 +21146,147 @@ OsuExpertPlus.pages.userProfile = (() => {
         node.classList.add(SECTION_COLLAPSE_BODY_HIDDEN_CLASS);
       }
     });
+    applyProfileSubsectionCollapseState(readProfileSubsectionsCollapsedSet());
   }
 
   function applyProfileSectionCollapseToTabAnchors(collapsed) {
-    getProfileContentsAnchorRows().flat().forEach((anchor) => {
-      if (!(anchor instanceof HTMLAnchorElement)) return;
-      const sectionId = sectionIdFromHashHref(
-        anchor.getAttribute("href") || "",
-      );
-      if (!sectionId) return;
-      if (collapsed.has(sectionId))
-        anchor.classList.add(SECTION_TAB_COLLAPSED_CLASS);
-      else anchor.classList.remove(SECTION_TAB_COLLAPSED_CLASS);
-    });
-  }
-
-  function anchorLabelForSectionToggle(anchor) {
-    const fromBold = anchor.querySelector(".fake-bold");
-    if (fromBold?.textContent?.trim()) return fromBold.textContent.trim();
-    const fromLink = anchor.querySelector(".page-mode-link");
-    if (fromLink?.textContent?.trim()) return fromLink.textContent.trim();
-    const t = anchor.textContent?.trim();
-    return t || "";
-  }
-
-  function updateProfileSectionCollapseToggleUi(collapsed) {
-    document
-      .querySelectorAll(`button[${SECTION_COLLAPSE_TOGGLE_ATTR}]`)
-      .forEach((btn) => {
-        if (!(btn instanceof HTMLButtonElement)) return;
-        const sid = btn.getAttribute(SECTION_COLLAPSE_FOR_ATTR);
-        if (!sid) return;
-        const isCollapsed = collapsed.has(sid);
-        const icon = btn.querySelector(".fas");
-        if (icon) {
-          icon.className = isCollapsed
-            ? "fas fa-chevron-down"
-            : "fas fa-chevron-up";
-        }
-        btn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
-        const label = btn.getAttribute("data-oep-section-tab-label") || sid;
-        btn.title = isCollapsed ? `Expand ${label}` : `Collapse ${label}`;
-        btn.setAttribute(
-          "aria-label",
-          isCollapsed ? `Expand ${label} section` : `Collapse ${label} section`,
+    getProfileContentsAnchorRows()
+      .flat()
+      .forEach((anchor) => {
+        if (!(anchor instanceof HTMLAnchorElement)) return;
+        const sectionId = sectionIdFromHashHref(
+          anchor.getAttribute("href") || "",
         );
+        if (!sectionId) return;
+        const isCollapsed = collapsed.has(sectionId);
+        if (isCollapsed) anchor.classList.add(SECTION_TAB_COLLAPSED_CLASS);
+        else anchor.classList.remove(SECTION_TAB_COLLAPSED_CLASS);
+
+        const iconClass = isCollapsed ? "fa-chevron-down" : "fa-chevron-up";
+        const parent = anchor.parentElement;
+        let btn = parent
+          ? parent.querySelector(
+              `button[${SECTION_TAB_CHEVRON_BTN_ATTR}="${sectionId}"]`,
+            )
+          : null;
+        if (!(btn instanceof HTMLButtonElement)) {
+          btn = el("button", {
+            type: "button",
+            class: `oep-profile-section-contents-tab-chevron fas ${iconClass}`,
+            [SECTION_TAB_CHEVRON_BTN_ATTR]: sectionId,
+            title: isCollapsed ? "Expand section" : "Collapse section",
+          });
+          btn.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            ev.stopImmediatePropagation();
+            toggleProfileSectionCollapsedId(sectionId);
+          });
+          anchor.insertAdjacentElement("beforebegin", btn);
+          if (parent) parent.classList.add(SECTION_CONTENTS_ROW_CLASS);
+        } else {
+          btn.className = `oep-profile-section-contents-tab-chevron fas ${iconClass}`;
+          btn.setAttribute(
+            "title",
+            isCollapsed ? "Expand section" : "Collapse section",
+          );
+        }
+        if (isCollapsed) btn.classList.add(SECTION_TAB_COLLAPSED_CLASS);
+        else btn.classList.remove(SECTION_TAB_COLLAPSED_CLASS);
       });
   }
 
   function cleanupProfileSectionCollapseToggles() {
     document
-      .querySelectorAll(`button[${SECTION_COLLAPSE_TOGGLE_ATTR}]`)
+      .querySelectorAll("button.oep-profile-section-collapse-toggle")
       .forEach((n) => n.remove());
+  }
+
+  function teardownProfileSectionPageTitleClick() {
+    document
+      .querySelectorAll(`h2[${SECTION_PAGE_TITLE_CLICK_ATTR}]`)
+      .forEach((h2) => {
+        if (!(h2 instanceof HTMLElement)) return;
+        const wrap =
+          /** @type {HTMLElement & { _oepSectionPageTitleAc?: AbortController }} */ (
+            h2
+          );
+        wrap._oepSectionPageTitleAc?.abort();
+        delete wrap._oepSectionPageTitleAc;
+        const label = h2.querySelector(
+          `:scope > .${SECTION_PAGE_TITLE_LABEL_CLASS}`,
+        );
+        if (label instanceof HTMLElement) {
+          while (label.firstChild) h2.insertBefore(label.firstChild, label);
+          label.remove();
+        }
+        h2.removeAttribute(SECTION_PAGE_TITLE_CLICK_ATTR);
+        h2.classList.remove(SECTION_PAGE_TITLE_TOGGLE_CLASS);
+      });
+  }
+
+  function teardownProfileContentsTabChevrons() {
+    document
+      .querySelectorAll(`button[${SECTION_TAB_CHEVRON_BTN_ATTR}]`)
+      .forEach((n) => n.remove());
+    document
+      .querySelectorAll(`.${SECTION_CONTENTS_ROW_CLASS}`)
+      .forEach((n) => n.classList.remove(SECTION_CONTENTS_ROW_CLASS));
+  }
+
+  /**
+   * Toggle section collapse from the in-page `h2` or from the contents-row chevron (tab label still navigates).
+   * @param {string} sectionId  data-page-id
+   */
+  function toggleProfileSectionCollapsedId(sectionId) {
+    if (!sectionId) return;
+    const set = readProfileSectionsCollapsedSet();
+    if (set.has(sectionId)) set.delete(sectionId);
+    else set.add(sectionId);
+    writeProfileSectionsCollapsedSet(set);
+    applyProfileSectionCollapseToPages(set);
+    applyProfileSectionCollapseToTabAnchors(set);
+  }
+
+  /** @param {HTMLElement} pageEl  div.js-sortable--page[data-page-id] */
+  function bindProfileSectionPageTitleClickOnPage(pageEl) {
+    const sectionId = pageEl.getAttribute("data-page-id");
+    if (!sectionId) return;
+    const h2 = pageEl.querySelector(SECTION_COLLAPSE_MAIN_TITLE_SELECTOR);
+    if (!(h2 instanceof HTMLElement)) return;
+    if (h2.hasAttribute(SECTION_PAGE_TITLE_CLICK_ATTR)) return;
+
+    h2.classList.add(SECTION_PAGE_TITLE_TOGGLE_CLASS);
+    h2.setAttribute(SECTION_PAGE_TITLE_CLICK_ATTR, sectionId);
+
+    if (!h2.querySelector(`:scope > .${SECTION_PAGE_TITLE_LABEL_CLASS}`)) {
+      const label = el("span", { class: SECTION_PAGE_TITLE_LABEL_CLASS });
+      while (h2.firstChild) label.appendChild(h2.firstChild);
+      h2.appendChild(label);
+    }
+
+    const ac = new AbortController();
+    /** @type {HTMLElement & { _oepSectionPageTitleAc?: AbortController }} */
+    (h2)._oepSectionPageTitleAc = ac;
+    h2.addEventListener(
+      "click",
+      (ev) => {
+        const t = ev.target;
+        if (!(t instanceof Element)) return;
+        if (t.closest("a[href]")) return;
+        if (t.closest("button")) return;
+        if (t.closest("input, select, textarea, label")) return;
+        toggleProfileSectionCollapsedId(sectionId);
+      },
+      { signal: ac.signal },
+    );
+  }
+
+  function bindProfileSectionPageTitleClicks() {
+    getSectionPageNodes().forEach((page) => {
+      if (page instanceof HTMLElement)
+        bindProfileSectionPageTitleClickOnPage(page);
+    });
   }
 
   /** @returns {function} */
@@ -18046,78 +21299,22 @@ OsuExpertPlus.pages.userProfile = (() => {
     const bind = () => {
       clearTimeout(rebindTimer);
       cleanupProfileSectionCollapseToggles();
+      teardownProfileSectionPageTitleClick();
+      teardownProfileContentsTabChevrons();
 
-      const rows = getProfileContentsAnchorRows();
       const collapsed = readProfileSectionsCollapsedSet();
       applyProfileSectionCollapseToPages(collapsed);
       applyProfileSectionCollapseToTabAnchors(collapsed);
 
-      if (!rows.length) return;
-
-      rows.flat().forEach((anchor) => {
-        if (!(anchor instanceof HTMLAnchorElement)) return;
-        const sectionId = sectionIdFromHashHref(
-          anchor.getAttribute("href") || "",
-        );
-        if (!sectionId) return;
-
-        const tabLabel = anchorLabelForSectionToggle(anchor) || sectionId;
-        const isCollapsed = collapsed.has(sectionId);
-        const btn = el(
-          "button",
-          {
-            type: "button",
-            class: "oep-profile-section-collapse-toggle",
-            [SECTION_COLLAPSE_TOGGLE_ATTR]: "1",
-            [SECTION_COLLAPSE_FOR_ATTR]: sectionId,
-            "data-oep-section-tab-label": tabLabel,
-            "aria-expanded": isCollapsed ? "false" : "true",
-            title: isCollapsed ? `Expand ${tabLabel}` : `Collapse ${tabLabel}`,
-            "aria-label": isCollapsed
-              ? `Expand ${tabLabel} section`
-              : `Collapse ${tabLabel} section`,
-          },
-          el("span", {
-            class: isCollapsed ? "fas fa-chevron-down" : "fas fa-chevron-up",
-          }),
-        );
-
-        btn.addEventListener("click", (ev) => {
-          ev.preventDefault();
-          ev.stopPropagation();
-          const set = readProfileSectionsCollapsedSet();
-          if (set.has(sectionId)) set.delete(sectionId);
-          else set.add(sectionId);
-          writeProfileSectionsCollapsedSet(set);
-          applyProfileSectionCollapseToPages(set);
-          applyProfileSectionCollapseToTabAnchors(set);
-          updateProfileSectionCollapseToggleUi(set);
-        });
-
-        anchor.insertAdjacentElement("afterend", btn);
-      });
-
-      updateProfileSectionCollapseToggleUi(collapsed);
+      bindProfileSectionPageTitleClicks();
     };
 
     bind();
     obs = new MutationObserver((mutations) => {
-      let needsRebind = mutationsIncludeSelector(
+      const needsRebind = mutationsIncludeSelector(
         mutations,
-        'div.js-sortable--page[data-page-id], a[href^="#"]',
+        'div.js-sortable--page[data-page-id], a[href^="#"], h2.title.title--page-extra',
       );
-
-      if (!needsRebind) {
-        for (const mutation of mutations) {
-          if (!mutation.addedNodes.length) continue;
-          const target = mutation.target;
-          if (!(target instanceof Element)) continue;
-          if (target.closest(`.${SECTION_COLLAPSE_PAGE_CLASS}`)) {
-            needsRebind = true;
-            break;
-          }
-        }
-      }
 
       if (needsRebind) {
         clearTimeout(rebindTimer);
@@ -18130,6 +21327,8 @@ OsuExpertPlus.pages.userProfile = (() => {
       clearTimeout(rebindTimer);
       obs?.disconnect();
       cleanupProfileSectionCollapseToggles();
+      teardownProfileSectionPageTitleClick();
+      teardownProfileContentsTabChevrons();
       getSectionPageNodes().forEach((node) => {
         node.classList.remove(SECTION_COLLAPSE_PAGE_CLASS);
         clearProfileSectionCollapseBodyHidden(node);
@@ -18141,6 +21340,29 @@ OsuExpertPlus.pages.userProfile = (() => {
     };
   }
 
+  /**
+   * @param {number} clientX
+   * @param {number} clientY
+   * @param {HTMLAnchorElement} source
+   * @returns {HTMLAnchorElement|null}
+   */
+  function contentsReorderTargetFromPoint(clientX, clientY, source) {
+    const row = source.parentElement;
+    if (!row) return null;
+    const stack = document.elementsFromPoint(clientX, clientY);
+    for (const n of stack) {
+      if (!(n instanceof Element)) continue;
+      const a = n.closest(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`);
+      if (
+        a instanceof HTMLAnchorElement &&
+        a !== source &&
+        a.parentElement === row
+      )
+        return a;
+    }
+    return null;
+  }
+
   /** @returns {function} */
   function startContentsReorderManager() {
     injectContentsReorderStyles();
@@ -18148,6 +21370,18 @@ OsuExpertPlus.pages.userProfile = (() => {
     let dragAnchor = null;
     let obs = null;
     let rebindTimer = 0;
+    /**
+     * @type {{
+     *   anchor: HTMLAnchorElement;
+     *   pointerId: number;
+     *   startX: number;
+     *   startY: number;
+     *   armed: boolean;
+     *   onMove: (e: PointerEvent) => void;
+     *   onUp: (e: PointerEvent) => void;
+     * } | null}
+     */
+    let pointerSession = null;
 
     const clearDragClasses = () => {
       document
@@ -18174,78 +21408,135 @@ OsuExpertPlus.pages.userProfile = (() => {
       }
     };
 
-    const onDragStart = (ev) => {
-      const a = ev.currentTarget;
-      if (!(a instanceof HTMLAnchorElement)) return;
-      dragAnchor = a;
-      a.classList.add(CONTENTS_REORDER_DRAGGING_CLASS);
-      ev.dataTransfer?.setData("text/plain", a.getAttribute("href") || "");
-      if (ev.dataTransfer) ev.dataTransfer.effectAllowed = "move";
-    };
+    function clearRowDragoverExcept(row, except) {
+      row
+        .querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`)
+        .forEach((n) => {
+          if (n !== except) n.classList.remove(CONTENTS_REORDER_DRAGOVER_CLASS);
+        });
+    }
 
-    const onDragOver = (ev) => {
-      if (!dragAnchor) return;
-      const a = ev.currentTarget;
-      if (!(a instanceof HTMLAnchorElement) || a === dragAnchor) return;
-      ev.preventDefault();
-      a.classList.add(CONTENTS_REORDER_DRAGOVER_CLASS);
-      if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-    };
+    function endPointerSession() {
+      const s = pointerSession;
+      pointerSession = null;
+      if (!s) return;
+      s.anchor.removeEventListener("pointermove", s.onMove);
+      s.anchor.removeEventListener("pointerup", s.onUp);
+      s.anchor.removeEventListener("pointercancel", s.onUp);
+      try {
+        s.anchor.releasePointerCapture(s.pointerId);
+      } catch (_) {}
+    }
 
-    const onDragLeave = (ev) => {
-      const a = ev.currentTarget;
-      if (!(a instanceof HTMLAnchorElement)) return;
-      a.classList.remove(CONTENTS_REORDER_DRAGOVER_CLASS);
-    };
+    const onPointerDown = (ev) => {
+      const anchor = ev.currentTarget;
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+      if (ev.button !== 0) return;
+      if (pointerSession) return;
 
-    const onDrop = async (ev) => {
-      const target = ev.currentTarget;
-      if (
-        !(target instanceof HTMLAnchorElement) ||
-        !dragAnchor ||
-        target === dragAnchor
-      )
-        return;
-      ev.preventDefault();
-      target.classList.remove(CONTENTS_REORDER_DRAGOVER_CLASS);
+      const startX = ev.clientX;
+      const startY = ev.clientY;
 
-      const row = target.parentElement;
-      if (!row || dragAnchor.parentElement !== row) return;
+      const onMove = (e) => {
+        if (!pointerSession || e.pointerId !== pointerSession.pointerId) return;
+        const s = pointerSession;
+        const dx = e.clientX - s.startX;
+        const dy = e.clientY - s.startY;
+        if (!s.armed) {
+          if (Math.hypot(dx, dy) < CONTENTS_REORDER_DRAG_THRESHOLD_PX) return;
+          s.armed = true;
+          dragAnchor = s.anchor;
+          s.anchor.classList.add(CONTENTS_REORDER_DRAGGING_CLASS);
+        }
+        const row = s.anchor.parentElement;
+        if (!(row instanceof HTMLElement)) return;
+        const hit = contentsReorderTargetFromPoint(
+          e.clientX,
+          e.clientY,
+          s.anchor,
+        );
+        clearRowDragoverExcept(row, hit);
+        if (hit) hit.classList.add(CONTENTS_REORDER_DRAGOVER_CLASS);
+      };
 
-      const dragRect = dragAnchor.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      const dragCenter = dragRect.left + dragRect.width / 2;
-      const targetCenter = targetRect.left + targetRect.width / 2;
-      const insertAfter = dragCenter < targetCenter;
+      const onUp = (e) => {
+        if (!pointerSession || e.pointerId !== pointerSession.pointerId) return;
+        const s = pointerSession;
+        endPointerSession();
 
-      if (insertAfter) target.insertAdjacentElement("afterend", dragAnchor);
-      else target.insertAdjacentElement("beforebegin", dragAnchor);
+        if (s.armed && dragAnchor) {
+          const hit = contentsReorderTargetFromPoint(
+            e.clientX,
+            e.clientY,
+            s.anchor,
+          );
+          const row = s.anchor.parentElement;
+          if (
+            hit &&
+            dragAnchor &&
+            hit !== dragAnchor &&
+            row &&
+            hit.parentElement === row
+          ) {
+            hit.classList.remove(CONTENTS_REORDER_DRAGOVER_CLASS);
+            const dragRect = dragAnchor.getBoundingClientRect();
+            const targetRect = hit.getBoundingClientRect();
+            const dragCenter = dragRect.left + dragRect.width / 2;
+            const targetCenter = targetRect.left + targetRect.width / 2;
+            const insertAfter = dragCenter < targetCenter;
+            if (insertAfter) hit.insertAdjacentElement("afterend", dragAnchor);
+            else hit.insertAdjacentElement("beforebegin", dragAnchor);
+            const anchors = Array.from(
+              row.querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`),
+            ).filter((a) => a instanceof HTMLAnchorElement);
+            void saveOrderFrom(anchors);
+          }
+          const suppressClick = (ce) => {
+            ce.preventDefault();
+            ce.stopPropagation();
+            s.anchor.removeEventListener("click", suppressClick, true);
+          };
+          s.anchor.addEventListener("click", suppressClick, true);
+        }
 
-      const anchors = Array.from(
-        row.querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`),
-      ).filter((a) => a instanceof HTMLAnchorElement);
-      await saveOrderFrom(anchors);
-    };
+        dragAnchor = null;
+        clearDragClasses();
+      };
 
-    const onDragEnd = () => {
-      dragAnchor = null;
-      clearDragClasses();
+      pointerSession = {
+        anchor,
+        pointerId: ev.pointerId,
+        startX,
+        startY,
+        armed: false,
+        onMove,
+        onUp,
+      };
+
+      try {
+        anchor.setPointerCapture(ev.pointerId);
+      } catch (_) {}
+
+      anchor.addEventListener("pointermove", onMove);
+      anchor.addEventListener("pointerup", onUp);
+      anchor.addEventListener("pointercancel", onUp);
     };
 
     const bind = () => {
       clearTimeout(rebindTimer);
+      if (pointerSession) {
+        endPointerSession();
+        dragAnchor = null;
+        clearDragClasses();
+      }
       const groups = getSortableContentsAnchorGroups();
       const visibleGroup = getPreferredVisibleContentsGroup(groups);
-      cleanupContentsHintAndIcons();
+      cleanupContentsReorderHints();
 
       document
         .querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`)
         .forEach((a) => {
-          a.removeEventListener("dragstart", onDragStart);
-          a.removeEventListener("dragover", onDragOver);
-          a.removeEventListener("dragleave", onDragLeave);
-          a.removeEventListener("drop", onDrop);
-          a.removeEventListener("dragend", onDragEnd);
+          a.removeEventListener("pointerdown", onPointerDown);
           a.removeAttribute(CONTENTS_REORDER_ANCHOR_ATTR);
           a.removeAttribute("draggable");
           a.classList.remove(
@@ -18256,41 +21547,10 @@ OsuExpertPlus.pages.userProfile = (() => {
 
       groups.flat().forEach((a) => {
         a.setAttribute(CONTENTS_REORDER_ANCHOR_ATTR, "1");
-        a.setAttribute("draggable", "true");
-        a.setAttribute("title", "Drag to reorder");
-        a.addEventListener("dragstart", onDragStart);
-        a.addEventListener("dragover", onDragOver);
-        a.addEventListener("dragleave", onDragLeave);
-        a.addEventListener("drop", onDrop);
-        a.addEventListener("dragend", onDragEnd);
+        a.removeAttribute("draggable");
+        a.setAttribute("title", `Drag to reorder`);
+        a.addEventListener("pointerdown", onPointerDown);
       });
-
-      const row = visibleGroup[0]?.parentElement;
-      if (row instanceof HTMLElement) {
-        const first = visibleGroup[0];
-        const hint = el(
-          "div",
-          {
-            class: `${CONTENTS_REORDER_HINT_CLASS} title title--page-extra-small`,
-            [CONTENTS_REORDER_HINT_ATTR]: "1",
-          },
-          "Drag contents below to reorder sections",
-        );
-        row.insertAdjacentElement("beforebegin", hint);
-        if (first instanceof HTMLElement) {
-          const firstLabel =
-            first.querySelector(".fake-bold") ||
-            first.querySelector(".page-mode-link") ||
-            first;
-          if (firstLabel instanceof HTMLElement) {
-            const dx = Math.round(
-              firstLabel.getBoundingClientRect().left -
-                row.getBoundingClientRect().left,
-            );
-            hint.style.paddingLeft = `${Math.max(0, dx)}px`;
-          }
-        }
-      }
     };
 
     bind();
@@ -18310,14 +21570,15 @@ OsuExpertPlus.pages.userProfile = (() => {
     return () => {
       clearTimeout(rebindTimer);
       obs?.disconnect();
+      if (pointerSession) {
+        endPointerSession();
+        dragAnchor = null;
+        clearDragClasses();
+      }
       document
         .querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`)
         .forEach((a) => {
-          a.removeEventListener("dragstart", onDragStart);
-          a.removeEventListener("dragover", onDragOver);
-          a.removeEventListener("dragleave", onDragLeave);
-          a.removeEventListener("drop", onDrop);
-          a.removeEventListener("dragend", onDragEnd);
+          a.removeEventListener("pointerdown", onPointerDown);
           a.removeAttribute(CONTENTS_REORDER_ANCHOR_ATTR);
           a.removeAttribute("draggable");
           a.classList.remove(
@@ -18325,7 +21586,7 @@ OsuExpertPlus.pages.userProfile = (() => {
             CONTENTS_REORDER_DRAGOVER_CLASS,
           );
         });
-      cleanupContentsHintAndIcons();
+      cleanupContentsReorderHints();
       removeContentsReorderStyles();
     };
   }
@@ -18359,6 +21620,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     cleanups.push(startRanksDateHighlightManager());
     cleanups.push(startProfileBadgesCollapseManager());
     cleanups.push(startProfileSectionCollapseManager());
+    cleanups.push(startProfileSubsectionCollapseManager());
     cleanups.push(startBbcodeHelperManager());
     const profileUserId = getProfileUserId();
     const currentUserId = getCurrentUserIdFromHeader();
@@ -18978,6 +22240,43 @@ OsuExpertPlus.settingsPanel = (() => {
       line-height: 1.45;
       color: hsl(var(--hsl-l2, 0 0% 72%));
       text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .osu-expertplus-panel__footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+    }
+    .osu-expertplus-panel__footer-reset {
+      margin: 0;
+      padding: 3px 9px;
+      border: 1px solid hsl(var(--hsl-b5, 333 18% 30%));
+      border-radius: 5px;
+      background: hsl(var(--hsl-b4, 333 18% 18%));
+      color: hsl(var(--hsl-l2, 0 0% 72%));
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      line-height: 1.3;
+      cursor: pointer;
+      transition:
+        background 140ms ease,
+        border-color 140ms ease,
+        color 140ms ease;
+    }
+    .osu-expertplus-panel__footer-reset:hover {
+      background: hsl(var(--hsl-b5, 333 18% 24%));
+      border-color: hsl(var(--hsl-b5, 333 18% 38%));
+      color: hsl(var(--hsl-l1, 0 0% 88%));
+    }
+    .osu-expertplus-panel__footer-reset:focus-visible {
+      outline: 1px solid hsl(var(--hsl-pink, 333 100% 65%));
+      outline-offset: 2px;
     }
     .osu-expertplus-panel__footer a {
       color: hsl(var(--hsl-c2, 333 60% 70%));
@@ -19336,6 +22635,7 @@ OsuExpertPlus.settingsPanel = (() => {
       try {
         await auth.getToken();
         setStatus("Credentials saved & verified. API v2 active.", "ok");
+        location.reload();
       } catch (e) {
         setStatus(
           `Failed: ${e.message.replace("[osu! Expert+] ", "")}`,
@@ -19346,6 +22646,7 @@ OsuExpertPlus.settingsPanel = (() => {
         syncOAuthHintVisibility();
         refreshModdedStarRatingRowLock();
         onConfiguredChange?.();
+        window.dispatchEvent(new Event("oep-osu-api-credentials-changed"));
       }
     });
 
@@ -19359,6 +22660,7 @@ OsuExpertPlus.settingsPanel = (() => {
       syncOAuthHintVisibility();
       refreshModdedStarRatingRowLock();
       onConfiguredChange?.();
+      window.dispatchEvent(new Event("oep-osu-api-credentials-changed"));
     });
 
     const hint = el("div", { class: "osu-expertplus-panel__creds-hint" });
@@ -19661,31 +22963,57 @@ OsuExpertPlus.settingsPanel = (() => {
       rows.push(buildSection(groupName, groupRows));
     }
 
+    const resetDefaultsBtn = el(
+      "button",
+      {
+        type: "button",
+        class: "osu-expertplus-panel__footer-reset",
+        title: "Set every toggle above to its default (API keys are not changed)",
+      },
+      "Reset to defaults",
+    );
+    resetDefaultsBtn.addEventListener("click", () => {
+      if (
+        !window.confirm(
+          "Reset all Expert+ options to their defaults? osu! and OMDB API keys will not be changed.",
+        )
+      ) {
+        return;
+      }
+      settings.resetPanelTogglesToDefaults();
+      refreshModdedStarRatingRowLock();
+    });
+
     const footer = el(
       "div",
       { class: "osu-expertplus-panel__footer" },
+      resetDefaultsBtn,
       el(
-        "a",
-        {
-          href: "https://github.com/inix1257/osu_expertplus",
-          target: "_blank",
-          rel: "noopener noreferrer",
-        },
-        "Source code",
-      ),
-      el(
-        "span",
-        { class: "osu-expertplus-panel__footer-sep", "aria-hidden": "true" },
-        "·",
-      ),
-      el(
-        "a",
-        {
-          href: "https://osu.ppy.sh/users/2688581",
-          target: "_blank",
-          rel: "noopener noreferrer",
-        },
-        "Developer",
+        "div",
+        { class: "osu-expertplus-panel__footer-links" },
+        el(
+          "a",
+          {
+            href: "https://github.com/inix1257/osu_expertplus",
+            target: "_blank",
+            rel: "noopener noreferrer",
+          },
+          "Source code",
+        ),
+        el(
+          "span",
+          { class: "osu-expertplus-panel__footer-sep", "aria-hidden": "true" },
+          "·",
+        ),
+        el(
+          "a",
+          {
+            href: "https://osu.ppy.sh/users/2688581",
+            target: "_blank",
+            rel: "noopener noreferrer",
+          },
+          "Developer",
+        ),
       ),
     );
 
@@ -19804,6 +23132,7 @@ OsuExpertPlus.settingsPanel = (() => {
 (function () {
   OsuExpertPlus.settingsPanel.init();
   OsuExpertPlus.modIconsAsAcronyms.install(OsuExpertPlus.settings);
+  OsuExpertPlus.beatmapsetsListingMode.installLinkPatcher();
 
   const router = new OsuExpertPlus.Router();
   router.init();
