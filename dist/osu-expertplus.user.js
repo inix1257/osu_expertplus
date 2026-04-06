@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.2.7
+// @version      0.2.8
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -403,6 +403,8 @@ window.OsuExpertPlus = window.OsuExpertPlus || {};
 
 OsuExpertPlus.api = (() => {
   const BASE = 'https://osu.ppy.sh/api/v2';
+  /** Public site origin (non-`/api/v2` routes). */
+  const SITE_ORIGIN = 'https://osu.ppy.sh';
 
   /**
    * Build fetch headers, injecting a Bearer token when available.
@@ -597,6 +599,53 @@ OsuExpertPlus.api = (() => {
   }
 
   /**
+   * GET https://osu.ppy.sh/beatmaps/{beatmap}/scores — site scoreboard JSON (same
+   * path the webpage uses), not `/api/v2`. Richer / leaderboard-aligned payload
+   * than the API route for some scores. `{beatmap}` is the difficulty id.
+   * @param {string|number} beatmapId
+   * @param {{ mode?: string, mods?: string[], legacy_only?: number, type?: string, limit?: number }} [query]
+   * @returns {Promise<{ scores: object[] }>}
+   */
+  async function getBeatmapScoresWebsite(beatmapId, query) {
+    /** @type {Record<string, string|number|string[]>} */
+    const params = {};
+    if (query && typeof query === 'object') {
+      if (query.mode) params.mode = query.mode;
+      if (query.legacy_only != null) params.legacy_only = query.legacy_only;
+      if (query.type) params.type = query.type;
+      if (query.limit != null) params.limit = query.limit;
+      if (Array.isArray(query.mods) && query.mods.length) {
+        params['mods[]'] = query.mods;
+      }
+    }
+    const usp = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null) continue;
+      if (Array.isArray(value)) {
+        for (const v of value) usp.append(key, String(v));
+      } else {
+        usp.append(key, String(value));
+      }
+    }
+    const qs = usp.toString();
+    const fullUrl = `${SITE_ORIGIN}/beatmaps/${beatmapId}/scores${qs ? `?${qs}` : ''}`;
+
+    const headers = { Accept: 'application/json' };
+    const authHeader = await OsuExpertPlus.auth.getAuthHeader().catch(() => null);
+    if (authHeader) headers['Authorization'] = authHeader;
+
+    const resp = await fetch(fullUrl, { headers, credentials: 'include' });
+    if (!resp.ok) {
+      throw new Error(`[osu! Expert+] ${resp.status}: ${fullUrl}`);
+    }
+    const data = await resp.json();
+    const scores = Array.isArray(data)
+      ? data
+      : data?.scores ?? data?.data?.scores ?? [];
+    return { scores };
+  }
+
+  /**
    * POST /beatmaps/{beatmap}/attributes — returns difficulty attributes with
    * the given mods applied, including the modded star_rating.
    *
@@ -636,6 +685,7 @@ OsuExpertPlus.api = (() => {
     getBeatmapUserScore,
     getBeatmapUserScoresAll,
     getBeatmapScores,
+    getBeatmapScoresWebsite,
     postBeatmapAttributes,
   };
 })();
@@ -5130,6 +5180,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   const MOD_WILDCARD_CLASS = "oep-mod-wildcard";
   const MOD_WILDCARD_ATTR = "data-oep-mod-wildcard";
   const WILDCARD_MERGED_ROW_ATTR = "data-oep-wildcard-merged-row";
+  /** Marks a wildcard row that is not the player's highest-ranked score in the merged list. */
+  const WILDCARD_DUPE_ROW_ATTR = "data-oep-wildcard-dupe";
+  /** Marks a row whose effective speed is not 1.00× or 1.50× (i.e. a custom-rate score). */
+  const RATE_EDIT_ROW_ATTR = "data-oep-rate-edit";
   const SCORE_USER_SEARCH_RESULT_ATTR = "data-oep-user-search-result";
   const WILDCARD_LOADING_CLASS = "oep-wildcard-loading";
   const MAX_WILDCARD_MODS = 2;
@@ -6762,6 +6816,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     .beatmapset-scoreboard table.beatmap-scoreboard-table__table td.beatmap-scoreboard-table__cell .oep-beatmap-scoreboard-pp-value {
       color: #c4b5fd;
     }
+    /* Prevent overflow when the mod extender tab sits next to the icon. */
+    .beatmapset-scoreboard .beatmap-scoreboard-table__mods .beatmap-scoreboard-mod {
+      overflow: visible;
+    }
     /* Beatmap scoreboard user search */
     .oep-user-search {
       box-sizing: border-box;
@@ -6866,6 +6924,20 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     }
     tr[data-oep-user-search-result] > td.beatmap-scoreboard-table__popup-menu {
       display: none !important;
+    }
+    /* Custom-rate (non 1.00×/1.50×) scores — slightly dimmed. */
+    tr[${RATE_EDIT_ROW_ATTR}] {
+      opacity: 0.6;
+    }
+    tr[${RATE_EDIT_ROW_ATTR}]:hover {
+      opacity: 0.9;
+    }
+    /* Non-top wildcard scores for a player — more heavily dimmed; overrides rate-edit above. */
+    tr[${WILDCARD_DUPE_ROW_ATTR}] {
+      opacity: 0.38;
+    }
+    tr[${WILDCARD_DUPE_ROW_ATTR}]:hover {
+      opacity: 0.72;
     }
   `;
 
@@ -7249,8 +7321,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
   /**
    * Fetch leaderboard scores for multiple mod combinations, merge, dedup, sort,
-   * and return the top `limit` scores.
-   * @param {string} beatmapId
+   * and return the top `limit` scores. Uses `GET /beatmaps/{beatmapId}/scores` on
+   * osu.ppy.sh (site JSON), not `/api/v2`.
+   * @param {string} beatmapId  difficulty id (same as in `/beatmaps/{id}/scores`)
    * @param {string[][]} modCombos
    * @param {string} mode
    * @param {number} limit
@@ -7266,8 +7339,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   ) {
     const fetches = modCombos.map((mods) =>
       OsuExpertPlus.api
-        .getBeatmapScores(beatmapId, {
+        .getBeatmapScoresWebsite(beatmapId, {
           mode,
+          type: "global",
           // Omitting mods[] returns every mod combination; NM is required for nomod.
           mods: mods.length ? mods : ["NM"],
           limit: EXTENDED_LB_LIMIT,
@@ -7341,6 +7415,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     // starts at 1 and matches the visual first row.
     const firstNative = nativeRows[0] ?? null;
 
+    // Track which user ids have already appeared so secondary scores can be dimmed.
+    const seenUserIds = new Set();
+
     for (let i = 0; i < scores.length; i++) {
       const score = scores[i];
       if (!score || typeof score !== "object") continue;
@@ -7348,6 +7425,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         templateRow.cloneNode(true)
       );
       row.setAttribute(WILDCARD_MERGED_ROW_ATTR, "1");
+      row.removeAttribute(RATE_EDIT_ROW_ATTR);
+      row.removeAttribute(WILDCARD_DUPE_ROW_ATTR);
       row.style.display = "";
       row.classList.remove(
         "beatmap-scoreboard-table__body-row--friend",
@@ -7380,13 +7459,28 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       );
 
       // Sync js-usercard data-user-id so hover cards reference the correct user.
-      if (colMap.user != null) {
-        const uid = score.user?.id ?? score.user_id;
+      const uid = score.user?.id ?? score.user_id;
+      if (colMap.user != null && uid != null) {
         const playerTd = row.cells[colMap.user];
         const card = playerTd?.querySelector(".js-usercard");
-        if (card instanceof HTMLElement && uid != null) {
+        if (card instanceof HTMLElement) {
           card.setAttribute("data-user-id", String(uid));
         }
+      }
+
+      // Dim rows that are not this player's highest-ranked entry in the merged list.
+      const uidKey = uid != null ? String(uid) : null;
+      if (uidKey != null) {
+        if (seenUserIds.has(uidKey)) {
+          row.setAttribute(WILDCARD_DUPE_ROW_ATTR, "1");
+        } else {
+          seenUserIds.add(uidKey);
+        }
+      }
+
+      // Dim rows with a custom rate (anything other than 1.00× or 1.50×).
+      if (scoreHasNonstandardRate(score)) {
+        row.setAttribute(RATE_EDIT_ROW_ATTR, "1");
       }
 
       tbody.insertBefore(row, firstNative);
@@ -8807,6 +8901,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         templateRow.cloneNode(true)
       );
       resultRow.setAttribute(SCORE_USER_SEARCH_RESULT_ATTR, "1");
+      resultRow.removeAttribute(RATE_EDIT_ROW_ATTR);
       resultRow.style.display = "";
       resultRow.classList.remove(
         "beatmap-scoreboard-table__body-row--friend",
@@ -8864,6 +8959,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         if (card instanceof HTMLElement && uid != null) {
           card.setAttribute("data-user-id", String(uid));
         }
+      }
+
+      if (scoreHasNonstandardRate(score)) {
+        resultRow.setAttribute(RATE_EDIT_ROW_ATTR, "1");
       }
 
       if (position == null && colMap.rank != null) {
@@ -10437,12 +10536,21 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    */
   function resolveBeatmapScoreboardModTemplateEl(scoreboardRoot) {
     const inRoot = (sel) => scoreboardRoot?.querySelector?.(sel) ?? null;
+    // Expert+ mod grid hides osu’s original strip with data-oep-mod-hidden; those nodes
+    // are first in DOM order and can be stale for masks — prefer grid pile clones.
+    const pileModSel = `.${MOD_GRID_CLASS}__pile .beatmap-scoreboard-mod`;
+    const stripVisibleSel =
+      ".beatmapset-scoreboard__mods .beatmap-scoreboard-mod:not([data-oep-mod-hidden])";
     const chain = [
       () => inRoot(".beatmap-scoreboard-table__mods .beatmap-scoreboard-mod"),
       () => inRoot(".beatmap-scoreboard-table__body .beatmap-scoreboard-mod"),
+      () => inRoot(pileModSel),
+      () => document.querySelector(pileModSel),
+      () => inRoot(stripVisibleSel),
+      () => document.querySelector(stripVisibleSel),
       () =>
         document.querySelector(
-          ".beatmapset-scoreboard__mods .beatmap-scoreboard-mod",
+          ".beatmap-scoreboard-mod:not([data-oep-mod-hidden])",
         ),
       () => document.querySelector(".beatmap-scoreboard-mod"),
     ];
@@ -10454,7 +10562,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
-   * Main score column value (prefer classic/legacy when osu shows it; else lazer total).
+   * Main score column value: site `/beatmaps/.../scores` uses `classic_total_score`;
+   * fall back to legacy / lazer totals.
    * @param {object} s
    */
   function leaderboardTableScoreNumber(s) {
@@ -10462,13 +10571,13 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       const x = Number(v);
       return Number.isFinite(x) && x > 0 ? x : 0;
     };
-    const leg = nz(s.legacy_total_score);
-    const tot = nz(s.total_score);
     const cls = nz(s.classic_total_score);
-    const raw = nz(s.score);
-    if (leg) return leg;
-    if (tot) return tot;
     if (cls) return cls;
+    const leg = nz(s.legacy_total_score);
+    if (leg) return leg;
+    const tot = nz(s.total_score);
+    if (tot) return tot;
+    const raw = nz(s.score);
     if (raw) return raw;
     const xTot = Number(s.total_score);
     if (Number.isFinite(xTot)) return xTot;
@@ -10992,14 +11101,96 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
-   * PP decimals, hit-stat header/cell colors, and PP column tint for the main HTML table
-   * (native osu-web rows and our API-rendered rows).
+   * @param {HTMLElement} row
+   * @returns {boolean}
+   */
+  function beatmapScoreboardRowNeedsRateEditMarkFromDom(row) {
+    for (const extSpan of row.querySelectorAll(
+      ".beatmap-scoreboard-table__mods .mod__extender span",
+    )) {
+      const modEl = extSpan.closest(".mod");
+      const icon = modEl?.querySelector(".mod__icon[data-acronym]");
+      const acronym = (icon?.getAttribute("data-acronym") ?? "")
+        .trim()
+        .toUpperCase();
+      if (
+        acronym !== "DT" &&
+        acronym !== "NC" &&
+        acronym !== "HT" &&
+        acronym !== "DC"
+      ) {
+        continue;
+      }
+      const rate = parseFloat(
+        (extSpan.textContent ?? "").replace(/[^\d.]/g, ""),
+      );
+      if (
+        Number.isFinite(rate) &&
+        shouldShowScoreboardModSpeedIndicator(acronym, rate)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * @param {HTMLElement} row
+   * @returns {boolean}
+   */
+  function beatmapScoreboardRowIsApiInjectedForRateMarking(row) {
+    return (
+      row.hasAttribute(WILDCARD_MERGED_ROW_ATTR) ||
+      row.hasAttribute(SCORE_USER_SEARCH_RESULT_ATTR) ||
+      row.hasAttribute(EXTENDED_SCORE_ROW_ATTR)
+    );
+  }
+
+  /**
+   * Scan all visible leaderboard body rows and mark those with a custom rate
+   * using RATE_EDIT_ROW_ATTR.  For each .mod__extender span, walks up to the
+   * nearest .mod container to read data-acronym from the sibling .mod__icon,
+   * then delegates to shouldShowScoreboardModSpeedIndicator.  Only DT/NC/HT/DC
+   * extenders are considered — DA difficulty-adjust extenders (e.g. "AR9") are
+   * intentionally ignored.  Works for both native osu-web rows and our injected
+   * rows; neither requires the .beatmap-scoreboard-mod wrapper class.
+   * Idempotent DOM writes; clears stale RATE_EDIT_ROW_ATTR on native rows only
+   * so API-built rows are not stripped when DOM parsing misses an extender.
+   * @param {HTMLElement|null|undefined} scoreboardRoot
+   */
+  function applyRateEditMarkingToScoreboardRows(scoreboardRoot) {
+    if (!(scoreboardRoot instanceof HTMLElement)) return;
+    const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
+    if (!(realTable instanceof HTMLTableElement)) return;
+    const tbody = realTable.querySelector(
+      "tbody.beatmap-scoreboard-table__body",
+    );
+    if (!tbody) return;
+    for (const row of tbody.querySelectorAll(
+      "tr.beatmap-scoreboard-table__body-row",
+    )) {
+      if (!(row instanceof HTMLElement)) continue;
+      if (row.style.display === "none") continue;
+      const needs = beatmapScoreboardRowNeedsRateEditMarkFromDom(row);
+      const has = row.hasAttribute(RATE_EDIT_ROW_ATTR);
+      if (needs) {
+        if (!has) row.setAttribute(RATE_EDIT_ROW_ATTR, "1");
+      } else if (has && !beatmapScoreboardRowIsApiInjectedForRateMarking(row)) {
+        row.removeAttribute(RATE_EDIT_ROW_ATTR);
+      }
+    }
+  }
+
+  /**
+   * PP decimals, hit-stat header/cell colors, PP column tint, and rate-edit dimming
+   * for the main HTML table (native osu-web rows and our API-rendered rows).
    * @param {HTMLElement|null|undefined} scoreboardRoot
    */
   function refreshBeatmapScoreboardTableEnhancements(scoreboardRoot) {
     syncBeatmapScoreboardPpDecimals(scoreboardRoot);
     syncBeatmapScoreboardHitstatColors(scoreboardRoot);
     syncBeatmapScoreboardPpValueColor(scoreboardRoot);
+    applyRateEditMarkingToScoreboardRows(scoreboardRoot);
   }
 
   /**
@@ -11010,12 +11201,27 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    */
   function startBeatmapScoreboardTableEnhancementsLive(pathRe) {
     let debounceTimer = 0;
+    let refreshRunning = false;
+    let pendingRefresh = false;
     const run = () => {
       debounceTimer = 0;
       if (!pathRe.test(location.pathname)) return;
-      const root = findBeatmapScoreboardRoot();
-      if (root instanceof HTMLElement) {
-        refreshBeatmapScoreboardTableEnhancements(root);
+      if (refreshRunning) {
+        pendingRefresh = true;
+        return;
+      }
+      refreshRunning = true;
+      try {
+        const root = findBeatmapScoreboardRoot();
+        if (root instanceof HTMLElement) {
+          refreshBeatmapScoreboardTableEnhancements(root);
+        }
+      } finally {
+        refreshRunning = false;
+        if (pendingRefresh) {
+          pendingRefresh = false;
+          schedule();
+        }
       }
     };
     const schedule = () => {
@@ -11257,9 +11463,95 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     return map[a] ?? a;
   }
 
-  function patchBeatmapScoreboardModButton(btn, acronym) {
+  /**
+   * @param {number} speedChange
+   * @returns {string}
+   */
+  function formatScoreboardModSpeedRate(speedChange) {
+    const x = Number(speedChange);
+    if (!Number.isFinite(x) || x <= 0) return "";
+    const rounded = Math.round(x * 100) / 100;
+    let t = String(rounded);
+    if (t.includes(".")) t = t.replace(/\.?0+$/, "");
+    return `${t}×`;
+  }
+
+  const SCOREBOARD_MOD_DEFAULT_SPEED_UP = 1.5;
+  const SCOREBOARD_MOD_DEFAULT_SPEED_DOWN = 0.75;
+  const SCOREBOARD_MOD_SPEED_EPS = 0.005;
+
+  /**
+   * Show rate only when API sends `speed_change` and it differs from osu defaults
+   * (1.5× DT/NC, 0.75× HT/DC).
+   * @param {string} acronym
+   * @param {number} speed
+   * @returns {boolean}
+   */
+  function shouldShowScoreboardModSpeedIndicator(acronym, speed) {
+    if (!Number.isFinite(speed) || speed <= 0) return false;
+    const ac = String(acronym || "").trim().toUpperCase();
+    if (ac === "HT" || ac === "DC") {
+      return (
+        Math.abs(speed - SCOREBOARD_MOD_DEFAULT_SPEED_DOWN) >
+        SCOREBOARD_MOD_SPEED_EPS
+      );
+    }
+    if (ac === "DT" || ac === "NC") {
+      return (
+        Math.abs(speed - SCOREBOARD_MOD_DEFAULT_SPEED_UP) >
+        SCOREBOARD_MOD_SPEED_EPS
+      );
+    }
+    return (
+      Math.abs(speed - SCOREBOARD_MOD_DEFAULT_SPEED_UP) > SCOREBOARD_MOD_SPEED_EPS
+    );
+  }
+
+  /**
+   * @param {unknown} mod  API mod object with optional `settings.speed_change`
+   * @returns {number}  finite speed, or NaN if absent
+   */
+  function speedChangeFromScoreMod(mod) {
+    if (mod == null || typeof mod !== "object") return NaN;
+    const sc = /** @type {{ settings?: { speed_change?: unknown } }} */ (mod)
+      .settings?.speed_change;
+    const x = Number(sc);
+    return Number.isFinite(x) && x > 0 ? x : NaN;
+  }
+
+  /**
+   * Returns true when the score contains a mod whose speed_change differs from
+   * that mod's default rate (1.50× for DT/NC, 0.75× for HT/DC, 1.00× otherwise).
+   * @param {object} score
+   * @returns {boolean}
+   */
+  function scoreHasNonstandardRate(score) {
+    const mods = /** @type {unknown[]} */ (score?.mods ?? []);
+    for (const m of mods) {
+      const ac =
+        typeof m === "string"
+          ? m
+          : /** @type {{ acronym?: unknown }} */ (m)?.acronym;
+      const spd = speedChangeFromScoreMod(m);
+      if (
+        Number.isFinite(spd) &&
+        shouldShowScoreboardModSpeedIndicator(String(ac ?? ""), spd)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * @param {HTMLElement} btn
+   * @param {string} acronym
+   * @param {{ speedChange?: number }|undefined} [opts]
+   */
+  function patchBeatmapScoreboardModButton(btn, acronym, opts) {
     const mi = OsuExpertPlus.modIconsAsAcronyms;
     mi?.stripOepModAcronymFromClonedMod?.(btn);
+    btn.removeAttribute("data-oep-mod-hidden");
     const safe = String(acronym).replace(/[^A-Za-z0-9]/g, "") || "X";
     const full = modFullName(acronym);
     const icon = btn.querySelector(".mod__icon");
@@ -11295,27 +11587,49 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       target.classList.add(typeClass);
     }
 
-    // Mirror `user-profile` patch: strip hover/extra UI remnants.
+    // Mirror `user-profile` patch: strip hover/extra UI remnants; re-add extender for custom rate.
     btn.querySelector(".mod__extender")?.remove();
     btn.querySelector(".mod__customised-indicator")?.remove();
-    btn.title = full;
-    btn.setAttribute("aria-label", full);
-    btn.setAttribute("data-original-title", full);
-    btn.setAttribute("data-qtip", full);
-    btn.setAttribute("data-tooltip", full);
+    const sc = opts?.speedChange;
+    const showRate =
+      Number.isFinite(sc) && shouldShowScoreboardModSpeedIndicator(acronym, sc);
+    const rateStr = showRate ? formatScoreboardModSpeedRate(sc) : "";
+    const fullLabel = rateStr ? `${full} (${rateStr})` : full;
+    const modInner =
+      (btn.querySelector(".mod") instanceof HTMLElement
+        ? btn.querySelector(".mod")
+        : modRoot) ?? btn;
+    if (rateStr && modInner instanceof HTMLElement) {
+      const ext = document.createElement("div");
+      ext.className = "mod__extender";
+      const sp = document.createElement("span");
+      sp.textContent = rateStr;
+      ext.appendChild(sp);
+      const iconEl = modInner.querySelector(".mod__icon");
+      if (iconEl instanceof HTMLElement) {
+        iconEl.insertAdjacentElement("afterend", ext);
+      } else {
+        modInner.appendChild(ext);
+      }
+    }
+    btn.title = fullLabel;
+    btn.setAttribute("aria-label", fullLabel);
+    btn.setAttribute("data-original-title", fullLabel);
+    btn.setAttribute("data-qtip", fullLabel);
+    btn.setAttribute("data-tooltip", fullLabel);
     if (modRoot instanceof HTMLElement) {
-      modRoot.title = full;
+      modRoot.title = fullLabel;
       // osu-web's tooltip is wired to the inner `.mod` element via `data-orig-title`.
       // (In the native DOM: `.mod` has `data-orig-title="Easy"` even when the button
       // wrapper has the correct `data-qtip`.)
-      modRoot.setAttribute("data-orig-title", full);
+      modRoot.setAttribute("data-orig-title", fullLabel);
     }
     if (icon instanceof HTMLElement) {
-      icon.title = full;
-      icon.setAttribute("aria-label", full);
-      icon.setAttribute("data-original-title", full);
-      icon.setAttribute("data-qtip", full);
-      icon.setAttribute("data-tooltip", full);
+      icon.title = fullLabel;
+      icon.setAttribute("aria-label", fullLabel);
+      icon.setAttribute("data-original-title", fullLabel);
+      icon.setAttribute("data-qtip", fullLabel);
+      icon.setAttribute("data-tooltip", fullLabel);
     }
 
     // Prevent selection-actions (filtering) but allow hover/tooltips.
@@ -11348,7 +11662,14 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         const ac = typeof m === "string" ? m : m?.acronym;
         if (!ac) continue;
         const btn = /** @type {HTMLElement} */ (modTemplateBtn.cloneNode(true));
-        patchBeatmapScoreboardModButton(btn, ac);
+        const spd = speedChangeFromScoreMod(m);
+        patchBeatmapScoreboardModButton(
+          btn,
+          ac,
+          Number.isFinite(spd) && shouldShowScoreboardModSpeedIndicator(ac, spd)
+            ? { speedChange: spd }
+            : undefined,
+        );
         wrap.appendChild(btn);
       }
     } else if (list.length) {
@@ -11358,7 +11679,27 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         const safe = String(ac).replace(/[^A-Za-z0-9]/g, "") || "X";
         const typeClass =
           mi?.modTypeClassForAcronym?.(ac) || "mod--type-Automation";
-        const full = modFullName(ac);
+        let full = modFullName(ac);
+        const spd = speedChangeFromScoreMod(m);
+        const showRate =
+          Number.isFinite(spd) && shouldShowScoreboardModSpeedIndicator(ac, spd);
+        const rateStr = showRate ? formatScoreboardModSpeedRate(spd) : "";
+        if (rateStr) full = `${full} (${rateStr})`;
+        const iconEl = el("div", {
+          class: `mod__icon mod__icon--${safe}`,
+          "data-acronym": ac,
+          title: full,
+          "aria-label": full,
+          "data-original-title": full,
+          "data-qtip": full,
+          "data-tooltip": full,
+        });
+        const modInnerKids = [iconEl];
+        if (rateStr) {
+          modInnerKids.push(
+            el("div", { class: "mod__extender" }, el("span", {}, rateStr)),
+          );
+        }
         const modEl = /** @type {HTMLElement} */ (
           el(
             "div",
@@ -11370,15 +11711,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
               "data-qtip": full,
               "data-tooltip": full,
             },
-            el("div", {
-              class: `mod__icon mod__icon--${safe}`,
-              "data-acronym": ac,
-              title: full,
-              "aria-label": full,
-              "data-original-title": full,
-              "data-qtip": full,
-              "data-tooltip": full,
-            }),
+            ...modInnerKids,
           )
         );
         modEl.addEventListener(
