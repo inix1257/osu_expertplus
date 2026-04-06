@@ -22,6 +22,7 @@ OsuExpertPlus.pages.beatmapsetsListing = (() => {
       OsuExpertPlus.beatmapCardStats.startFullBeatmapStatNumbers(settings),
     );
     bag.add(OsuExpertPlus.beatmapCardExtra.start(settings));
+    bag.add(OsuExpertPlus.beatmapsetsListingMode.startPageBehavior());
 
     return () => bag.dispose();
   }

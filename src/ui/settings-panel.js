@@ -255,6 +255,43 @@ OsuExpertPlus.settingsPanel = (() => {
       line-height: 1.45;
       color: hsl(var(--hsl-l2, 0 0% 72%));
       text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .osu-expertplus-panel__footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+    }
+    .osu-expertplus-panel__footer-reset {
+      margin: 0;
+      padding: 3px 9px;
+      border: 1px solid hsl(var(--hsl-b5, 333 18% 30%));
+      border-radius: 5px;
+      background: hsl(var(--hsl-b4, 333 18% 18%));
+      color: hsl(var(--hsl-l2, 0 0% 72%));
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      line-height: 1.3;
+      cursor: pointer;
+      transition:
+        background 140ms ease,
+        border-color 140ms ease,
+        color 140ms ease;
+    }
+    .osu-expertplus-panel__footer-reset:hover {
+      background: hsl(var(--hsl-b5, 333 18% 24%));
+      border-color: hsl(var(--hsl-b5, 333 18% 38%));
+      color: hsl(var(--hsl-l1, 0 0% 88%));
+    }
+    .osu-expertplus-panel__footer-reset:focus-visible {
+      outline: 1px solid hsl(var(--hsl-pink, 333 100% 65%));
+      outline-offset: 2px;
     }
     .osu-expertplus-panel__footer a {
       color: hsl(var(--hsl-c2, 333 60% 70%));
@@ -613,6 +650,7 @@ OsuExpertPlus.settingsPanel = (() => {
       try {
         await auth.getToken();
         setStatus("Credentials saved & verified. API v2 active.", "ok");
+        location.reload();
       } catch (e) {
         setStatus(
           `Failed: ${e.message.replace("[osu! Expert+] ", "")}`,
@@ -623,6 +661,7 @@ OsuExpertPlus.settingsPanel = (() => {
         syncOAuthHintVisibility();
         refreshModdedStarRatingRowLock();
         onConfiguredChange?.();
+        window.dispatchEvent(new Event("oep-osu-api-credentials-changed"));
       }
     });
 
@@ -636,6 +675,7 @@ OsuExpertPlus.settingsPanel = (() => {
       syncOAuthHintVisibility();
       refreshModdedStarRatingRowLock();
       onConfiguredChange?.();
+      window.dispatchEvent(new Event("oep-osu-api-credentials-changed"));
     });
 
     const hint = el("div", { class: "osu-expertplus-panel__creds-hint" });
@@ -938,31 +978,57 @@ OsuExpertPlus.settingsPanel = (() => {
       rows.push(buildSection(groupName, groupRows));
     }
 
+    const resetDefaultsBtn = el(
+      "button",
+      {
+        type: "button",
+        class: "osu-expertplus-panel__footer-reset",
+        title: "Set every toggle above to its default (API keys are not changed)",
+      },
+      "Reset to defaults",
+    );
+    resetDefaultsBtn.addEventListener("click", () => {
+      if (
+        !window.confirm(
+          "Reset all Expert+ options to their defaults? osu! and OMDB API keys will not be changed.",
+        )
+      ) {
+        return;
+      }
+      settings.resetPanelTogglesToDefaults();
+      refreshModdedStarRatingRowLock();
+    });
+
     const footer = el(
       "div",
       { class: "osu-expertplus-panel__footer" },
+      resetDefaultsBtn,
       el(
-        "a",
-        {
-          href: "https://github.com/inix1257/osu_expertplus",
-          target: "_blank",
-          rel: "noopener noreferrer",
-        },
-        "Source code",
-      ),
-      el(
-        "span",
-        { class: "osu-expertplus-panel__footer-sep", "aria-hidden": "true" },
-        "·",
-      ),
-      el(
-        "a",
-        {
-          href: "https://osu.ppy.sh/users/2688581",
-          target: "_blank",
-          rel: "noopener noreferrer",
-        },
-        "Developer",
+        "div",
+        { class: "osu-expertplus-panel__footer-links" },
+        el(
+          "a",
+          {
+            href: "https://github.com/inix1257/osu_expertplus",
+            target: "_blank",
+            rel: "noopener noreferrer",
+          },
+          "Source code",
+        ),
+        el(
+          "span",
+          { class: "osu-expertplus-panel__footer-sep", "aria-hidden": "true" },
+          "·",
+        ),
+        el(
+          "a",
+          {
+            href: "https://osu.ppy.sh/users/2688581",
+            target: "_blank",
+            rel: "noopener noreferrer",
+          },
+          "Developer",
+        ),
       ),
     );
 

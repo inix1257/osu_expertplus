@@ -1834,7 +1834,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     });
 
     canvasHost.addEventListener("click", (ev) => {
-      // Odd `detail` only: double-click yields play then ignore 2nd click; triple-click can play–pause–play.
+      // Only odd `detail` (1st, 3rd, …): double-click plays once; triple-click can play-pause-play.
       if ((ev.detail & 1) !== 1) return;
       togglePlaybackFromCanvas();
     });

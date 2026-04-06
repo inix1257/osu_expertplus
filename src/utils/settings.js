@@ -22,9 +22,9 @@ OsuExpertPlus.settings = (() => {
     },
     {
       id: "userProfile.beatmapCardDifficultyRange",
-      label: "Star rating range on beatmap cards",
+      label: "Star rating on beatmap cards",
       description:
-        "On user profiles and on /beatmapsets: after each mode’s difficulty dots, shows min–max nomod star rating as coloured pills (from cached `difficulty_rating` per beatmap; same JSON sources as extra metadata).",
+        "On user profiles and on /beatmapsets: after each mode’s difficulty dots, shows the highest nomod star rating as a coloured pill (Font Awesome up-chevron, star, and value; from cached `difficulty_rating` per beatmap; same JSON sources as extra metadata).",
       group: "Beatmap Card",
       default: true,
     },
@@ -37,10 +37,10 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
-      id: "userProfile.scoreListDetails",
-      label: "PP decimals & hit statistics on scores",
+      id: "userProfile.scoreHitStatistics",
+      label: "Hit statistics on profile scores",
       description:
-        "On best performance, pinned, and first place lists: shows pp to two decimal places (e.g. 610.27pp) and a colour-coded hit row (great / ok / meh / miss).",
+        "On best performance, pinned, first place, and Expert+ Recent scores (Historical): adds a colour-coded hit row (great / ok / meh / miss). Beatmapset leaderboards keep hit-stat colours regardless of this option.",
       group: "User Profile",
       default: true,
     },
@@ -51,22 +51,6 @@ OsuExpertPlus.settings = (() => {
         "Fetches and displays the accurate star rating with mods applied next to each difficulty name. Requires API credentials.",
       group: "User Profile",
       default: true,
-    },
-    {
-      id: "userProfile.modIconsAsAcronyms",
-      label: "Mod acronyms instead of icons",
-      description:
-        "Shows mod letters (e.g. HD, DT) on score rows and beatmap leaderboards instead of sprite icons.",
-      group: "User Profile",
-      default: false,
-    },
-    {
-      id: "userProfile.hideClMod",
-      label: "Hide Classic (CL) mod",
-      description:
-        "Hides the Classic (CL) mod on score rows and leaderboards. Works whether mods are shown as icons or acronyms.",
-      group: "User Profile",
-      default: false,
     },
     {
       id: "userProfile.scoreCardBackgrounds",
@@ -80,8 +64,48 @@ OsuExpertPlus.settings = (() => {
       id: "userProfile.scoreCardPlaceNumber",
       label: "Score place number on rank cards",
       description:
-        "Displays the position (#1, #2, …) before each score card's rank grade in the Ranks section.",
+        "On Best performance only: shows #1, #2, … before the beatmap title on each score row in the Ranks section.",
       group: "User Profile",
+      default: true,
+    },
+    {
+      id: "scores.periodHighlight",
+      label: "Score age period highlight",
+      description:
+        "On user profile Top Ranks only: bar to highlight scores by how recent they are (weeks through years), with reverse and reset.",
+      group: "User Profile",
+      default: true,
+    },
+    {
+      id: "userProfile.scorePpDecimals",
+      label: "PP decimals on scores",
+      description:
+        "On profile best performance, pinned, first place, Expert+ Recent (Historical), and on beatmapset leaderboards: shows pp to two decimal places (e.g. 610.27pp) instead of rounding to an integer in the visible text (full value stays in the tooltip/title where the site provides it).",
+      group: "Scores",
+      default: true,
+    },
+    {
+      id: "userProfile.modIconsAsAcronyms",
+      label: "Mod acronyms instead of icons",
+      description:
+        "Shows mod letters (e.g. HD, DT) on score rows and beatmap leaderboards instead of sprite icons.",
+      group: "Scores",
+      default: false,
+    },
+    {
+      id: "userProfile.hideClMod",
+      label: "Hide Classic (CL) mod",
+      description:
+        "Hides the Classic (CL) mod on score rows and leaderboards. Works whether mods are shown as icons or acronyms.",
+      group: "Scores",
+      default: false,
+    },
+    {
+      id: "beatmapDetail.metadataDescriptionModalButtons",
+      label: "Full description & metadata buttons",
+      description:
+        "On beatmapset pages, adds the \"Show metadata\" button under the artist and the \"Full description\" button in the info panel (each opens a modal).",
+      group: "Beatmap Detail",
       default: true,
     },
     {
@@ -109,6 +133,14 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
+      id: "beatmapDetail.beatmapsetPreviewAudioButton",
+      label: "Open preview audio button on beatmapset pages",
+      description:
+        "On beatmapset info pages, adds a square header button (with icon) that opens the official preview MP3 at b.ppy.sh in a new tab.",
+      group: "Beatmap Detail",
+      default: false,
+    },
+    {
       id: "beatmapDetail.beatconnectDownloadButton",
       label: "Beatconnect download on beatmapset pages",
       description:
@@ -121,6 +153,22 @@ OsuExpertPlus.settings = (() => {
       label: "Load up to 100 scores on beatmap leaderboard",
       description:
         "On beatmap scoreboards, bumps the `/beatmaps/{id}/scores` API limit from osu!’s default (50) to 100 so the first page loads more rows at once. Turn off to use the site default.",
+      group: "Beatmap Detail",
+      default: true,
+    },
+    {
+      id: "beatmapDetail.scoreboardPlayerLookup",
+      label: "Leaderboard player lookup bar",
+      description:
+        "On beatmapset scoreboards, shows the username field to look up a player’s scores on the current difficulty; results replace the main leaderboard table (same idea as wildcard merge). Requires osu! API OAuth (Client ID + Secret) in Expert+ settings; without credentials the bar stays visible but disabled with a short notice.",
+      group: "Beatmap Detail",
+      default: true,
+    },
+    {
+      id: "beatmapDetail.scoreboardModGrid",
+      label: "Grid layout for scoreboard mod filters",
+      description:
+        "On beatmapset scoreboards, replaces the default horizontal mod strip with Expert+’s grouped grid (stable / Lazer, difficulty rows, reset, collapsible “Mod filters”). Turn off to use osu!’s original mod strip layout.",
       group: "Beatmap Detail",
       default: true,
     },
@@ -145,6 +193,21 @@ OsuExpertPlus.settings = (() => {
     GM_setValue("userProfile.scoreListDetails", on(pp) && on(st));
     GM_deleteValue("userProfile.ppDecimals");
     GM_deleteValue("userProfile.bestScoreStats");
+    GM_setValue(flag, true);
+  })();
+
+  (function migrateScoreListDetailsSplit() {
+    const flag = "userProfile._oepScoreListDetailsSplitMigrated";
+    if (GM_getValue(flag, false)) return;
+    const unset = "__oep_unset__";
+    const legacy = "userProfile.scoreListDetails";
+    const v = GM_getValue(legacy, unset);
+    if (v !== unset) {
+      const on = Boolean(v);
+      GM_setValue("userProfile.scorePpDecimals", on);
+      GM_setValue("userProfile.scoreHitStatistics", on);
+      GM_deleteValue(legacy);
+    }
     GM_setValue(flag, true);
   })();
 
@@ -216,24 +279,46 @@ OsuExpertPlus.settings = (() => {
     return () => _listeners.get(id)?.delete(fn);
   }
 
+  /** Revert every option listed in the settings panel to its registered default. */
+  function resetPanelTogglesToDefaults() {
+    for (const f of FEATURES) {
+      set(f.id, Boolean(f.default));
+    }
+  }
+
   const IDS = Object.freeze({
     ALWAYS_SHOW_STATS: "userProfile.alwaysShowStats",
     BEATMAP_CARD_EXTRA_INFO: "userProfile.beatmapCardExtraInfo",
     BEATMAP_CARD_DIFFICULTY_RANGE: "userProfile.beatmapCardDifficultyRange",
     FULL_BEATMAP_STAT_NUMBERS: "userProfile.fullBeatmapStatNumbers",
-    SCORE_LIST_DETAILS: "userProfile.scoreListDetails",
+    SCORE_PP_DECIMALS: "userProfile.scorePpDecimals",
+    SCORE_HIT_STATISTICS: "userProfile.scoreHitStatistics",
     MODDED_STAR_RATING: "userProfile.moddedStarRating",
     MOD_ICONS_AS_ACRONYMS: "userProfile.modIconsAsAcronyms",
     HIDE_CL_MOD: "userProfile.hideClMod",
     SCORE_CARD_BACKGROUNDS: "userProfile.scoreCardBackgrounds",
     SCORE_CARD_PLACE_NUMBER: "userProfile.scoreCardPlaceNumber",
+    SCORE_PERIOD_HIGHLIGHT: "scores.periodHighlight",
     RECENT_SCORES_SHOW_FAILS: "userProfile.recentScoresShowFails",
+    METADATA_DESCRIPTION_MODAL_BUTTONS:
+      "beatmapDetail.metadataDescriptionModalButtons",
     DISCUSSION_DEFAULT_TO_TOTAL: "beatmapDetail.discussionDefaultToTotal",
     OMDB_BEATMAPSET_RATINGS: "beatmapDetail.omdbBeatmapsetRatings",
     BEATMAP_PREVIEW: "beatmapDetail.beatmapPreview",
+    BEATMAPSET_PREVIEW_AUDIO_BUTTON:
+      "beatmapDetail.beatmapsetPreviewAudioButton",
     BEATCONNECT_DOWNLOAD_BUTTON: "beatmapDetail.beatconnectDownloadButton",
     API_EXTENDED_LEADERBOARD: "beatmapDetail.apiExtendedLeaderboard",
+    SCOREBOARD_MOD_GRID: "beatmapDetail.scoreboardModGrid",
+    SCOREBOARD_PLAYER_LOOKUP: "beatmapDetail.scoreboardPlayerLookup",
   });
 
-  return { IDS, getFeatures, isEnabled, set, onChange };
+  return {
+    IDS,
+    getFeatures,
+    isEnabled,
+    set,
+    onChange,
+    resetPanelTogglesToDefaults,
+  };
 })();

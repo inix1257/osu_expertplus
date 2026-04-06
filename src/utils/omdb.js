@@ -27,7 +27,8 @@ OsuExpertPlus.omdb = (() => {
   }
 
   /**
-   * GET /api/set/{beatmapset_id} — returns per-beatmap rating rows or null if no API key.
+   * GET /api/set/{beatmapset_id} — per-beatmap rating rows or null if no API key.
+   * A difficulty from this set may be omitted from the array when it is blacklisted on OMDB.
    * @param {string|number} beatmapsetId
    * @returns {Promise<object[]|null>}
    */

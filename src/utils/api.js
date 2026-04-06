@@ -127,6 +127,77 @@ OsuExpertPlus.api = (() => {
   }
 
   /**
+   * GET /beatmaps/{beatmap}/scores/users/{user} — a user's score on a beatmap
+   * ([Get a User Beatmap score](https://osu.ppy.sh/docs/#get-a-user-beatmap-score)).
+   * Response shape: BeatmapUserScore — `{ position, score }`.
+   *
+   * @param {string|number} beatmapId
+   * @param {string|number} userId
+   * @param {string|{ mode?: string, legacy_only?: number, mods?: string[] }} [modeOrQuery]
+   *        Ruleset string (e.g. `'osu'`), or query params matching the docs.
+   */
+  function getBeatmapUserScore(beatmapId, userId, modeOrQuery) {
+    /** @type {Record<string, string|number|string[]>} */
+    const params = {};
+    if (typeof modeOrQuery === "string") {
+      if (modeOrQuery) params.mode = modeOrQuery;
+    } else if (modeOrQuery && typeof modeOrQuery === "object") {
+      if (modeOrQuery.mode) params.mode = modeOrQuery.mode;
+      if (modeOrQuery.legacy_only != null) {
+        params.legacy_only = modeOrQuery.legacy_only;
+      }
+      if (Array.isArray(modeOrQuery.mods) && modeOrQuery.mods.length) {
+        params.mods = modeOrQuery.mods;
+      }
+    }
+    return get(`${BASE}/beatmaps/${beatmapId}/scores/users/${userId}`, params);
+  }
+
+  /**
+   * GET /beatmaps/{beatmap}/scores/users/{user}/all — all of a user’s scores on
+   * a beatmap ([Get a User Beatmap scores](https://osu.ppy.sh/docs/#get-a-user-beatmap-scores)).
+   * Response: `{ scores: Score[] }`.
+   *
+   * @param {string|number} beatmapId
+   * @param {string|number} userId
+   * @param {{ ruleset?: string, mode?: string, legacy_only?: number }} [query]
+   */
+  function getBeatmapUserScoresAll(beatmapId, userId, query) {
+    /** @type {Record<string, string|number>} */
+    const params = {};
+    if (query && typeof query === "object") {
+      if (query.ruleset) params.ruleset = query.ruleset;
+      if (query.mode) params.mode = query.mode;
+      if (query.legacy_only != null) params.legacy_only = query.legacy_only;
+    }
+    return get(
+      `${BASE}/beatmaps/${beatmapId}/scores/users/${userId}/all`,
+      params,
+    );
+  }
+
+  /**
+   * GET /beatmaps/{beatmap}/scores — top scores for a beatmap.
+   * @param {string|number} beatmapId
+   * @param {{ mode?: string, mods?: string[], legacy_only?: number, type?: string, limit?: number }} [query]
+   * @returns {Promise<{ scores: object[] }>}
+   */
+  function getBeatmapScores(beatmapId, query) {
+    /** @type {Record<string, string|number|string[]>} */
+    const params = {};
+    if (query && typeof query === "object") {
+      if (query.mode) params.mode = query.mode;
+      if (query.legacy_only != null) params.legacy_only = query.legacy_only;
+      if (query.type) params.type = query.type;
+      if (query.limit != null) params.limit = query.limit;
+      if (Array.isArray(query.mods) && query.mods.length) {
+        params["mods[]"] = query.mods;
+      }
+    }
+    return get(`${BASE}/beatmaps/${beatmapId}/scores`, params);
+  }
+
+  /**
    * POST /beatmaps/{beatmap}/attributes — returns difficulty attributes with
    * the given mods applied, including the modded star_rating.
    *
@@ -163,6 +234,9 @@ OsuExpertPlus.api = (() => {
     searchBeatmapsets,
     getUserBestScores,
     getUserRecentScores,
+    getBeatmapUserScore,
+    getBeatmapUserScoresAll,
+    getBeatmapScores,
     postBeatmapAttributes,
   };
 })();
