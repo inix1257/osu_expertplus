@@ -4,6 +4,8 @@ window.OsuExpertPlus = window.OsuExpertPlus || {};
 
 OsuExpertPlus.api = (() => {
   const BASE = 'https://osu.ppy.sh/api/v2';
+  /** Public site origin (non-`/api/v2` routes). */
+  const SITE_ORIGIN = 'https://osu.ppy.sh';
 
   /**
    * Build fetch headers, injecting a Bearer token when available.
@@ -198,6 +200,53 @@ OsuExpertPlus.api = (() => {
   }
 
   /**
+   * GET https://osu.ppy.sh/beatmaps/{beatmap}/scores — site scoreboard JSON (same
+   * path the webpage uses), not `/api/v2`. Richer / leaderboard-aligned payload
+   * than the API route for some scores. `{beatmap}` is the difficulty id.
+   * @param {string|number} beatmapId
+   * @param {{ mode?: string, mods?: string[], legacy_only?: number, type?: string, limit?: number }} [query]
+   * @returns {Promise<{ scores: object[] }>}
+   */
+  async function getBeatmapScoresWebsite(beatmapId, query) {
+    /** @type {Record<string, string|number|string[]>} */
+    const params = {};
+    if (query && typeof query === 'object') {
+      if (query.mode) params.mode = query.mode;
+      if (query.legacy_only != null) params.legacy_only = query.legacy_only;
+      if (query.type) params.type = query.type;
+      if (query.limit != null) params.limit = query.limit;
+      if (Array.isArray(query.mods) && query.mods.length) {
+        params['mods[]'] = query.mods;
+      }
+    }
+    const usp = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null) continue;
+      if (Array.isArray(value)) {
+        for (const v of value) usp.append(key, String(v));
+      } else {
+        usp.append(key, String(value));
+      }
+    }
+    const qs = usp.toString();
+    const fullUrl = `${SITE_ORIGIN}/beatmaps/${beatmapId}/scores${qs ? `?${qs}` : ''}`;
+
+    const headers = { Accept: 'application/json' };
+    const authHeader = await OsuExpertPlus.auth.getAuthHeader().catch(() => null);
+    if (authHeader) headers['Authorization'] = authHeader;
+
+    const resp = await fetch(fullUrl, { headers, credentials: 'include' });
+    if (!resp.ok) {
+      throw new Error(`[osu! Expert+] ${resp.status}: ${fullUrl}`);
+    }
+    const data = await resp.json();
+    const scores = Array.isArray(data)
+      ? data
+      : data?.scores ?? data?.data?.scores ?? [];
+    return { scores };
+  }
+
+  /**
    * POST /beatmaps/{beatmap}/attributes — returns difficulty attributes with
    * the given mods applied, including the modded star_rating.
    *
@@ -237,6 +286,7 @@ OsuExpertPlus.api = (() => {
     getBeatmapUserScore,
     getBeatmapUserScoresAll,
     getBeatmapScores,
+    getBeatmapScoresWebsite,
     postBeatmapAttributes,
   };
 })();
