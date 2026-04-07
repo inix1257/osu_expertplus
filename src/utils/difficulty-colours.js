@@ -1,6 +1,7 @@
 /**
- * Star difficulty background / text colours — same spectrum as osu-web
+ * Star difficulty background / text colours — aligned with osu-web
  * `getDiffColour` / `getDiffTextColour` (resources/js/utils/beatmap-helper.ts).
+ * Background ramp matches; text ramp above SR 9 is lightened (osu uses black bg there).
  */
 
 "use strict";
@@ -28,8 +29,8 @@ OsuExpertPlus.difficultyColours = (() => {
     "#FF8068",
     "#FF4E6F",
     "#C645B8",
-    "#6563DE",
-    "#18158E",
+    "#B0A8FF",
+    "#E4E2FF",
   ];
 
   function hexToRgb(hex) {
@@ -69,7 +70,7 @@ OsuExpertPlus.difficultyColours = (() => {
   function getDiffTextColour(sr) {
     if (sr < 6.5) return "#000000";
     if (sr < 9) return "#F6F05C";
-    if (sr >= 12.4) return "#18158E";
+    if (sr >= 12.4) return "#E4E2FF";
     for (let i = 0; i < TEXT_SR_DOMAIN.length - 1; i++) {
       const d0 = TEXT_SR_DOMAIN[i];
       const d1 = TEXT_SR_DOMAIN[i + 1];
@@ -84,7 +85,7 @@ OsuExpertPlus.difficultyColours = (() => {
         );
       }
     }
-    return "#18158E";
+    return "#E4E2FF";
   }
 
   return { getDiffColour, getDiffTextColour };

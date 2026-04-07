@@ -13,6 +13,8 @@ OsuExpertPlus.pages.userProfile = (() => {
     waitForStaleElementToLeave,
     manageStyle,
     createCleanupBag,
+    parseLocaleNumber,
+    formatDecimalPp,
   } = OsuExpertPlus.dom;
   const settings = OsuExpertPlus.settings;
   const { IDS } = settings;
@@ -52,7 +54,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     listEl
       .querySelectorAll(".play-detail__pp > span[title]")
       .forEach((span) => {
-        if (span.hasAttribute(PP_DECIMALS_ATTR)) return;
         const full = span.getAttribute("title");
         if (!full) return;
 
@@ -61,11 +62,14 @@ OsuExpertPlus.pages.userProfile = (() => {
         );
         if (!textNode) return;
 
-        const n = parseFloat(String(full).replace(/,/g, ""));
+        const n = parseLocaleNumber(full);
         if (!Number.isFinite(n)) return;
 
+        const expected = formatDecimalPp(n) + "\u200A"; // hair space
+        if (textNode.textContent === expected) return;
+
         span.setAttribute(PP_DECIMALS_ATTR, textNode.textContent.trim());
-        textNode.textContent = n.toFixed(2) + "\u200A"; // hair space
+        textNode.textContent = expected;
       });
   }
 
@@ -573,11 +577,47 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   /**
-   * Identify what type of score section a .play-detail-list belongs to by
-   * inspecting the nearest preceding subsection h3 (osu may insert nodes between h3 and list).
+   * Identify what type of score section a .play-detail-list belongs to.
+   * Uses language-independent structural/positional signals; falls back to
+   * heading text for English.
    * @returns {'pinned'|'best'|'firsts'|null}
    */
   function _getSectionType(listEl) {
+    // "best" always renders pp-weight elements (language-independent)
+    if (
+      listEl.querySelector(".play-detail__pp-weight, .play-detail__weighted-pp")
+    )
+      return "best";
+
+    // show-more-link sibling carries the section key as a BEM class modifier
+    const nextSib = listEl.nextElementSibling;
+    if (
+      nextSib instanceof HTMLElement &&
+      nextSib.classList.contains("show-more-link")
+    ) {
+      if (nextSib.classList.contains("show-more-link--pinned")) return "pinned";
+      if (nextSib.classList.contains("show-more-link--best")) return "best";
+      if (nextSib.classList.contains("show-more-link--firsts")) return "firsts";
+    }
+
+    // position relative to the structurally identified "best" list within
+    // top_ranks (osu-web always renders pinned → best → firsts)
+    const topRanksPage = listEl.closest('[data-page-id="top_ranks"]');
+    if (topRanksPage) {
+      const allLists = Array.from(
+        topRanksPage.querySelectorAll(".play-detail-list"),
+      );
+      const bestIdx = allLists.findIndex((el) =>
+        el.querySelector(".play-detail__pp-weight, .play-detail__weighted-pp"),
+      );
+      if (bestIdx >= 0) {
+        const idx = allLists.indexOf(listEl);
+        if (idx < bestIdx) return "pinned";
+        if (idx > bestIdx) return "firsts";
+      }
+    }
+
+    // heading text fallback (English)
     let n = listEl.previousElementSibling;
     while (n) {
       if (
@@ -1273,6 +1313,10 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
       await Promise.all(scoreSections.map(_loadAndApplyStats));
+      // Re-apply in case a locale re-render overwrote decimals during the await.
+      if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) {
+        scoreSections.forEach(({ listEl }) => applyPpDecimals(listEl));
+      }
     }
 
     // Per-section MutationObserver for "load more" rows.
@@ -1294,7 +1338,26 @@ OsuExpertPlus.pages.userProfile = (() => {
           }
           return false;
         });
-        if (!hasNewRows) return;
+
+        // Detect when the site re-renders (e.g. after async locale load) and
+        // patches pp text nodes back to integer values via characterData mutations,
+        // bypassing the childList check above.
+        const hasPpDecimalOverwrite =
+          !hasNewRows &&
+          settings.isEnabled(SCORE_PP_DECIMALS_ID) &&
+          mutations.some((m) => {
+            if (m.type !== "characterData") return false;
+            const span = m.target.parentElement;
+            if (!(span instanceof HTMLSpanElement)) return false;
+            const titleAttr = span.getAttribute("title");
+            if (!titleAttr || !span.parentElement?.matches(".play-detail__pp"))
+              return false;
+            const n = parseLocaleNumber(titleAttr);
+            if (!Number.isFinite(n)) return false;
+            return m.target.nodeValue !== formatDecimalPp(n) + "\u200A";
+          });
+
+        if (!hasNewRows && !hasPpDecimalOverwrite) return;
 
         sectionObsBusy = true;
         try {
@@ -1332,6 +1395,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       obs.observe(listEl, {
         childList: true,
         subtree: true,
+        characterData: true,
       });
       cleanupFns.push(() => obs.disconnect());
 
@@ -1752,7 +1816,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       const showPpDecimals = settings.isEnabled(SCORE_PP_DECIMALS_ID);
       const shown = Number.isFinite(rawN)
         ? showPpDecimals
-          ? rawN.toFixed(2)
+          ? formatDecimalPp(rawN)
           : String(Math.round(rawN))
         : raw;
       ppInner = el(
@@ -5737,6 +5801,9 @@ OsuExpertPlus.pages.userProfile = (() => {
   const CONTENTS_REORDER_ANCHOR_ATTR = "data-oep-contents-reorder-anchor";
   const CONTENTS_REORDER_DRAGGING_CLASS = "oep-contents-reorder--dragging";
   const CONTENTS_REORDER_DRAGOVER_CLASS = "oep-contents-reorder--dragover";
+  const CONTENTS_REORDER_DROP_BEFORE_CLASS = "oep-contents-reorder--drop-before";
+  const CONTENTS_REORDER_DROP_AFTER_CLASS = "oep-contents-reorder--drop-after";
+  const CONTENTS_REORDER_GHOST_CLASS = "oep-contents-reorder--ghost";
   const CONTENTS_REORDER_DRAG_THRESHOLD_PX = 12;
 
   const CONTENTS_REORDER_CSS = `
@@ -5747,12 +5814,32 @@ OsuExpertPlus.pages.userProfile = (() => {
       align-items: center;
     }
     a[${CONTENTS_REORDER_ANCHOR_ATTR}].${CONTENTS_REORDER_DRAGGING_CLASS} {
-      opacity: 0.7;
+      opacity: 0 !important;
       cursor: grabbing;
+      pointer-events: none;
     }
-    a[${CONTENTS_REORDER_ANCHOR_ATTR}].${CONTENTS_REORDER_DRAGOVER_CLASS} {
-      outline: 1px dashed currentColor;
-      outline-offset: 2px;
+    a[${CONTENTS_REORDER_ANCHOR_ATTR}].${CONTENTS_REORDER_DROP_BEFORE_CLASS} {
+      box-shadow: -3px 0 0 0 hsl(var(--hsl-c1));
+      border-radius: 0 5px 5px 0;
+    }
+    a[${CONTENTS_REORDER_ANCHOR_ATTR}].${CONTENTS_REORDER_DROP_AFTER_CLASS} {
+      box-shadow: 3px 0 0 0 hsl(var(--hsl-c1));
+      border-radius: 5px 0 0 5px;
+    }
+    .${CONTENTS_REORDER_GHOST_CLASS} {
+      position: fixed;
+      z-index: 9999;
+      pointer-events: none;
+      padding: 0.22em 0.5em;
+      border-radius: 5px;
+      background-color: rgba(255, 255, 255, 0.14);
+      color: hsl(var(--hsl-l1));
+      white-space: nowrap;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+      user-select: none;
+      transform: translate(10px, -50%);
+      font-size: 0.875em;
+      opacity: 0.95;
     }
   `;
 
@@ -5957,6 +6044,10 @@ OsuExpertPlus.pages.userProfile = (() => {
     }
     h3.${SUBSECTION_TITLE_CLASS}.title.title--page-extra-small::before {
       z-index: 0;
+      transition: opacity 120ms ease;
+    }
+    h3.${SUBSECTION_TITLE_CLASS}.${SUBSECTION_TITLE_COLLAPSED_CLASS}.title.title--page-extra-small::before {
+      opacity: ${SUBSECTION_COLLAPSED_DIM_OPACITY};
     }
     h3.${SUBSECTION_TITLE_CLASS}.title.title--page-extra-small::after {
       content: "";
@@ -6098,6 +6189,59 @@ OsuExpertPlus.pages.userProfile = (() => {
     return slug;
   }
 
+  const SUBSECTION_SHOW_MORE_NAMED_MODIFIERS = new Set([
+    "pinned",
+    "best",
+    "firsts",
+    "recent",
+  ]);
+  const SUBSECTION_SHOW_MORE_SKIP_MODIFIERS = new Set(["loading"]);
+
+  /**
+   * osu-web PlayDetailList sets ShowMoreLink modifiers to pinned / best / firsts / recent
+   * (language-independent BEM classes). Other pages use generic modifiers; those fall back to
+   * index-based keys in the caller.
+   * @param {HTMLElement} h3
+   * @returns {string|null}
+   */
+  function subsectionNamedModifierFromFollowingContent(h3) {
+    let n = h3.nextElementSibling;
+    while (n instanceof HTMLElement) {
+      if (n.matches(PROFILE_PAGE_SUBTITLE_H3_SELECTOR)) break;
+      const roots = n.matches(".show-more-link")
+        ? [n]
+        : Array.from(n.querySelectorAll(".show-more-link"));
+      for (const sm of roots) {
+        for (const c of sm.classList) {
+          if (!c.startsWith("show-more-link--")) continue;
+          const mod = c.slice("show-more-link--".length);
+          if (SUBSECTION_SHOW_MORE_SKIP_MODIFIERS.has(mod)) continue;
+          if (SUBSECTION_SHOW_MORE_NAMED_MODIFIERS.has(mod)) return mod;
+        }
+      }
+      n = n.nextElementSibling;
+    }
+    return null;
+  }
+
+  /**
+   * @param {Set<string>} collapsedSet
+   * @param {string} legacyKey
+   * @param {string} stableKey
+   * @returns {boolean} true if collapsedSet was mutated
+   */
+  function migrateSubsectionCollapseLegacyKey(
+    collapsedSet,
+    legacyKey,
+    stableKey,
+  ) {
+    if (!legacyKey || !stableKey || legacyKey === stableKey) return false;
+    if (!collapsedSet.has(legacyKey)) return false;
+    collapsedSet.add(stableKey);
+    collapsedSet.delete(legacyKey);
+    return true;
+  }
+
   /**
    * @param {HTMLElement} h3
    * @returns {HTMLElement[]}
@@ -6237,12 +6381,16 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   /**
    * @param {HTMLElement} pageEl  div.js-sortable--page
+   * @param {Set<string>} collapsedSet  live set; legacy slug keys are migrated into stable keys
+   * @returns {boolean} true if collapsedSet was mutated (caller should persist)
    */
-  function enhanceSortablePageSubsections(pageEl) {
+  function enhanceSortablePageSubsections(pageEl, collapsedSet) {
     const pageId = pageEl.getAttribute("data-page-id");
-    if (!pageId) return;
-    if (PROFILE_SUBSECTION_SKIP_PAGE_IDS.has(pageId)) return;
+    if (!pageId) return false;
+    if (PROFILE_SUBSECTION_SKIP_PAGE_IDS.has(pageId)) return false;
     const usedSlugs = new Set();
+    let subsectionIndex = 0;
+    let migrationDirty = false;
     const h3s = pageEl.querySelectorAll(PROFILE_PAGE_SUBTITLE_H3_SELECTOR);
     for (const h3 of h3s) {
       if (!(h3 instanceof HTMLElement)) continue;
@@ -6250,20 +6398,31 @@ OsuExpertPlus.pages.userProfile = (() => {
       if (h3.hasAttribute(SUBSECTION_DONE_ATTR)) continue;
 
       const label = String(h3.textContent || "").trim() || pageId;
-      const slug = subsectionSlugFromTitle(label, usedSlugs);
-      const key = `${pageId}::${slug}`;
+      const legacyKey = `${pageId}::${subsectionSlugFromTitle(label, usedSlugs)}`;
+      const namedMod = subsectionNamedModifierFromFollowingContent(h3);
+      const stableKey = namedMod
+        ? `${pageId}::${namedMod}`
+        : `${pageId}::sub_${subsectionIndex}`;
+      subsectionIndex += 1;
+
+      if (
+        migrateSubsectionCollapseLegacyKey(collapsedSet, legacyKey, stableKey)
+      ) {
+        migrationDirty = true;
+      }
+
+      const isCollapsed = collapsedSet.has(stableKey);
 
       const bodies = collectSubsectionBodyElements(h3);
-      bodies.forEach((b) => b.setAttribute(SUBSECTION_BODY_FOR_ATTR, key));
-
-      const collapsedSet = readProfileSubsectionsCollapsedSet();
-      const isCollapsed = collapsedSet.has(key);
+      bodies.forEach((b) =>
+        b.setAttribute(SUBSECTION_BODY_FOR_ATTR, stableKey),
+      );
 
       const btn = el("button", {
         type: "button",
         class: "oep-profile-subsection-collapse-toggle",
         [SUBSECTION_TOGGLE_ATTR]: "1",
-        [SUBSECTION_TOGGLE_FOR_ATTR]: key,
+        [SUBSECTION_TOGGLE_FOR_ATTR]: stableKey,
         [SUBSECTION_LABEL_ATTR]: label,
         "aria-expanded": isCollapsed ? "false" : "true",
         title: isCollapsed ? `Expand ${label}` : `Collapse ${label}`,
@@ -6272,7 +6431,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       btn.addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        toggleProfileSubsectionCollapsedKey(key);
+        toggleProfileSubsectionCollapsedKey(stableKey);
       });
 
       const subsectionAc = new AbortController();
@@ -6285,7 +6444,7 @@ OsuExpertPlus.pages.userProfile = (() => {
           if (!(t instanceof Element)) return;
           if (t.closest(`button[${SUBSECTION_TOGGLE_ATTR}]`)) return;
           if (t.closest("a[href]")) return;
-          toggleProfileSubsectionCollapsedKey(key);
+          toggleProfileSubsectionCollapsedKey(stableKey);
         },
         { signal: subsectionAc.signal },
       );
@@ -6296,14 +6455,24 @@ OsuExpertPlus.pages.userProfile = (() => {
       if (isCollapsed) h3.classList.add(SUBSECTION_TITLE_COLLAPSED_CLASS);
       h3.setAttribute(SUBSECTION_DONE_ATTR, "1");
     }
+    return migrationDirty;
   }
 
   function scanProfileSubsections() {
     teardownProfileSubsectionCollapse();
+    const collapsedSet = readProfileSubsectionsCollapsedSet();
+    let migrationDirty = false;
     getSectionPageNodes().forEach((page) => {
-      if (page instanceof HTMLElement) enhanceSortablePageSubsections(page);
+      if (page instanceof HTMLElement) {
+        if (enhanceSortablePageSubsections(page, collapsedSet)) {
+          migrationDirty = true;
+        }
+      }
     });
-    applyProfileSubsectionCollapseState(readProfileSubsectionsCollapsedSet());
+    if (migrationDirty) {
+      writeProfileSubsectionsCollapsedSet(collapsedSet);
+    }
+    applyProfileSubsectionCollapseState(collapsedSet);
   }
 
   /** @returns {function} */
@@ -6350,16 +6519,27 @@ OsuExpertPlus.pages.userProfile = (() => {
   const SECTION_TAB_COLLAPSED_CLASS = "oep-profile-section-tab--collapsed";
   const SECTION_PAGE_TITLE_CLICK_ATTR =
     "data-oep-profile-section-page-title-click";
-  const SECTION_TAB_CHEVRON_BTN_ATTR = "data-oep-section-tab-chevron-btn";
+  const SECTION_TAB_CHEVRON_ATTR = "data-oep-section-tab-chevron";
   const SECTION_CONTENTS_ROW_CLASS = "oep-profile-contents-row";
   const SECTION_PAGE_TITLE_TOGGLE_CLASS =
     "oep-profile-section-page-title--toggle";
   const SECTION_PAGE_TITLE_LABEL_CLASS =
     "oep-profile-section-page-title__label";
+  const SECTION_PAGE_TITLE_COLLAPSED_SUFFIX_CLASS =
+    "oep-profile-section-page-title__collapsed-suffix";
   const SECTION_COLLAPSE_STYLE_ID = "osu-expertplus-profile-section-collapse";
 
   const SECTION_COLLAPSE_CSS = `
     .${SECTION_COLLAPSE_BODY_HIDDEN_CLASS} {
+      display: none !important;
+    }
+    div.js-sortable--page.${SECTION_COLLAPSE_PAGE_CLASS}
+      > *:not(h2.title.title--page-extra):not(h3.title.title--page-extra-small):not(div.u-relative:has(> h2.title.title--page-extra)) {
+      display: none !important;
+    }
+    div.js-sortable--page.${SECTION_COLLAPSE_PAGE_CLASS}
+      > div.u-relative
+      > *:not(h2.title.title--page-extra):not(h3.title.title--page-extra-small) {
       display: none !important;
     }
     h2.${SECTION_PAGE_TITLE_TOGGLE_CLASS}.title.title--page-extra {
@@ -6385,17 +6565,17 @@ OsuExpertPlus.pages.userProfile = (() => {
       pointer-events: none;
       z-index: 1;
     }
-    div.js-sortable--page:not(.${SECTION_COLLAPSE_PAGE_CLASS})
+    div.js-sortable--page
       h2.${SECTION_PAGE_TITLE_TOGGLE_CLASS}.title.title--page-extra:hover::after {
       background-color: rgba(255, 255, 255, 0.07);
     }
-    div.js-sortable--page.${SECTION_COLLAPSE_PAGE_CLASS}
-      h2.title.title--page-extra.${SECTION_PAGE_TITLE_TOGGLE_CLASS}:hover
-      > .${SECTION_PAGE_TITLE_LABEL_CLASS} {
-      background-color: rgba(255, 255, 255, 0.07);
-      border-radius: 6px;
-      padding: 0.12em 0.45em;
-      margin: -0.12em -0.45em;
+    h2.${SECTION_PAGE_TITLE_TOGGLE_CLASS}.title.title--page-extra
+      > .${SECTION_PAGE_TITLE_COLLAPSED_SUFFIX_CLASS} {
+      position: relative;
+      z-index: 2;
+      font-weight: 600;
+      font-size: 0.88em;
+      opacity: 0.9;
     }
     h2.${SECTION_PAGE_TITLE_TOGGLE_CLASS}.title.title--page-extra::before {
       -moz-osx-font-smoothing: grayscale;
@@ -6424,20 +6604,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       content: "\\f078";
       opacity: 0.8;
     }
-    div.js-sortable--page.${SECTION_COLLAPSE_PAGE_CLASS}
-      h2.title.title--page-extra.${SECTION_PAGE_TITLE_TOGGLE_CLASS}::after {
-      content: " (Collapsed)";
-      position: static;
-      inset: auto;
-      background-color: transparent;
-      border-radius: 0;
-      transition: none;
-      pointer-events: auto;
-      z-index: auto;
-      font-weight: 600;
-      font-size: 0.88em;
-      opacity: 0.9;
-    }
     a.${SECTION_TAB_COLLAPSED_CLASS} .page-mode-link,
     a.${SECTION_TAB_COLLAPSED_CLASS} .fake-bold {
       color: hsl(var(--hsl-l2)) !important;
@@ -6465,44 +6631,33 @@ OsuExpertPlus.pages.userProfile = (() => {
     .${SECTION_CONTENTS_ROW_CLASS} > a[href^="#"]:last-child {
       margin-right: 0 !important;
     }
-    button.oep-profile-section-contents-tab-chevron {
-      appearance: none;
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+    .${SECTION_CONTENTS_ROW_CLASS} > a[${SECTION_TAB_CHEVRON_ATTR}]::before {
+      -moz-osx-font-smoothing: grayscale;
+      -webkit-font-smoothing: antialiased;
+      display: inline-block;
+      font-style: normal;
+      font-variant: normal;
+      text-rendering: auto;
+      font-family: "Font Awesome 6 Free", "Font Awesome 5 Free";
+      font-weight: 900;
+      content: "\\f077";
       font-size: 0.82em;
       line-height: 1;
-      margin-right: 0;
-      margin-left: 0;
-      padding: 0.16em 0.25em;
-      min-width: 1.2em;
-      min-height: 1.2em;
-      box-sizing: border-box;
-      flex-shrink: 0;
-      vertical-align: middle;
-      border-radius: 5px;
       color: hsl(var(--hsl-c1));
       opacity: 0.9;
+      margin-right: 0.25em;
+      flex-shrink: 0;
       transition: color 120ms ease, opacity 120ms ease;
     }
-    .${SECTION_CONTENTS_ROW_CLASS}
-      button.oep-profile-section-contents-tab-chevron:first-child {
-      margin-left: 0;
-    }
-    button.oep-profile-section-contents-tab-chevron + a {
-      padding-left: 0.2em;
-    }
-    button.oep-profile-section-contents-tab-chevron:hover {
+    .${SECTION_CONTENTS_ROW_CLASS} > a[${SECTION_TAB_CHEVRON_ATTR}]:hover::before {
       opacity: 1;
       color: hsl(var(--hsl-l1));
     }
-    button.oep-profile-section-contents-tab-chevron.${SECTION_TAB_COLLAPSED_CLASS} {
+    .${SECTION_CONTENTS_ROW_CLASS} > a[${SECTION_TAB_CHEVRON_ATTR}="collapsed"]::before {
+      content: "\\f078";
       opacity: 0.8;
     }
-    button.oep-profile-section-contents-tab-chevron.${SECTION_TAB_COLLAPSED_CLASS}:hover {
+    .${SECTION_CONTENTS_ROW_CLASS} > a[${SECTION_TAB_CHEVRON_ATTR}="collapsed"]:hover::before {
       opacity: 1;
       color: hsl(var(--hsl-l1));
     }
@@ -6575,6 +6730,33 @@ OsuExpertPlus.pages.userProfile = (() => {
    * @param {number} depth
    * @returns {boolean} true when headings were found and body nodes hidden
    */
+  /**
+   * "(Collapsed)" is a real node so `h2::after` stays the hover overlay (same as expanded).
+   * @param {HTMLElement} pageEl
+   * @param {boolean} isCollapsed
+   */
+  function syncProfileSectionPageTitleCollapsedSuffix(pageEl, isCollapsed) {
+    const h2 = pageEl.querySelector(SECTION_COLLAPSE_MAIN_TITLE_SELECTOR);
+    if (!(h2 instanceof HTMLElement)) return;
+    if (!h2.classList.contains(SECTION_PAGE_TITLE_TOGGLE_CLASS)) return;
+    const existing = h2.querySelector(
+      `:scope > .${SECTION_PAGE_TITLE_COLLAPSED_SUFFIX_CLASS}`,
+    );
+    if (isCollapsed) {
+      if (!existing) {
+        h2.appendChild(
+          el(
+            "span",
+            { class: SECTION_PAGE_TITLE_COLLAPSED_SUFFIX_CLASS },
+            " (Collapsed)",
+          ),
+        );
+      }
+    } else {
+      existing?.remove();
+    }
+  }
+
   function markProfileSectionBodyCollapsed(pageEl, depth) {
     if (depth > 4) return false;
     const kids = [...pageEl.children].filter((n) => n instanceof HTMLElement);
@@ -6603,12 +6785,16 @@ OsuExpertPlus.pages.userProfile = (() => {
       clearProfileSectionCollapseBodyHidden(node);
       node.classList.remove(SECTION_COLLAPSE_PAGE_CLASS);
 
-      if (!collapsed.has(id)) return;
+      if (!collapsed.has(id)) {
+        syncProfileSectionPageTitleCollapsedSuffix(node, false);
+        return;
+      }
 
       node.classList.add(SECTION_COLLAPSE_PAGE_CLASS);
       if (!markProfileSectionBodyCollapsed(node, 0)) {
         node.classList.add(SECTION_COLLAPSE_BODY_HIDDEN_CLASS);
       }
+      syncProfileSectionPageTitleCollapsedSuffix(node, true);
     });
     applyProfileSubsectionCollapseState(readProfileSubsectionsCollapsedSet());
   }
@@ -6626,37 +6812,12 @@ OsuExpertPlus.pages.userProfile = (() => {
         if (isCollapsed) anchor.classList.add(SECTION_TAB_COLLAPSED_CLASS);
         else anchor.classList.remove(SECTION_TAB_COLLAPSED_CLASS);
 
-        const iconClass = isCollapsed ? "fa-chevron-down" : "fa-chevron-up";
+        anchor.setAttribute(
+          SECTION_TAB_CHEVRON_ATTR,
+          isCollapsed ? "collapsed" : "expanded",
+        );
         const parent = anchor.parentElement;
-        let btn = parent
-          ? parent.querySelector(
-              `button[${SECTION_TAB_CHEVRON_BTN_ATTR}="${sectionId}"]`,
-            )
-          : null;
-        if (!(btn instanceof HTMLButtonElement)) {
-          btn = el("button", {
-            type: "button",
-            class: `oep-profile-section-contents-tab-chevron fas ${iconClass}`,
-            [SECTION_TAB_CHEVRON_BTN_ATTR]: sectionId,
-            title: isCollapsed ? "Expand section" : "Collapse section",
-          });
-          btn.addEventListener("click", (ev) => {
-            ev.preventDefault();
-            ev.stopPropagation();
-            ev.stopImmediatePropagation();
-            toggleProfileSectionCollapsedId(sectionId);
-          });
-          anchor.insertAdjacentElement("beforebegin", btn);
-          if (parent) parent.classList.add(SECTION_CONTENTS_ROW_CLASS);
-        } else {
-          btn.className = `oep-profile-section-contents-tab-chevron fas ${iconClass}`;
-          btn.setAttribute(
-            "title",
-            isCollapsed ? "Expand section" : "Collapse section",
-          );
-        }
-        if (isCollapsed) btn.classList.add(SECTION_TAB_COLLAPSED_CLASS);
-        else btn.classList.remove(SECTION_TAB_COLLAPSED_CLASS);
+        if (parent) parent.classList.add(SECTION_CONTENTS_ROW_CLASS);
       });
   }
 
@@ -6677,6 +6838,9 @@ OsuExpertPlus.pages.userProfile = (() => {
           );
         wrap._oepSectionPageTitleAc?.abort();
         delete wrap._oepSectionPageTitleAc;
+        h2.querySelectorAll(
+          `:scope > .${SECTION_PAGE_TITLE_COLLAPSED_SUFFIX_CLASS}`,
+        ).forEach((n) => n.remove());
         const label = h2.querySelector(
           `:scope > .${SECTION_PAGE_TITLE_LABEL_CLASS}`,
         );
@@ -6691,11 +6855,32 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   function teardownProfileContentsTabChevrons() {
     document
-      .querySelectorAll(`button[${SECTION_TAB_CHEVRON_BTN_ATTR}]`)
-      .forEach((n) => n.remove());
+      .querySelectorAll(`a[${SECTION_TAB_CHEVRON_ATTR}]`)
+      .forEach((a) => a.removeAttribute(SECTION_TAB_CHEVRON_ATTR));
     document
       .querySelectorAll(`.${SECTION_CONTENTS_ROW_CLASS}`)
       .forEach((n) => n.classList.remove(SECTION_CONTENTS_ROW_CLASS));
+  }
+
+  /**
+   * Delegated click handler: if the click lands on the ::before chevron area of
+   * a contents-row tab anchor, toggle section collapse instead of navigating.
+   * @param {MouseEvent} ev
+   */
+  function onContentsTabChevronClick(ev) {
+    const a = /** @type {Element|null} */ (ev.target);
+    if (!(a instanceof HTMLAnchorElement)) return;
+    if (!a.hasAttribute(SECTION_TAB_CHEVRON_ATTR)) return;
+    const rect = a.getBoundingClientRect();
+    const style = window.getComputedStyle(a, "::before");
+    const beforeWidth = parseFloat(style.width) || 0;
+    const paddingLeft = parseFloat(window.getComputedStyle(a).paddingLeft) || 0;
+    const chevronRight = rect.left + paddingLeft + beforeWidth + 4;
+    if (ev.clientX > chevronRight) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const sectionId = sectionIdFromHashHref(a.getAttribute("href") || "");
+    if (sectionId) toggleProfileSectionCollapsedId(sectionId);
   }
 
   /**
@@ -6771,9 +6956,16 @@ OsuExpertPlus.pages.userProfile = (() => {
       applyProfileSectionCollapseToTabAnchors(collapsed);
 
       bindProfileSectionPageTitleClicks();
+
+      getSectionPageNodes().forEach((node) => {
+        const id = node.getAttribute("data-page-id");
+        if (!id) return;
+        syncProfileSectionPageTitleCollapsedSuffix(node, collapsed.has(id));
+      });
     };
 
     bind();
+    document.addEventListener("click", onContentsTabChevronClick, true);
     obs = new MutationObserver((mutations) => {
       const needsRebind = mutationsIncludeSelector(
         mutations,
@@ -6790,6 +6982,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     return () => {
       clearTimeout(rebindTimer);
       obs?.disconnect();
+      document.removeEventListener("click", onContentsTabChevronClick, true);
       cleanupProfileSectionCollapseToggles();
       teardownProfileSectionPageTitleClick();
       teardownProfileContentsTabChevrons();
@@ -6832,8 +7025,11 @@ OsuExpertPlus.pages.userProfile = (() => {
     injectContentsReorderStyles();
 
     let dragAnchor = null;
+    let ghostEl = /** @type {HTMLElement|null} */ (null);
     let obs = null;
     let rebindTimer = 0;
+    /** Section IDs in current visual order; null means DOM order is authoritative. */
+    let currentTabOrder = /** @type {string[]|null} */ (null);
     /**
      * @type {{
      *   anchor: HTMLAnchorElement;
@@ -6847,15 +7043,65 @@ OsuExpertPlus.pages.userProfile = (() => {
      */
     let pointerSession = null;
 
+    /**
+     * Returns anchors in their current visual order.
+     * Uses `currentTabOrder` when set, otherwise falls back to DOM order.
+     * @param {HTMLElement} row
+     * @returns {HTMLAnchorElement[]}
+     */
+    function getOrderedAnchors(row) {
+      const anchors = /** @type {HTMLAnchorElement[]} */ (
+        Array.from(
+          row.querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`),
+        ).filter((a) => a instanceof HTMLAnchorElement)
+      );
+      if (!currentTabOrder) return anchors;
+      const byId = new Map(
+        anchors.map((a) => [
+          sectionIdFromHashHref(a.getAttribute("href") || ""),
+          a,
+        ]),
+      );
+      const ordered = /** @type {HTMLAnchorElement[]} */ (
+        currentTabOrder.map((id) => byId.get(id)).filter(Boolean)
+      );
+      const inOrder = new Set(currentTabOrder);
+      anchors.forEach((a) => {
+        const id = sectionIdFromHashHref(a.getAttribute("href") || "");
+        if (id && !inOrder.has(id)) ordered.push(a);
+      });
+      return ordered;
+    }
+
+    /**
+     * Applies CSS flexbox `order` to visually reorder tabs without touching React-managed DOM nodes.
+     * Each chevron button gets an even order value; its anchor gets odd (chevron always visually first).
+     * @param {HTMLAnchorElement[]} anchors ordered array representing desired visual sequence
+     * @param {HTMLElement} row
+     */
+    function applyTabCssOrder(anchors) {
+      anchors.forEach((a, i) => {
+        a.style.order = String(i);
+      });
+    }
+
+    const removeGhost = () => {
+      if (ghostEl) {
+        ghostEl.remove();
+        ghostEl = null;
+      }
+    };
+
     const clearDragClasses = () => {
+      if (ghostEl) removeGhost();
       document
-        .querySelectorAll(
-          `a[${CONTENTS_REORDER_ANCHOR_ATTR}].${CONTENTS_REORDER_DRAGGING_CLASS}, a[${CONTENTS_REORDER_ANCHOR_ATTR}].${CONTENTS_REORDER_DRAGOVER_CLASS}`,
-        )
+        .querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`)
         .forEach((n) =>
           n.classList.remove(
             CONTENTS_REORDER_DRAGGING_CLASS,
             CONTENTS_REORDER_DRAGOVER_CLASS,
+            CONTENTS_REORDER_DROP_BEFORE_CLASS,
+            CONTENTS_REORDER_DROP_AFTER_CLASS,
           ),
         );
     };
@@ -6872,18 +7118,23 @@ OsuExpertPlus.pages.userProfile = (() => {
       }
     };
 
-    function clearRowDragoverExcept(row, except) {
+    function clearRowDropIndicators(row) {
       row
         .querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`)
-        .forEach((n) => {
-          if (n !== except) n.classList.remove(CONTENTS_REORDER_DRAGOVER_CLASS);
-        });
+        .forEach((n) =>
+          n.classList.remove(
+            CONTENTS_REORDER_DRAGOVER_CLASS,
+            CONTENTS_REORDER_DROP_BEFORE_CLASS,
+            CONTENTS_REORDER_DROP_AFTER_CLASS,
+          ),
+        );
     }
 
     function endPointerSession() {
       const s = pointerSession;
       pointerSession = null;
       if (!s) return;
+      removeGhost();
       s.anchor.removeEventListener("pointermove", s.onMove);
       s.anchor.removeEventListener("pointerup", s.onUp);
       s.anchor.removeEventListener("pointercancel", s.onUp);
@@ -6911,6 +7162,14 @@ OsuExpertPlus.pages.userProfile = (() => {
           s.armed = true;
           dragAnchor = s.anchor;
           s.anchor.classList.add(CONTENTS_REORDER_DRAGGING_CLASS);
+          ghostEl = document.createElement("div");
+          ghostEl.className = CONTENTS_REORDER_GHOST_CLASS;
+          ghostEl.textContent = s.anchor.textContent || "";
+          document.body.appendChild(ghostEl);
+        }
+        if (ghostEl) {
+          ghostEl.style.left = `${e.clientX}px`;
+          ghostEl.style.top = `${e.clientY}px`;
         }
         const row = s.anchor.parentElement;
         if (!(row instanceof HTMLElement)) return;
@@ -6919,8 +7178,16 @@ OsuExpertPlus.pages.userProfile = (() => {
           e.clientY,
           s.anchor,
         );
-        clearRowDragoverExcept(row, hit);
-        if (hit) hit.classList.add(CONTENTS_REORDER_DRAGOVER_CLASS);
+        clearRowDropIndicators(row);
+        if (hit) {
+          const hitRect = hit.getBoundingClientRect();
+          const insertAfter = e.clientX > hitRect.left + hitRect.width / 2;
+          hit.classList.add(
+            insertAfter
+              ? CONTENTS_REORDER_DROP_AFTER_CLASS
+              : CONTENTS_REORDER_DROP_BEFORE_CLASS,
+          );
+        }
       };
 
       const onUp = (e) => {
@@ -6942,18 +7209,23 @@ OsuExpertPlus.pages.userProfile = (() => {
             row &&
             hit.parentElement === row
           ) {
-            hit.classList.remove(CONTENTS_REORDER_DRAGOVER_CLASS);
-            const dragRect = dragAnchor.getBoundingClientRect();
+            hit.classList.remove(
+              CONTENTS_REORDER_DROP_BEFORE_CLASS,
+              CONTENTS_REORDER_DROP_AFTER_CLASS,
+            );
             const targetRect = hit.getBoundingClientRect();
-            const dragCenter = dragRect.left + dragRect.width / 2;
-            const targetCenter = targetRect.left + targetRect.width / 2;
-            const insertAfter = dragCenter < targetCenter;
-            if (insertAfter) hit.insertAdjacentElement("afterend", dragAnchor);
-            else hit.insertAdjacentElement("beforebegin", dragAnchor);
-            const anchors = Array.from(
-              row.querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`),
-            ).filter((a) => a instanceof HTMLAnchorElement);
-            void saveOrderFrom(anchors);
+            const insertAfter = e.clientX > targetRect.left + targetRect.width / 2;
+
+            const currentAnchors = getOrderedAnchors(row);
+            const newAnchors = currentAnchors.filter((a) => a !== dragAnchor);
+            const hitIdx = newAnchors.indexOf(hit);
+            newAnchors.splice(insertAfter ? hitIdx + 1 : hitIdx, 0, dragAnchor);
+
+            currentTabOrder = newAnchors
+              .map((a) => sectionIdFromHashHref(a.getAttribute("href") || ""))
+              .filter(Boolean);
+            applyTabCssOrder(newAnchors);
+            void saveOrderFrom(newAnchors);
           }
           const suppressClick = (ce) => {
             ce.preventDefault();
@@ -6963,6 +7235,7 @@ OsuExpertPlus.pages.userProfile = (() => {
           s.anchor.addEventListener("click", suppressClick, true);
         }
 
+        removeGhost();
         dragAnchor = null;
         clearDragClasses();
       };
@@ -7003,6 +7276,7 @@ OsuExpertPlus.pages.userProfile = (() => {
           a.removeEventListener("pointerdown", onPointerDown);
           a.removeAttribute(CONTENTS_REORDER_ANCHOR_ATTR);
           a.removeAttribute("draggable");
+          a.style.removeProperty("order");
           a.classList.remove(
             CONTENTS_REORDER_DRAGGING_CLASS,
             CONTENTS_REORDER_DRAGOVER_CLASS,
@@ -7015,6 +7289,14 @@ OsuExpertPlus.pages.userProfile = (() => {
         a.setAttribute("title", `Drag to reorder`);
         a.addEventListener("pointerdown", onPointerDown);
       });
+
+      if (currentTabOrder) {
+        groups.forEach((anchors) => {
+          const row = anchors[0]?.parentElement;
+          if (!(row instanceof HTMLElement)) return;
+          applyTabCssOrder(getOrderedAnchors(row));
+        });
+      }
     };
 
     bind();
@@ -7045,6 +7327,7 @@ OsuExpertPlus.pages.userProfile = (() => {
           a.removeEventListener("pointerdown", onPointerDown);
           a.removeAttribute(CONTENTS_REORDER_ANCHOR_ATTR);
           a.removeAttribute("draggable");
+          a.style.removeProperty("order");
           a.classList.remove(
             CONTENTS_REORDER_DRAGGING_CLASS,
             CONTENTS_REORDER_DRAGOVER_CLASS,

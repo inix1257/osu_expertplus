@@ -30,14 +30,14 @@ OsuExpertPlus.dom = (() => {
   function el(tag, attrs = {}, ...children) {
     const element = document.createElement(tag);
     for (const [key, value] of Object.entries(attrs)) {
-      if (key === 'class') {
+      if (key === "class") {
         element.className = value;
-      } else if (key.startsWith('on') && typeof value === 'function') {
+      } else if (key.startsWith("on") && typeof value === "function") {
         element.addEventListener(key.slice(2).toLowerCase(), value);
       } else if (
-        key === 'style' &&
+        key === "style" &&
         value != null &&
-        typeof value === 'object'
+        typeof value === "object"
       ) {
         Object.assign(element.style, /** @type {object} */ (value));
       } else {
@@ -45,7 +45,7 @@ OsuExpertPlus.dom = (() => {
       }
     }
     for (const child of children) {
-      if (typeof child === 'string') {
+      if (typeof child === "string") {
         element.appendChild(document.createTextNode(child));
       } else if (child instanceof Element) {
         element.appendChild(child);
@@ -55,7 +55,11 @@ OsuExpertPlus.dom = (() => {
   }
 
   /** Wait for selector match to disconnect (SPA teardown); no-op if absent. Use before waitForElement on re-nav. */
-  function waitForStaleElementToLeave(selector, timeout = 8000, root = document.documentElement) {
+  function waitForStaleElementToLeave(
+    selector,
+    timeout = 8000,
+    root = document.documentElement,
+  ) {
     return new Promise((resolve) => {
       const stale = root.querySelector(selector);
       if (!stale || !stale.isConnected) {
@@ -84,7 +88,11 @@ OsuExpertPlus.dom = (() => {
    * @param {Element} [root=document.body]
    * @returns {Promise<Element>}
    */
-  function waitForElement(selector, timeout = 10000, root = document.documentElement) {
+  function waitForElement(
+    selector,
+    timeout = 10000,
+    root = document.documentElement,
+  ) {
     return new Promise((resolve, reject) => {
       const existing = root.querySelector(selector);
       if (existing) return resolve(existing);
@@ -101,7 +109,11 @@ OsuExpertPlus.dom = (() => {
 
       setTimeout(() => {
         observer.disconnect();
-        reject(new Error(`waitForElement: "${selector}" not found within ${timeout}ms`));
+        reject(
+          new Error(
+            `waitForElement: "${selector}" not found within ${timeout}ms`,
+          ),
+        );
       }, timeout);
     });
   }
@@ -115,7 +127,7 @@ OsuExpertPlus.dom = (() => {
   function manageStyle(id, css) {
     const inject = () => {
       if (document.getElementById(id)) return;
-      const s = document.createElement('style');
+      const s = document.createElement("style");
       s.id = id;
       s.textContent = css;
       document.head.appendChild(s);
@@ -133,12 +145,71 @@ OsuExpertPlus.dom = (() => {
   function createCleanupBag() {
     const fns = [];
     return {
-      add(...args) { fns.push(...args); },
+      add(...args) {
+        fns.push(...args);
+      },
       dispose() {
-        while (fns.length) { try { fns.pop()(); } catch (_) {} }
+        while (fns.length) {
+          try {
+            fns.pop()();
+          } catch (_) {}
+        }
       },
     };
   }
 
-  return { qs, qsa, el, waitForElement, waitForStaleElementToLeave, manageStyle, createCleanupBag };
+  /**
+   * Parse a locale-formatted number string (handles period or comma as
+   * decimal separator and spaces/commas/periods as group separators).
+   * @param {string} str
+   * @returns {number}
+   */
+  function parseLocaleNumber(str) {
+    if (!str) return NaN;
+    let s = String(str).trim();
+    // Strip whitespace-like thousand separators (thin/non-breaking/regular space)
+    s = s.replace(/[\s\u00A0\u202F\u2009]/g, "");
+    // Whichever of comma/period appears LAST is the decimal separator
+    const lastComma = s.lastIndexOf(",");
+    const lastPeriod = s.lastIndexOf(".");
+    if (lastComma > lastPeriod) {
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      s = s.replace(/,/g, "");
+    }
+    return parseFloat(s);
+  }
+
+  /**
+   * Format a number with exactly 2 decimal places using the osu-web page
+   * locale (thousand grouping + locale-appropriate decimal separator).
+   * @param {number} n
+   * @returns {string}
+   */
+  function formatDecimalPp(n) {
+    const locale =
+      typeof window.currentLocale === "string"
+        ? window.currentLocale
+        : document.documentElement.lang || undefined;
+    try {
+      return n.toLocaleString(locale, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    } catch {
+      return n.toFixed(2);
+    }
+  }
+
+  return {
+    qs,
+    qsa,
+    el,
+    waitForElement,
+    waitForStaleElementToLeave,
+    manageStyle,
+    createCleanupBag,
+    parseLocaleNumber,
+    formatDecimalPp,
+  };
 })();

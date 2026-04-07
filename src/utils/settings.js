@@ -172,6 +172,14 @@ OsuExpertPlus.settings = (() => {
       group: "Beatmap Detail",
       default: true,
     },
+    {
+      id: "beatmapDetail.diffNameBesidePicker",
+      label: "Difficulty name & stars in the active picker cell",
+      description:
+        "On beatmapset pages, puts the selected difficulty’s name, guest mapper credit when applicable (mapped by …), and nomod star rating inside the same bordered box as the active difficulty icon. Hides the duplicate header diff line and the separate nomod star chip.",
+      group: "Beatmap Detail",
+      default: false,
+    },
   ];
 
   /** GM keys used by UI elsewhere (not listed in the options panel). */
@@ -311,6 +319,9 @@ OsuExpertPlus.settings = (() => {
     API_EXTENDED_LEADERBOARD: "beatmapDetail.apiExtendedLeaderboard",
     SCOREBOARD_MOD_GRID: "beatmapDetail.scoreboardModGrid",
     SCOREBOARD_PLAYER_LOOKUP: "beatmapDetail.scoreboardPlayerLookup",
+    DIFF_NAME_BESIDE_PICKER: "beatmapDetail.diffNameBesidePicker",
+    /** GM string (not a panel toggle): last leaderboard sort `column:asc|desc`; default score:desc. */
+    BEATMAP_SCOREBOARD_SORT_KEY: "beatmapDetail.scoreboardSortKey",
   });
 
   return {

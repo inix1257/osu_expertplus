@@ -1217,7 +1217,89 @@ OsuExpertPlus.beatmapCardExtra = (() => {
         disconnectJsonBeatmapsObserver();
       }
       syncPopupHighlightHeight();
+      scheduleBeatmapsetsListingLayoutSync();
     };
+
+    /** @type {ResizeObserver|null} */
+    let beatmapsetsListingItemsRo = null;
+    /** @type {Element|null} */
+    let beatmapsetsListingItemsObserved = null;
+
+    function detachBeatmapsetsListingItemsRo() {
+      if (beatmapsetsListingItemsRo) {
+        beatmapsetsListingItemsRo.disconnect();
+        beatmapsetsListingItemsRo = null;
+        beatmapsetsListingItemsObserved = null;
+      }
+    }
+
+    function isBeatmapsetsListingIndexPage() {
+      const p = location.pathname;
+      return p === "/beatmapsets" || p === "/beatmapsets/";
+    }
+
+    /**
+     * Listing uses a virtual list: the first child of `.beatmapsets__content` gets an inline
+     * `height` from osu-web from row count × assumed row height. Extra card rows increase real
+     * content height without updating that value, so the b5 page background shows past the block.
+     */
+    function syncBeatmapsetsListingOuterHeight(outer, items) {
+      if (!(outer instanceof HTMLElement) || !(items instanceof HTMLElement)) return;
+      const st = outer.getAttribute("style") || "";
+      if (!/height\s*:\s*[\d.]+\s*px/i.test(st)) return;
+      const cs = getComputedStyle(outer);
+      const padY =
+        (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+      const minOuter = Math.ceil(items.scrollHeight + padY);
+      if (minOuter > outer.clientHeight + 0.5) {
+        outer.style.height = `${minOuter}px`;
+      }
+    }
+
+    function maybeAttachBeatmapsetsListingHeightObserver() {
+      if (!wantIngest()) {
+        detachBeatmapsetsListingItemsRo();
+        return;
+      }
+      if (!isBeatmapsetsListingIndexPage()) {
+        detachBeatmapsetsListingItemsRo();
+        return;
+      }
+      const content = document.querySelector(".beatmapsets__content");
+      const outer = content?.firstElementChild;
+      const items = outer?.querySelector?.(".beatmapsets__items");
+      if (!(outer instanceof HTMLElement) || !(items instanceof HTMLElement)) {
+        detachBeatmapsetsListingItemsRo();
+        return;
+      }
+      if (beatmapsetsListingItemsObserved === items && beatmapsetsListingItemsRo) {
+        syncBeatmapsetsListingOuterHeight(outer, items);
+        return;
+      }
+      detachBeatmapsetsListingItemsRo();
+      beatmapsetsListingItemsObserved = items;
+      beatmapsetsListingItemsRo = new ResizeObserver(() => {
+        syncBeatmapsetsListingOuterHeight(outer, items);
+      });
+      beatmapsetsListingItemsRo.observe(items);
+      syncBeatmapsetsListingOuterHeight(outer, items);
+    }
+
+    function scheduleBeatmapsetsListingLayoutSync() {
+      if (!wantIngest()) {
+        detachBeatmapsetsListingItemsRo();
+        return;
+      }
+      if (!isBeatmapsetsListingIndexPage()) {
+        detachBeatmapsetsListingItemsRo();
+        return;
+      }
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          maybeAttachBeatmapsetsListingHeightObserver();
+        });
+      });
+    }
 
     /**
      * osu-web's difficulty popup (`.beatmaps-popup`, rendered via Portal) draws a highlight border
@@ -1249,6 +1331,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       ingestFromJsonBeatmapsScript();
       scheduleAllPanels(document, settings);
       syncPopupHighlightHeight();
+      scheduleBeatmapsetsListingLayoutSync();
     };
 
     const flushMoSchedule = () => {
@@ -1300,6 +1383,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
         requestAnimationFrame(() => {
           if (!wantIngest()) return;
           scheduleAllPanels(document, settings);
+          scheduleBeatmapsetsListingLayoutSync();
         });
       }, 0);
     };
@@ -1323,6 +1407,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       profileExtraPrefetchStarted = false;
       listingSearchPrefetchStarted = false;
       scheduleAfterIngest = () => {};
+      detachBeatmapsetsListingItemsRo();
       uninstallXhrHook();
       if (origFetch) pageContext.fetch = origFetch;
       style.remove();

@@ -3,18 +3,20 @@
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
 OsuExpertPlus.api = (() => {
-  const BASE = 'https://osu.ppy.sh/api/v2';
+  const BASE = "https://osu.ppy.sh/api/v2";
   /** Public site origin (non-`/api/v2` routes). */
-  const SITE_ORIGIN = 'https://osu.ppy.sh';
+  const SITE_ORIGIN = "https://osu.ppy.sh";
 
   /**
    * Build fetch headers, injecting a Bearer token when available.
    * @returns {Promise<HeadersInit>}
    */
   async function buildHeaders() {
-    const headers = { Accept: 'application/json' };
-    const authHeader = await OsuExpertPlus.auth.getAuthHeader().catch(() => null);
-    if (authHeader) headers['Authorization'] = authHeader;
+    const headers = { Accept: "application/json" };
+    const authHeader = await OsuExpertPlus.auth
+      .getAuthHeader()
+      .catch(() => null);
+    if (authHeader) headers["Authorization"] = authHeader;
     return headers;
   }
 
@@ -41,13 +43,15 @@ OsuExpertPlus.api = (() => {
     }
     const qs = usp.toString();
     const fullUrl = qs ? `${url}?${qs}` : url;
-    const headers = { Accept: 'application/json' };
+    const headers = { Accept: "application/json" };
     if (!options.sessionOnly) {
-      const authHeader = await OsuExpertPlus.auth.getAuthHeader().catch(() => null);
-      if (authHeader) headers['Authorization'] = authHeader;
+      const authHeader = await OsuExpertPlus.auth
+        .getAuthHeader()
+        .catch(() => null);
+      if (authHeader) headers["Authorization"] = authHeader;
     }
 
-    const resp = await fetch(fullUrl, { headers, credentials: 'include' });
+    const resp = await fetch(fullUrl, { headers, credentials: "include" });
 
     if (!resp.ok) {
       throw new Error(`[osu! Expert+] API ${resp.status}: ${fullUrl}`);
@@ -210,13 +214,13 @@ OsuExpertPlus.api = (() => {
   async function getBeatmapScoresWebsite(beatmapId, query) {
     /** @type {Record<string, string|number|string[]>} */
     const params = {};
-    if (query && typeof query === 'object') {
+    if (query && typeof query === "object") {
       if (query.mode) params.mode = query.mode;
       if (query.legacy_only != null) params.legacy_only = query.legacy_only;
       if (query.type) params.type = query.type;
       if (query.limit != null) params.limit = query.limit;
       if (Array.isArray(query.mods) && query.mods.length) {
-        params['mods[]'] = query.mods;
+        params["mods[]"] = query.mods;
       }
     }
     const usp = new URLSearchParams();
@@ -229,20 +233,22 @@ OsuExpertPlus.api = (() => {
       }
     }
     const qs = usp.toString();
-    const fullUrl = `${SITE_ORIGIN}/beatmaps/${beatmapId}/scores${qs ? `?${qs}` : ''}`;
+    const fullUrl = `${SITE_ORIGIN}/beatmaps/${beatmapId}/scores${qs ? `?${qs}` : ""}`;
 
-    const headers = { Accept: 'application/json' };
-    const authHeader = await OsuExpertPlus.auth.getAuthHeader().catch(() => null);
-    if (authHeader) headers['Authorization'] = authHeader;
+    const headers = { Accept: "application/json" };
+    const authHeader = await OsuExpertPlus.auth
+      .getAuthHeader()
+      .catch(() => null);
+    if (authHeader) headers["Authorization"] = authHeader;
 
-    const resp = await fetch(fullUrl, { headers, credentials: 'include' });
+    const resp = await fetch(fullUrl, { headers, credentials: "include" });
     if (!resp.ok) {
       throw new Error(`[osu! Expert+] ${resp.status}: ${fullUrl}`);
     }
     const data = await resp.json();
     const scores = Array.isArray(data)
       ? data
-      : data?.scores ?? data?.data?.scores ?? [];
+      : (data?.scores ?? data?.data?.scores ?? []);
     return { scores };
   }
 
@@ -255,20 +261,22 @@ OsuExpertPlus.api = (() => {
    * @param {string}        ruleset  'osu' | 'taiko' | 'fruits' | 'mania'
    * @returns {Promise<{attributes: {star_rating: number, max_combo: number, ...}}>}
    */
-  async function postBeatmapAttributes(beatmapId, mods, ruleset = 'osu') {
+  async function postBeatmapAttributes(beatmapId, mods, ruleset = "osu") {
     const url = `${BASE}/beatmaps/${beatmapId}/attributes`;
     const headers = await buildHeaders();
-    headers['Content-Type'] = 'application/json';
+    headers["Content-Type"] = "application/json";
 
     const resp = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers,
-      credentials: 'include',
+      credentials: "include",
       body: JSON.stringify({ mods, ruleset }),
     });
 
     if (!resp.ok) {
-      throw new Error(`[osu! Expert+] API ${resp.status}: beatmap attributes ${beatmapId}`);
+      throw new Error(
+        `[osu! Expert+] API ${resp.status}: beatmap attributes ${beatmapId}`,
+      );
     }
     return resp.json();
   }
