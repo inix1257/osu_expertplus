@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.2.9
+// @version      0.2.10
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -6958,16 +6958,28 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       max-width: none;
     }
     .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker__beatmap--active {
+      .beatmapset-beatmap-picker__beatmap--active,
+    .beatmapset-header.oep-diff-beside-picker
+      .beatmapset-beatmap-picker:has(> .beatmapset-beatmap-picker__beatmap:only-child)
+      > .beatmapset-beatmap-picker__beatmap:only-child {
       --oep-diff-muted: color-mix(
         in srgb,
         var(--diff, hsl(var(--hsl-c1))) 44%,
         #ffffff
       );
     }
+    .beatmapset-header.oep-diff-beside-picker .beatmapset-beatmap-picker {
+      /* Keep tray background height consistent for single vs multi-diff sets. */
+      min-height: 4rem;
+      align-items: stretch;
+      box-sizing: border-box;
+    }
     /* Active cell: [ icon | diffname / SR ] — two columns, text stacked in column 2. */
     .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker__beatmap--active {
+      .beatmapset-beatmap-picker__beatmap--active,
+    .beatmapset-header.oep-diff-beside-picker
+      .beatmapset-beatmap-picker:has(> .beatmapset-beatmap-picker__beatmap:only-child)
+      > .beatmapset-beatmap-picker__beatmap:only-child {
       display: inline-flex !important;
       flex-direction: row;
       flex-wrap: nowrap;
@@ -6983,7 +6995,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       flex-shrink: 0;
     }
     .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker__beatmap--active::before {
+      .beatmapset-beatmap-picker__beatmap--active::before,
+    .beatmapset-header.oep-diff-beside-picker
+      .beatmapset-beatmap-picker:has(> .beatmapset-beatmap-picker__beatmap:only-child)
+      > .beatmapset-beatmap-picker__beatmap:only-child::before {
       z-index: 0;
       border-color: var(--oep-diff-muted) !important;
     }
@@ -6992,6 +7007,14 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       > .beatmap-icon,
     .beatmapset-header.oep-diff-beside-picker
       .beatmapset-beatmap-picker__beatmap--active
+      > :first-child:not(.oep-picker-active-meta),
+    .beatmapset-header.oep-diff-beside-picker
+      .beatmapset-beatmap-picker:has(> .beatmapset-beatmap-picker__beatmap:only-child)
+      > .beatmapset-beatmap-picker__beatmap:only-child
+      > .beatmap-icon,
+    .beatmapset-header.oep-diff-beside-picker
+      .beatmapset-beatmap-picker:has(> .beatmapset-beatmap-picker__beatmap:only-child)
+      > .beatmapset-beatmap-picker__beatmap:only-child
       > :first-child:not(.oep-picker-active-meta) {
       flex-shrink: 0;
       align-self: center;
@@ -10904,8 +10927,21 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
-   * Main score column value: site `/beatmaps/.../scores` uses `classic_total_score`;
-   * fall back to legacy / lazer totals.
+   * @returns {boolean}
+   */
+  function isLazerModeEnabledForLeaderboard() {
+    // Account menu toggle reflects current preference; checked icon means lazer mode on.
+    const toggle = document.querySelector(
+      'button[title*="Lazer mode"][data-url*="legacy_score_only"]',
+    );
+    if (!(toggle instanceof HTMLButtonElement)) return false;
+    return Boolean(toggle.querySelector(".fa-check-square"));
+  }
+
+  /**
+   * Main score column value aligned with osu-web's Lazer mode toggle.
+   * Lazer mode off -> prefer `legacy_total_score`.
+   * Lazer mode on  -> prefer `classic_total_score`.
    * @param {object} s
    */
   function leaderboardTableScoreNumber(s) {
@@ -10914,9 +10950,14 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       return Number.isFinite(x) && x > 0 ? x : 0;
     };
     const cls = nz(s.classic_total_score);
-    if (cls) return cls;
     const leg = nz(s.legacy_total_score);
-    if (leg) return leg;
+    if (isLazerModeEnabledForLeaderboard()) {
+      if (cls) return cls;
+      if (leg) return leg;
+    } else {
+      if (leg) return leg;
+      if (cls) return cls;
+    }
     const tot = nz(s.total_score);
     if (tot) return tot;
     const raw = nz(s.score);
@@ -11637,6 +11678,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     raw = raw
       .replace(/[x×%]/gi, "")
       .replace(/\bpp\b/gi, "")
+      .replace(/,/g, "")
       .trim();
     const n = parseLocaleNumber(raw);
     return Number.isFinite(n) ? n : -Infinity;
@@ -14384,10 +14426,23 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     /** Avoid guest-row DOM churn (stops MutationObserver ↔ sync loops + osu usercard re-init). */
     let lastGuestStableKey = "";
 
-    function getSelectedBeatmapId() {
-      const a = picker.querySelector(
+    /**
+     * osu-web may omit `--active` when there is only one difficulty in some states.
+     * @returns {HTMLAnchorElement|null}
+     */
+    function getActivePickerAnchor() {
+      const active = picker.querySelector(
         "a.beatmapset-beatmap-picker__beatmap--active",
       );
+      if (active instanceof HTMLAnchorElement) return active;
+      const only = picker.querySelector(
+        "a.beatmapset-beatmap-picker__beatmap:only-child",
+      );
+      return only instanceof HTMLAnchorElement ? only : null;
+    }
+
+    function getSelectedBeatmapId() {
+      const a = getActivePickerAnchor();
       if (!(a instanceof HTMLAnchorElement)) return null;
       const fromHash = parseBeatmapIdFromPickerLink(a);
       if (fromHash != null) return fromHash;
@@ -14424,9 +14479,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       if (disposed || !pathRe.test(location.pathname)) return null;
       removeLegacySiblingStrip();
 
-      const active = picker.querySelector(
-        "a.beatmapset-beatmap-picker__beatmap--active",
-      );
+      const active = getActivePickerAnchor();
       for (const node of picker.querySelectorAll(
         `[${DIFF_BESIDE_PICKER_ATTR}="1"]`,
       )) {
@@ -14492,9 +14545,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
     function syncContent() {
       if (disposed || !pathRe.test(location.pathname)) return;
-      const active = picker.querySelector(
-        "a.beatmapset-beatmap-picker__beatmap--active",
-      );
+      const active = getActivePickerAnchor();
       if (!(active instanceof HTMLAnchorElement)) {
         stripInjectedMetaFromPicker();
         header.classList.remove("oep-diff-beside-picker");
