@@ -173,6 +173,14 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
+      id: "beatmapDetail.scoreboardHideCustomRateScores",
+      label: "Hide custom rate scores on leaderboard",
+      description:
+        "On beatmapset scoreboards, hides leaderboard rows whose speed mod rate is not the osu! default (1.00×, or 1.50× for DT/NC, or 0.75× for HT/DC)—the same rows Expert+ dims as rate-edited. A checkbox under the mod filters mirrors this option.",
+      group: "Beatmap Detail",
+      default: false,
+    },
+    {
       id: "beatmapDetail.diffNameBesidePicker",
       label: "Difficulty name & stars in the active picker cell",
       description:
@@ -318,6 +326,8 @@ OsuExpertPlus.settings = (() => {
     BEATCONNECT_DOWNLOAD_BUTTON: "beatmapDetail.beatconnectDownloadButton",
     API_EXTENDED_LEADERBOARD: "beatmapDetail.apiExtendedLeaderboard",
     SCOREBOARD_MOD_GRID: "beatmapDetail.scoreboardModGrid",
+    SCOREBOARD_HIDE_CUSTOM_RATE_SCORES:
+      "beatmapDetail.scoreboardHideCustomRateScores",
     SCOREBOARD_PLAYER_LOOKUP: "beatmapDetail.scoreboardPlayerLookup",
     DIFF_NAME_BESIDE_PICKER: "beatmapDetail.diffNameBesidePicker",
     /** GM string (not a panel toggle): last leaderboard sort `column:asc|desc`; default score:desc. */
