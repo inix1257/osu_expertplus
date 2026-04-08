@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.2.10
+// @version      0.2.11
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -1043,6 +1043,14 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
+      id: "beatmapDetail.scoreboardHideCustomRateScores",
+      label: "Hide custom rate scores on leaderboard",
+      description:
+        "On beatmapset scoreboards, hides leaderboard rows whose speed mod rate is not the osu! default (1.00×, or 1.50× for DT/NC, or 0.75× for HT/DC)—the same rows Expert+ dims as rate-edited. A checkbox under the mod filters mirrors this option.",
+      group: "Beatmap Detail",
+      default: false,
+    },
+    {
       id: "beatmapDetail.diffNameBesidePicker",
       label: "Difficulty name & stars in the active picker cell",
       description:
@@ -1188,6 +1196,8 @@ OsuExpertPlus.settings = (() => {
     BEATCONNECT_DOWNLOAD_BUTTON: "beatmapDetail.beatconnectDownloadButton",
     API_EXTENDED_LEADERBOARD: "beatmapDetail.apiExtendedLeaderboard",
     SCOREBOARD_MOD_GRID: "beatmapDetail.scoreboardModGrid",
+    SCOREBOARD_HIDE_CUSTOM_RATE_SCORES:
+      "beatmapDetail.scoreboardHideCustomRateScores",
     SCOREBOARD_PLAYER_LOOKUP: "beatmapDetail.scoreboardPlayerLookup",
     DIFF_NAME_BESIDE_PICKER: "beatmapDetail.diffNameBesidePicker",
     /** GM string (not a panel toggle): last leaderboard sort `column:asc|desc`; default score:desc. */
@@ -5340,6 +5350,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   const BEATCONNECT_DOWNLOAD_BUTTON_ID = IDS.BEATCONNECT_DOWNLOAD_BUTTON;
   const API_EXTENDED_LEADERBOARD_ID = IDS.API_EXTENDED_LEADERBOARD;
   const SCOREBOARD_MOD_GRID_ID = IDS.SCOREBOARD_MOD_GRID;
+  const SCOREBOARD_HIDE_CUSTOM_RATE_SCORES_ID =
+    IDS.SCOREBOARD_HIDE_CUSTOM_RATE_SCORES;
   const SCOREBOARD_PLAYER_LOOKUP_ID = IDS.SCOREBOARD_PLAYER_LOOKUP;
   const DIFF_NAME_BESIDE_PICKER_ID = IDS.DIFF_NAME_BESIDE_PICKER;
   const BEATMAP_SCOREBOARD_SORT_GM_KEY = IDS.BEATMAP_SCOREBOARD_SORT_KEY;
@@ -5364,6 +5376,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   const WILDCARD_DUPE_ROW_ATTR = "data-oep-wildcard-dupe";
   /** Marks a row whose effective speed is not 1.00× or 1.50× (i.e. a custom-rate score). */
   const RATE_EDIT_ROW_ATTR = "data-oep-rate-edit";
+  /** Row hidden because “hide custom rate scores” is on (restored when filter off). */
+  const RATE_EDIT_ROW_HIDDEN_ATTR = "data-oep-rate-edit-filtered";
+  /** In-page “hide custom rate scores” control; visibility follows whether any rate-edit row exists. */
+  const RATE_EDIT_FILTER_BAR_ATTR = "data-oep-rate-edit-filter-bar";
   const SCORE_USER_SEARCH_RESULT_ATTR = "data-oep-user-search-result";
   /** Marks the per-column sort control in `<th>` (re-mounted after osu-web React refresh). */
   const SCOREBOARD_SORT_ARROW_ATTR = "data-oep-scoreboard-sort-arrow";
@@ -7187,6 +7203,26 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       outline: 2px solid rgba(102, 204, 255, 0.45);
       outline-offset: 1px;
       border-radius: 2px;
+    }
+    .oep-rate-edit-filter {
+      box-sizing: border-box;
+      margin: 0 0 0.5rem 0;
+      max-width: 34rem;
+    }
+    .oep-rate-edit-filter label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      cursor: pointer;
+      font-size: 0.8125rem;
+      color: rgba(255, 255, 255, 0.65);
+      user-select: none;
+    }
+    .oep-rate-edit-filter input[type="checkbox"] {
+      width: 1rem;
+      height: 1rem;
+      flex-shrink: 0;
+      accent-color: #66ccff;
     }
     /* Beatmap scoreboard user search */
     .oep-user-search {
@@ -9176,6 +9212,30 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    */
   function insertBeatmapScoreUserSearchBar(scoreboardRoot, wrap) {
     const modsEl = scoreboardRoot.querySelector(".beatmapset-scoreboard__mods");
+    const rateBar = scoreboardRoot.querySelector(
+      `[${RATE_EDIT_FILTER_BAR_ATTR}]`,
+    );
+    if (modsEl) {
+      if (rateBar instanceof HTMLElement) rateBar.after(wrap);
+      else modsEl.after(wrap);
+      return;
+    }
+    const main = scoreboardRoot.querySelector(".beatmapset-scoreboard__main");
+    if (main) {
+      main.insertBefore(wrap, main.firstChild);
+      return;
+    }
+    scoreboardRoot.insertBefore(wrap, scoreboardRoot.firstChild);
+  }
+
+  /**
+   * Sits directly under `.beatmapset-scoreboard__mods` so SPA remounts of the
+   * mod strip do not replace this node (sibling of React root, not inside it).
+   * @param {HTMLElement} scoreboardRoot
+   * @param {HTMLElement} wrap
+   */
+  function insertBeatmapRateEditFilterBar(scoreboardRoot, wrap) {
+    const modsEl = scoreboardRoot.querySelector(".beatmapset-scoreboard__mods");
     if (modsEl) {
       modsEl.after(wrap);
       return;
@@ -9408,8 +9468,15 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       const modsEl = root.querySelector(".beatmapset-scoreboard__mods");
       const existing = root.querySelector(`[${MARKER_ATTR}]`);
       if (existing) {
-        if (modsEl && existing.previousElementSibling !== modsEl) {
-          modsEl.after(existing);
+        const rateBar = root.querySelector(`[${RATE_EDIT_FILTER_BAR_ATTR}]`);
+        if (modsEl) {
+          if (rateBar instanceof HTMLElement) {
+            if (existing.previousElementSibling !== rateBar) {
+              rateBar.after(existing);
+            }
+          } else if (existing.previousElementSibling !== modsEl) {
+            modsEl.after(existing);
+          }
         }
         syncPlayerLookupSearchBarApiState(
           /** @type {HTMLElement} */ (existing),
@@ -9592,6 +9659,109 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     return () => {
       unsubLookup();
       window.removeEventListener(OSU_API_CREDS_CHANGE, onOsuApiCredsChange);
+      window.clearTimeout(debounceTimer);
+      obs.disconnect();
+      cleanup();
+    };
+  }
+
+  /**
+   * Checkbox under mod filters (sibling of React’s mods root) + setting
+   * `beatmapDetail.scoreboardHideCustomRateScores` to hide custom-rate rows.
+   * @param {RegExp} pathRe
+   * @returns {() => void}
+   */
+  function startBeatmapScoreboardHideRateEditFilterBar(pathRe) {
+    let debounceTimer = 0;
+
+    const cleanup = () => {
+      document
+        .querySelectorAll(`[${RATE_EDIT_FILTER_BAR_ATTR}]`)
+        .forEach((n) => n.remove());
+    };
+
+    const syncCheckbox = (wrap) => {
+      if (!(wrap instanceof HTMLElement)) return;
+      const cb = wrap.querySelector('input[type="checkbox"]');
+      if (!(cb instanceof HTMLInputElement)) return;
+      const on = settings.isEnabled(SCOREBOARD_HIDE_CUSTOM_RATE_SCORES_ID);
+      if (cb.checked !== on) cb.checked = on;
+    };
+
+    const ensureBar = (root) => {
+      const modsEl = root.querySelector(".beatmapset-scoreboard__mods");
+      if (!modsEl) return;
+
+      let existing = root.querySelector(`[${RATE_EDIT_FILTER_BAR_ATTR}]`);
+      if (!(existing instanceof HTMLElement)) {
+        const cb = /** @type {HTMLInputElement} */ (
+          el("input", { type: "checkbox" })
+        );
+        const label = el("label", {}, cb, " Hide custom rate scores");
+        existing = /** @type {HTMLElement} */ (
+          el(
+            "div",
+            {
+              class: "oep-rate-edit-filter",
+              [RATE_EDIT_FILTER_BAR_ATTR]: "1",
+            },
+            label,
+          )
+        );
+        cb.addEventListener("change", () => {
+          settings.set(SCOREBOARD_HIDE_CUSTOM_RATE_SCORES_ID, cb.checked);
+        });
+        insertBeatmapRateEditFilterBar(root, existing);
+      } else {
+        insertBeatmapRateEditFilterBar(root, existing);
+      }
+      syncCheckbox(existing);
+      syncBeatmapRateEditFilterBarVisibility(root);
+    };
+
+    const run = () => {
+      if (!pathRe.test(location.pathname)) {
+        cleanup();
+        return;
+      }
+      const root = findBeatmapScoreboardRoot();
+      if (!(root instanceof HTMLElement)) return;
+      ensureBar(root);
+    };
+
+    const schedule = () => {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(run, 16);
+    };
+
+    const unsub = settings.onChange(
+      SCOREBOARD_HIDE_CUSTOM_RATE_SCORES_ID,
+      (on) => {
+        document
+          .querySelectorAll(`[${RATE_EDIT_FILTER_BAR_ATTR}]`)
+          .forEach((w) => {
+            if (!(w instanceof HTMLElement)) return;
+            const cb = w.querySelector('input[type="checkbox"]');
+            if (cb instanceof HTMLInputElement && cb.checked !== on) {
+              cb.checked = on;
+            }
+          });
+        const board = findBeatmapScoreboardRoot();
+        if (board instanceof HTMLElement) {
+          refreshBeatmapScoreboardTableEnhancements(board);
+        }
+      },
+    );
+
+    const obs = new MutationObserver(schedule);
+    obs.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+    schedule();
+
+    return () => {
+      unsub();
       window.clearTimeout(debounceTimer);
       obs.disconnect();
       cleanup();
@@ -11282,6 +11452,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       if (refSpan) {
         const s = /** @type {HTMLSpanElement} */ (refSpan.cloneNode(false));
         s.textContent = "—";
+        s.removeAttribute("title");
+        s.removeAttribute("data-orig-title");
+        s.removeAttribute("data-original-title");
+        s.removeAttribute(SCOREBOARD_PP_ORIGINAL_ATTR);
         a.replaceChildren(s);
       } else {
         a.replaceChildren(document.createTextNode("—"));
@@ -11943,6 +12117,60 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
+   * When the setting is on, hides rows marked as custom-rate (`RATE_EDIT_ROW_ATTR`)
+   * using inline `display` so sort/rank logic treats them like other hidden rows.
+   * @param {HTMLElement|null|undefined} scoreboardRoot
+   */
+  function syncBeatmapScoreboardRateEditRowVisibility(scoreboardRoot) {
+    if (!(scoreboardRoot instanceof HTMLElement)) return;
+    const hide = settings.isEnabled(SCOREBOARD_HIDE_CUSTOM_RATE_SCORES_ID);
+    const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
+    if (!(realTable instanceof HTMLTableElement)) return;
+    const tbody = realTable.querySelector(
+      "tbody.beatmap-scoreboard-table__body",
+    );
+    if (!tbody) return;
+    for (const row of tbody.querySelectorAll(
+      "tr.beatmap-scoreboard-table__body-row",
+    )) {
+      if (!(row instanceof HTMLElement)) continue;
+      const filtered = row.hasAttribute(RATE_EDIT_ROW_HIDDEN_ATTR);
+      const isRate = row.hasAttribute(RATE_EDIT_ROW_ATTR);
+      if (hide && isRate) {
+        if (!filtered) {
+          row.setAttribute(RATE_EDIT_ROW_HIDDEN_ATTR, "1");
+          row.style.display = "none";
+        }
+      } else if (filtered) {
+        row.removeAttribute(RATE_EDIT_ROW_HIDDEN_ATTR);
+        row.style.display = "";
+      }
+    }
+  }
+
+  /**
+   * Shows the in-page “hide custom rate scores” bar only when the table has at
+   * least one `RATE_EDIT_ROW_ATTR` row (including rows hidden by that filter).
+   * @param {HTMLElement|null|undefined} scoreboardRoot
+   */
+  function syncBeatmapRateEditFilterBarVisibility(scoreboardRoot) {
+    if (!(scoreboardRoot instanceof HTMLElement)) return;
+    const wrap = scoreboardRoot.querySelector(`[${RATE_EDIT_FILTER_BAR_ATTR}]`);
+    if (!(wrap instanceof HTMLElement)) return;
+    const tbody = scoreboardRoot.querySelector(
+      "tbody.beatmap-scoreboard-table__body",
+    );
+    if (!tbody) {
+      wrap.hidden = true;
+      return;
+    }
+    const n = tbody.querySelectorAll(
+      `tr.beatmap-scoreboard-table__body-row[${RATE_EDIT_ROW_ATTR}]`,
+    ).length;
+    wrap.hidden = n < 1;
+  }
+
+  /**
    * PP decimals, hit-stat header/cell colors, PP column tint, and rate-edit dimming
    * for the main HTML table (native osu-web rows and our API-rendered rows).
    * @param {HTMLElement|null|undefined} scoreboardRoot
@@ -11952,8 +12180,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     syncBeatmapScoreboardHitstatColors(scoreboardRoot);
     syncBeatmapScoreboardPpValueColor(scoreboardRoot);
     applyRateEditMarkingToScoreboardRows(scoreboardRoot);
+    syncBeatmapScoreboardRateEditRowVisibility(scoreboardRoot);
     applyBeatmapScoreboardLeaderboardSort(scoreboardRoot);
     syncBeatmapScoreboardHeaderSortUi(scoreboardRoot);
+    syncBeatmapRateEditFilterBarVisibility(scoreboardRoot);
   }
 
   /**
@@ -14672,10 +14902,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       if (rating == null) {
         if (starEl instanceof HTMLElement && starEl.style.display !== "none")
           starEl.style.display = "none";
-        if (ratingTextNode.textContent !== "")
-          ratingTextNode.textContent = "";
+        if (ratingTextNode.textContent !== "") ratingTextNode.textContent = "";
         const metaDisplay = hasTitle ? "" : "none";
-        if (meta.style.display !== metaDisplay) meta.style.display = metaDisplay;
+        if (meta.style.display !== metaDisplay)
+          meta.style.display = metaDisplay;
         return;
       }
       if (meta.style.display !== "") meta.style.display = "";
@@ -15720,6 +15950,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     if (!pathRe.test(location.pathname)) return cleanup;
 
     bag.add(startBeatmapScoreboardSortControls(pathRe));
+    bag.add(startBeatmapScoreboardHideRateEditFilterBar(pathRe));
     bag.add(startBeatmapScoreUserSearchManager(pathRe));
     bag.add(startBeatmapScoreboardTableEnhancementsLive(pathRe));
     bag.add(startBeatmapDiscussionPreviewManager(pathRe));
