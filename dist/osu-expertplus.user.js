@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.2.15
+// @version      0.2.16
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -6408,6 +6408,62 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       align-items: center;
       min-width: 0;
     }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__wildcard-guide {
+      flex: 1 1 100%;
+      width: 100%;
+      max-width: 22rem;
+      box-sizing: border-box;
+      margin-top: 2px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid hsl(var(--hsl-b4, 333 18% 28%) / 0.55);
+      background: hsl(var(--hsl-b2, 333 18% 10%) / 0.9);
+      font-size: 9px;
+      line-height: 1.35;
+      color: hsl(var(--hsl-c2, 333 60% 72%));
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__wildcard-guide-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      min-width: 0;
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__wildcard-guide-icon {
+      position: relative;
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      margin-top: 1px;
+      border-radius: 8px;
+      box-sizing: border-box;
+      background: hsl(var(--hsl-b4, 333 18% 18%) / 0.6);
+      outline: 2px dashed hsl(45 100% 60% / 0.85);
+      outline-offset: 1px;
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__wildcard-guide-icon::after {
+      content: "?";
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: hsl(45 100% 50%);
+      color: hsl(0 0% 10%);
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 15px;
+      text-align: center;
+      pointer-events: none;
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__wildcard-guide-text {
+      margin: 0;
+      min-width: 0;
+    }
+    [${MOD_GRID_ATTR}] .${MOD_GRID_CLASS}__wildcard-guide-text strong {
+      color: hsl(var(--hsl-l1, 0 0% 90%));
+      font-weight: 700;
+    }
     /* Mod statistics numbers (grid layout only): enabled mods -> white. */
     .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .beatmap-scoreboard-mod--enabled .mod__extender span,
     .beatmapset-scoreboard__mods[${MOD_GRID_ATTR}] .beatmap-scoreboard-mod--enabled .mod__extender,
@@ -9151,6 +9207,35 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     modsEl.appendChild(frag);
 
     placeBeatmapModGridButtons(modsEl, piles);
+
+    if (auth.isConfigured()) {
+      piles["r2-stable"].appendChild(
+        elFn(
+          "div",
+          {
+            class: `${MOD_GRID_CLASS}__wildcard-guide`,
+            role: "note",
+          },
+          elFn(
+            "div",
+            { class: `${MOD_GRID_CLASS}__wildcard-guide-row` },
+            elFn("span", {
+              class: `${MOD_GRID_CLASS}__wildcard-guide-icon`,
+              "aria-hidden": "true",
+            }),
+            elFn(
+              "p",
+              { class: `${MOD_GRID_CLASS}__wildcard-guide-text` },
+              elFn("strong", {}, "Wildcard"),
+              ": click an enabled mod again. Wildcard mods ",
+              elFn("strong", {}, "may or may not"),
+              " appear on each score.",
+            ),
+          ),
+        ),
+      );
+    }
+
     reconcileMergedModCycleFromDom(modsEl);
 
     syncBeatmapModGridCloneHighlights(modsEl);
