@@ -77,6 +77,14 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
+      id: "userProfile.bwsRanking",
+      label: "Extra rankings in profile header",
+      description:
+        "Shows extra rankings in the profile header next to global and country: BWS (badge-weighted), country PP rank, and ranked-score rank (api.kirino.sh). BWS uses keyword-filtered badge count and rank ^ (0.9937 ^ (badges ^ 2)); optional session-only badge input.",
+      group: "User Profile",
+      default: true,
+    },
+    {
       id: "userProfile.scorePpDecimals",
       label: "PP decimals on scores",
       description:
@@ -104,7 +112,7 @@ OsuExpertPlus.settings = (() => {
       id: "beatmapDetail.metadataDescriptionModalButtons",
       label: "Full description & metadata buttons",
       description:
-        "On beatmapset pages, adds the \"Show metadata\" button under the artist and the \"Full description\" button in the info panel (each opens a modal).",
+        'On beatmapset pages, adds the "Show metadata" button under the artist and the "Full description" button in the info panel (each opens a modal).',
       group: "Beatmap Detail",
       default: true,
     },
@@ -315,6 +323,7 @@ OsuExpertPlus.settings = (() => {
     SCORE_CARD_BACKGROUNDS: "userProfile.scoreCardBackgrounds",
     SCORE_CARD_PLACE_NUMBER: "userProfile.scoreCardPlaceNumber",
     SCORE_PERIOD_HIGHLIGHT: "scores.periodHighlight",
+    BWS_RANKING: "userProfile.bwsRanking",
     RECENT_SCORES_SHOW_FAILS: "userProfile.recentScoresShowFails",
     METADATA_DESCRIPTION_MODAL_BUTTONS:
       "beatmapDetail.metadataDescriptionModalButtons",

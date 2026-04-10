@@ -305,6 +305,53 @@ OsuExpertPlus.api = (() => {
    * @param {string}        ruleset  'osu' | 'taiko' | 'fruits' | 'mania'
    * @returns {Promise<{attributes: {star_rating: number, max_combo: number, ...}}>}
    */
+  const KIRINO_INSPECTOR_PROFILE =
+    "https://api.kirino.sh/inspector/extension/profile";
+
+  const KIRINO_MODE_INDEX = {
+    osu: 0,
+    taiko: 1,
+    fruits: 2,
+    mania: 3,
+  };
+
+  /**
+   * Kirino score-inspector profile payload (country rank, ranked-score rank, etc.).
+   * POST body matches the osu! web extension: `{ user_id, mode, username }`.
+   * @param {string} userId
+   * @param {number} modeIndex  0 osu, 1 taiko, 2 fruits, 3 mania
+   * @param {string} [username]
+   * @returns {Promise<any>}
+   */
+  function fetchKirinoInspectorProfile(userId, modeIndex, username = "") {
+    const body = {
+      user_id: String(userId),
+      mode: modeIndex,
+      username: String(username || ""),
+    };
+    return fetch(KIRINO_INSPECTOR_PROFILE, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }).then((resp) => {
+      if (!resp.ok) {
+        throw new Error(
+          `[osu! Expert+] Kirino inspector ${resp.status}: ${KIRINO_INSPECTOR_PROFILE}`,
+        );
+      }
+      return resp.json();
+    });
+  }
+
+  /** @param {string} ruleset  osu | taiko | fruits | mania */
+  function kirinoModeIndexForRuleset(ruleset) {
+    const n = KIRINO_MODE_INDEX[ruleset];
+    return typeof n === "number" ? n : 0;
+  }
+
   function postBeatmapAttributes(beatmapId, mods, ruleset = "osu") {
     return new Promise((resolve, reject) => {
       _beatmapAttrsQueue.push({
@@ -350,5 +397,7 @@ OsuExpertPlus.api = (() => {
     getBeatmapScores,
     getBeatmapScoresWebsite,
     postBeatmapAttributes,
+    fetchKirinoInspectorProfile,
+    kirinoModeIndexForRuleset,
   };
 })();
