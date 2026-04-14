@@ -169,10 +169,18 @@ OsuExpertPlus.dom = (() => {
     let s = String(str).trim();
     // Strip whitespace-like thousand separators (thin/non-breaking/regular space)
     s = s.replace(/[\s\u00A0\u202F\u2009]/g, "");
-    // Whichever of comma/period appears LAST is the decimal separator
-    const lastComma = s.lastIndexOf(",");
-    const lastPeriod = s.lastIndexOf(".");
-    if (lastComma > lastPeriod) {
+
+    let decimalSeparator = ".";
+    try {
+      decimalSeparator = new Intl.NumberFormat(
+        window.currentLocale || document.documentElement.lang || undefined
+      )
+        .format(1.1).replace(/\d/g, "");
+    } catch (e) {
+      // Defaulting to "."
+    }
+
+    if (decimalSeparator === ",") {
       s = s.replace(/\./g, "").replace(",", ".");
     } else {
       s = s.replace(/,/g, "");
