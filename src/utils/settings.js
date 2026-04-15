@@ -85,6 +85,14 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
+      id: "userProfile.profileSectionCollapseRemoveFromPage",
+      label: "Hide collapsed profile sections",
+      description:
+        "When enabled, collapsing a section via Contents hides the whole block until you expand it from Contents again. When disabled (default), the section heading stays on the page with “(collapsed)” and you can expand it by clicking the heading.",
+      group: "User Profile",
+      default: false,
+    },
+    {
       id: "userProfile.scorePpDecimals",
       label: "PP decimals on scores",
       description:
@@ -324,6 +332,8 @@ OsuExpertPlus.settings = (() => {
     SCORE_CARD_PLACE_NUMBER: "userProfile.scoreCardPlaceNumber",
     SCORE_PERIOD_HIGHLIGHT: "scores.periodHighlight",
     BWS_RANKING: "userProfile.bwsRanking",
+    PROFILE_SECTION_COLLAPSE_REMOVE_FROM_PAGE:
+      "userProfile.profileSectionCollapseRemoveFromPage",
     RECENT_SCORES_SHOW_FAILS: "userProfile.recentScoresShowFails",
     METADATA_DESCRIPTION_MODAL_BUTTONS:
       "beatmapDetail.metadataDescriptionModalButtons",
