@@ -1510,28 +1510,16 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     await waitForStaleElementToLeave(PLAY_DETAIL_LIST_STALE_SEL);
 
-    try {
-      // Wait specifically for top_ranks (Ranks section) to have play-detail rows.
-      // Using `.play-detail-list .play-detail` here would resolve on "Most Watched
-      // Replays" if that section renders first, causing initScoreFeatures to run
-      // before top_ranks is in the DOM and return early with no sections.
-      await waitForElement(
-        '[data-page-id="top_ranks"] .play-detail-list .play-detail',
-        15000,
-      );
-    } catch {
-      return () => {};
-    }
+    await waitForElement(
+      '[data-page-id="top_ranks"] .play-detail-list',
+      15000,
+    ).catch(() => {});
 
     const scoreSections = Array.from(
       document.querySelectorAll(".play-detail-list"),
     )
       .map((listEl) => ({ listEl, type: _getSectionType(listEl) }))
       .filter((s) => SCORE_SECTION_TYPES.includes(s.type));
-
-    if (!scoreSections.length) {
-      return () => {};
-    }
 
     scoreSections.forEach(({ listEl }) =>
       listEl.setAttribute(PLAY_DETAIL_LIST_PROCESSED_ATTR, "1"),
@@ -1618,6 +1606,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     function mountScoreListObserver(section) {
       const { listEl, type } = section;
       let sectionObsBusy = false;
+      let statsFetchPending = false;
 
       const obs = new MutationObserver((mutations) => {
         if (sectionObsBusy) return;
@@ -1676,21 +1665,29 @@ OsuExpertPlus.pages.userProfile = (() => {
           }
 
           const allEls = Array.from(listEl.querySelectorAll(".play-detail"));
-          if (
-            settings.isEnabled(SCORE_HIT_STATISTICS_ID) &&
-            scoresMap.has(type)
-          ) {
-            const scores = scoresMap.get(type);
-            allEls.forEach((rowEl, i) => {
-              const needsReinjection =
-                !rowEl.hasAttribute(SCORE_STATS_ATTR) ||
-                !rowEl.querySelector(".oep-score-stats");
-              if (!needsReinjection) return;
-              rowEl.removeAttribute(SCORE_STATS_ATTR);
-              const score = scores[i];
-              if (!score) return;
-              injectStatsRow(rowEl, score);
-            });
+          if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
+            if (!scoresMap.has(type) && !statsFetchPending) {
+              // Rows appeared before the initial fetch completed (e.g. list was
+              // adopted while empty). Fetch now, then re-apply.
+              statsFetchPending = true;
+              _loadAndApplyStats(section).then(() => {
+                statsFetchPending = false;
+                if (settings.isEnabled(SCORE_PP_DECIMALS_ID))
+                  applyPpDecimals(listEl);
+              });
+            } else if (scoresMap.has(type)) {
+              const scores = scoresMap.get(type);
+              allEls.forEach((rowEl, i) => {
+                const needsReinjection =
+                  !rowEl.hasAttribute(SCORE_STATS_ATTR) ||
+                  !rowEl.querySelector(".oep-score-stats");
+                if (!needsReinjection) return;
+                rowEl.removeAttribute(SCORE_STATS_ATTR);
+                const score = scores[i];
+                if (!score) return;
+                injectStatsRow(rowEl, score);
+              });
+            }
           }
 
           if (type === "most_watched" && scoresMap.has(type)) {
@@ -1743,6 +1740,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     async function adoptLateSection(listEl) {
       const type = _getSectionType(listEl);
       if (!SCORE_SECTION_TYPES.includes(type)) return;
+      // Mark immediately to prevent a second adoption while we're async.
       listEl.setAttribute(PLAY_DETAIL_LIST_PROCESSED_ATTR, "1");
 
       const section = { listEl, type };
@@ -1752,36 +1750,45 @@ OsuExpertPlus.pages.userProfile = (() => {
         setScoreListLayoutClass([section], true);
       }
       syncScoreListPpDecimalsWidthClass(listEl);
-      if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
-      applyHideWeightedPp(listEl);
-      if (
-        settings.isEnabled(SCORE_PLACE_NUMBER_ID) &&
-        type === SCORE_PLACE_SECTION_TYPE
-      ) {
-        applyPlaceNumbers(listEl);
-        if (scoreSections.some((s) => s.type === SCORE_PLACE_SECTION_TYPE)) {
-          scorePlaceNumberStyle.inject();
-        }
-      }
 
-      if (type === "most_watched") {
-        mostWatchedSections.push(section);
-        if (!scoresMap.has("most_watched")) {
-          scoresMap.set(
-            "most_watched",
-            await fetchMostWatchedScores(userId, mode),
-          );
-        }
-        applyMostWatchedPp(listEl, scoresMap.get("most_watched"));
-        if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
-      }
-
-      if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
-        await _loadAndApplyStats(section);
-        if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
-      }
-
+      // Mount the per-list observer first so mutations that bring in the first
+      // rows are always caught, even if the list is empty right now.
       mountScoreListObserver(section);
+
+      const hasRows = listEl.querySelector(".play-detail") != null;
+
+      if (hasRows) {
+        if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
+        applyHideWeightedPp(listEl);
+        if (
+          settings.isEnabled(SCORE_PLACE_NUMBER_ID) &&
+          type === SCORE_PLACE_SECTION_TYPE
+        ) {
+          applyPlaceNumbers(listEl);
+          if (scoreSections.some((s) => s.type === SCORE_PLACE_SECTION_TYPE)) {
+            scorePlaceNumberStyle.inject();
+          }
+        }
+
+        if (type === "most_watched") {
+          mostWatchedSections.push(section);
+          if (!scoresMap.has("most_watched")) {
+            scoresMap.set(
+              "most_watched",
+              await fetchMostWatchedScores(userId, mode),
+            );
+          }
+          applyMostWatchedPp(listEl, scoresMap.get("most_watched"));
+          if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
+        }
+
+        if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
+          await _loadAndApplyStats(section);
+          if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
+        }
+      } else if (type === "most_watched") {
+        mostWatchedSections.push(section);
+      }
     }
 
     const lateSectionObs = new MutationObserver(() => {
@@ -1983,32 +1990,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       outline: 2px solid hsl(var(--hsl-b1));
       outline-offset: 2px;
     }
-    .${PROFILE_MEDIA_OPEN_BTN_CLASS}[data-oep-media-tip]::after {
-      content: attr(data-oep-media-tip);
-      position: absolute;
-      right: 0;
-      bottom: calc(100% + 6px);
-      padding: 0.32em 0.48em;
-      max-width: min(14rem, 70vw);
-      font-size: 11px;
-      font-weight: 600;
-      line-height: 1.25;
-      text-align: center;
-      white-space: normal;
-      color: hsl(var(--hsl-l1));
-      background: rgba(0, 0, 0, 0.9);
-      border-radius: 5px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 120ms ease;
-      z-index: 8;
-    }
-    .${PROFILE_MEDIA_OPEN_BTN_CLASS}[data-oep-media-tip]:hover::after,
-    .${PROFILE_MEDIA_OPEN_BTN_CLASS}[data-oep-media-tip]:focus-visible::after {
-      opacity: 1;
-    }
   `,
   );
 
@@ -2072,7 +2053,9 @@ OsuExpertPlus.pages.userProfile = (() => {
     const styleAttr = bgHost.getAttribute("style") || "";
     let m = styleAttr.match(/url\(\s*["']?([^"')]+)/i);
     if (m && m[1]) return m[1].trim();
-    for (const inner of bgHost.querySelectorAll("[style*='background-image']")) {
+    for (const inner of bgHost.querySelectorAll(
+      "[style*='background-image']",
+    )) {
       if (!(inner instanceof HTMLElement)) continue;
       const s = inner.getAttribute("style") || "";
       m = s.match(/url\(\s*["']?([^"')]+)/i);
@@ -2089,12 +2072,11 @@ OsuExpertPlus.pages.userProfile = (() => {
    *   markerAttr: string,
    *   resolveHref: (host: HTMLElement) => string,
    *   ariaLabel: string,
-   *   tip: string,
    * }} opts
    * @returns {null | (() => void)}
    */
   function bindProfileMediaOpenButton(opts) {
-    const { mediaHost, markerAttr, resolveHref, ariaLabel, tip } = opts;
+    const { mediaHost, markerAttr, resolveHref, ariaLabel } = opts;
     if (!(mediaHost instanceof HTMLElement)) return null;
     if (mediaHost.hasAttribute(markerAttr)) return null;
     const href = resolveHref(mediaHost);
@@ -2123,7 +2105,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       {
         type: "button",
         class: `${PROFILE_MEDIA_OPEN_BTN_CLASS} ${variantClass}`,
-        "data-oep-media-tip": tip,
         "aria-label": ariaLabel,
         onclick: (ev) => {
           ev.preventDefault();
@@ -2192,11 +2173,13 @@ OsuExpertPlus.pages.userProfile = (() => {
             markerAttr: PROFILE_AVATAR_OPEN_ATTR,
             resolveHref: resolveProfileAvatarImageHref,
             ariaLabel: "Open profile picture",
-            tip: "Open profile picture",
           }) || null;
       }
       const bg = document.querySelector(".profile-info__bg");
-      if (bg instanceof HTMLElement && !bg.hasAttribute(PROFILE_BANNER_OPEN_ATTR)) {
+      if (
+        bg instanceof HTMLElement &&
+        !bg.hasAttribute(PROFILE_BANNER_OPEN_ATTR)
+      ) {
         disposeBanner?.();
         disposeBanner =
           bindProfileMediaOpenButton({
@@ -2204,7 +2187,6 @@ OsuExpertPlus.pages.userProfile = (() => {
             markerAttr: PROFILE_BANNER_OPEN_ATTR,
             resolveHref: resolveProfileBannerImageHref,
             ariaLabel: "Open profile banner",
-            tip: "Open profile banner",
           }) || null;
       }
     }
@@ -2235,9 +2217,7 @@ OsuExpertPlus.pages.userProfile = (() => {
         .forEach((el) => el.removeAttribute(PROFILE_BANNER_OPEN_ATTR));
       document
         .querySelectorAll(`.${PROFILE_MEDIA_OPEN_HOST_CLASS}`)
-        .forEach((el) =>
-          el.classList.remove(PROFILE_MEDIA_OPEN_HOST_CLASS),
-        );
+        .forEach((el) => el.classList.remove(PROFILE_MEDIA_OPEN_HOST_CLASS));
       profileMediaOpenStyle.remove();
     };
   }
@@ -4240,9 +4220,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     const s = String(htmlOrText);
     const tmp = document.createElement("div");
     tmp.innerHTML = s;
-    return (tmp.textContent || tmp.innerText || "")
-      .replace(/\s+/g, " ")
-      .trim();
+    return (tmp.textContent || tmp.innerText || "").replace(/\s+/g, " ").trim();
   }
 
   function bwsBadgeDescriptionText(badgeEl) {
@@ -4292,8 +4270,7 @@ OsuExpertPlus.pages.userProfile = (() => {
   function parseProfileGlobalRankForBws() {
     const data = parseProfileInitialData();
     const mode = getCurrentMode();
-    const fromRulesets =
-      data?.user?.statistics_rulesets?.[mode]?.global_rank;
+    const fromRulesets = data?.user?.statistics_rulesets?.[mode]?.global_rank;
     if (fromRulesets != null) {
       const n = Number(fromRulesets);
       if (Number.isFinite(n) && n > 0) return n;
@@ -4478,7 +4455,8 @@ OsuExpertPlus.pages.userProfile = (() => {
     const exponent = Math.pow(0.9937, count * count);
     const bwsVal = computeBwsRankValue(globalRank, count);
     const expStr = exponent.toFixed(4);
-    const resultStr = bwsVal != null ? Math.round(bwsVal).toLocaleString() : "?";
+    const resultStr =
+      bwsVal != null ? Math.round(bwsVal).toLocaleString() : "?";
     return (
       `rank ^ (0.9937 ^ (badges²))` +
       ` = ${globalRank.toLocaleString()} ^ (0.9937 ^ ${count}²)` +
@@ -4499,9 +4477,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     const globalRank = parseProfileGlobalRankForBws();
     if (globalRank == null) return;
     const eligible = analyzeBadgesForBws().eligible;
-    const rv = inp
-      .closest(`[${BWS_ATTR}="1"]`)
-      ?.querySelector(".rank-value");
+    const rv = inp.closest(`[${BWS_ATTR}="1"]`)?.querySelector(".rank-value");
     if (!(rv instanceof HTMLElement)) return;
     const count = bwsEffectiveBadgeCountFromInput(inp, eligible);
     const bwsVal = computeBwsRankValue(globalRank, count);
@@ -8422,7 +8398,9 @@ OsuExpertPlus.pages.userProfile = (() => {
       document
         .querySelectorAll(`a.${SECTION_TAB_COLLAPSED_CLASS}`)
         .forEach((a) => a.classList.remove(SECTION_TAB_COLLAPSED_CLASS));
-      document.documentElement.classList.remove(SECTION_COLLAPSE_HARD_MODE_CLASS);
+      document.documentElement.classList.remove(
+        SECTION_COLLAPSE_HARD_MODE_CLASS,
+      );
       sectionCollapseStyle.remove();
     };
   }
