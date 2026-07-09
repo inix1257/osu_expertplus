@@ -47,10 +47,10 @@ OsuExpertPlus.omdb = (() => {
     } catch {
       throw new Error(MSG_BEATMAPSET_RESPONSE_UNEXPECTED);
     }
-    if (!Array.isArray(data)) {
+    if (!Array.isArray(data.Difficulties)) {
       throw new Error(MSG_BEATMAPSET_RESPONSE_UNEXPECTED);
     }
-    return data;
+    return data.Difficulties;
   }
 
   /**
