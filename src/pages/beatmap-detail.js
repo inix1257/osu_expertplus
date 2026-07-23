@@ -38,7 +38,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   const SCOREBOARD_HIDE_CUSTOM_RATE_SCORES_ID =
     IDS.SCOREBOARD_HIDE_CUSTOM_RATE_SCORES;
   const SCOREBOARD_PLAYER_LOOKUP_ID = IDS.SCOREBOARD_PLAYER_LOOKUP;
-  const DIFF_NAME_BESIDE_PICKER_ID = IDS.DIFF_NAME_BESIDE_PICKER;
+  const PICKER_DIFF_NAMES_ID = IDS.PICKER_DIFF_NAMES;
+  const SCOREBOARD_GLOBAL_RANK_ID = IDS.SCOREBOARD_GLOBAL_RANK;
   const beatmapPreview = OsuExpertPlus.beatmapPreview;
   const DISCUSSION_USER_CACHE = new Map();
 
@@ -102,9 +103,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
   const SCOREBOARD_PP_ORIGINAL_ATTR = "data-oep-scoreboard-pp-original";
   /** Injected always-visible header nomod star rating (osu-web shows native line only on picker hover). */
-  const HEADER_NOMOD_STAR_ATTR = "data-oep-header-nomod-star";
   /** Marks injected name / guest credit / SR block inside the active `.beatmapset-beatmap-picker__beatmap--active`. */
-  const DIFF_BESIDE_PICKER_ATTR = "data-oep-header-diff-beside-picker";
+  const PICKER_DIFF_NAMES_META_ATTR = "data-oep-picker-diff-names-meta";
   /** OMDB (omdb.nyahh.net) block above `.beatmapset-header__diff-name`. */
   const OEP_OMDB_WRAP_CLASS = "oep-beatmapset-omdb-wrap";
   const OEP_OMDB_ROW_CLASS = "oep-beatmapset-omdb-row";
@@ -943,47 +943,85 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       padding: 4px 2px 8px;
     }
 
-    .beatmapset-header.oep-picker-hover-hint-enabled
-      .beatmapset-header__beatmap-picker-box:has(.oep-picker-hover-hint)
-      > .beatmapset-beatmap-picker {
-      padding-left: 0;
+    /* Vertical difficulty picker: keeps osu's horizontal, wrapping tray, but shows each diff's name + SR beside its icon. */
+    .beatmapset-header.oep-picker-diff-names-enabled
+      .beatmapset-header__beatmap-picker-box {
+      width: auto;
+      max-width: none;
     }
-    /* Shown only when "Difficulty name & stars in the active picker cell" is on. */
-    .beatmapset-header:not(.oep-picker-hover-hint-enabled) .oep-picker-hover-hint {
-      display: none !important;
+    .beatmapset-header.oep-picker-diff-names-enabled
+      .beatmapset-beatmap-picker {
+      flex-direction: row;
+      flex-wrap: wrap;
+      width: auto;
+      max-width: 100%;
     }
-    .oep-picker-hover-hint {
-      display: flex;
-      align-items: baseline;
-      gap: 0.5rem;
-      padding: 0.2rem 0.6rem 0.15rem 0;
-      min-height: 1.5rem;
-      font-size: 1.0625rem;
-      /* Same muted mix as active picker cell border (see .oep-diff-beside-picker --oep-diff-muted). */
+    .beatmapset-header.oep-picker-diff-names-enabled
+      .beatmapset-beatmap-picker__beatmap {
+      display: inline-flex !important;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 0.6rem;
+      width: auto !important;
+      height: auto !important;
+      padding: 0.3rem 0.9rem 0.3rem 0.5rem;
+      box-sizing: border-box;
+      position: relative;
+    }
+    .beatmapset-header.oep-picker-diff-names-enabled
+      .beatmapset-beatmap-picker__beatmap::before {
+      z-index: 0;
+    }
+    .beatmapset-header.oep-picker-diff-names-enabled
+      .beatmapset-beatmap-picker__beatmap
+      > .beatmap-icon {
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+    }
+    .oep-picker-diff-names__meta {
+      display: none;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 0.1rem;
+      min-width: 0;
+      line-height: 1.2;
+      text-align: left;
+      position: relative;
+      z-index: 1;
+      /* Same muted mix used elsewhere for diff-tinted text (see --oep-diff-muted). */
       --oep-diff-muted: color-mix(
         in srgb,
-        var(--oep-hint-diff, hsl(var(--hsl-c1))) 44%,
+        var(--oep-diff-muted-src, hsl(var(--hsl-c1))) 44%,
         #ffffff
       );
-      color: var(--oep-diff-muted);
     }
-    .oep-picker-hover-hint__version {
+    .beatmapset-header.oep-picker-diff-names-enabled .oep-picker-diff-names__meta {
+      display: flex;
+    }
+    .oep-picker-diff-names__version {
       font-weight: 600;
-      max-width: 16rem;
+      font-size: 0.95rem;
+      color: var(--oep-diff-muted);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+      max-width: 14rem;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
     }
-    .oep-picker-hover-hint__star {
+    .oep-picker-diff-names__star {
       display: inline-flex;
       align-items: baseline;
       gap: 0.2em;
+      font-size: 0.8rem;
       font-weight: 600;
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+      color: var(--oep-diff-muted);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
     }
-    .oep-picker-hover-hint__star .fa-star {
-      font-size: 0.92em;
+    .oep-picker-diff-names__star .fa-star {
+      font-size: 1em;
       color: inherit;
     }
 
@@ -1005,28 +1043,38 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     }
     .${OEP_OMDB_ROW_CLASS}__label {
       flex-shrink: 0;
-      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      font-size: 10px;
       font-weight: 800;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      opacity: 0.92;
-      color: hsl(var(--hsl-l1, 0 0% 94%));
+      padding: 0.15em 0.6em;
+      border-radius: 999px;
+      background: color-mix(
+        in srgb,
+        color-mix(in srgb, hsl(var(--hsl-c2, 333 60% 60%)) 32%, #000000) 50%,
+        transparent
+      );
+      color: hsl(var(--hsl-l1, 0 0% 96%));
     }
     a.${OEP_OMDB_ROW_CLASS}__label {
       text-decoration: none;
-      border-bottom: 1px solid hsl(var(--hsl-c2, 333 60% 70%) / 0.35);
       cursor: pointer;
-      transition: color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+      transition: background-color 0.12s ease, color 0.12s ease;
     }
     a.${OEP_OMDB_ROW_CLASS}__label:hover {
-      opacity: 1;
-      color: hsl(var(--hsl-c2, 333 72% 78%));
-      border-bottom-color: hsl(var(--hsl-c2, 333 60% 70%) / 0.65);
+      background: color-mix(
+        in srgb,
+        color-mix(in srgb, hsl(var(--hsl-c2, 333 60% 60%)) 48%, #000000) 65%,
+        transparent
+      );
+      color: hsl(var(--hsl-c2, 333 72% 84%));
     }
     a.${OEP_OMDB_ROW_CLASS}__label:focus-visible {
       outline: 2px solid hsl(var(--hsl-c2, 333 60% 65%));
       outline-offset: 2px;
-      border-radius: 2px;
+      border-radius: 999px;
     }
     .${OEP_OMDB_ROW_CLASS}__body {
       flex: 1 1 auto;
@@ -1055,6 +1103,11 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       color: #e05c5c;
       opacity: 0.95;
     }
+    .${OEP_OMDB_ROW_CLASS}__stat-value {
+      font-weight: 700;
+      color: #ffffff;
+      font-variant-numeric: tabular-nums;
+    }
     .${OEP_OMDB_ROW_CLASS}__ranks {
       display: inline-flex;
       flex-wrap: wrap;
@@ -1074,12 +1127,13 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       font-weight: 700;
       font-size: 14px;
       letter-spacing: -0.02em;
-      color: hsl(var(--hsl-l1, 0 0% 97%));
+      color: #ffffff;
       font-variant-numeric: tabular-nums;
     }
     a.${OEP_OMDB_ROW_CLASS}__rank-value {
+      /* No color override here — "overall"/year rank links are the same element as
+         .__rank-value above, and an inherited color would win on specificity and undo it. */
       text-decoration: none;
-      color: inherit;
     }
     a.${OEP_OMDB_ROW_CLASS}__rank-value:hover {
       color: hsl(var(--hsl-c2, 333 72% 78%));
@@ -1431,170 +1485,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       color: #fff;
     }
 
-    /* Single always-visible nomod star line; hide osu-web duplicate on picker hover. */
-    .beatmapset-header
-      .beatmapset-header__diff-extra--star-difficulty:not([${HEADER_NOMOD_STAR_ATTR}]) {
-      display: none !important;
-    }
-    .beatmapset-header__diff-extra--star-difficulty[${HEADER_NOMOD_STAR_ATTR}] {
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
-    }
-    .beatmapset-header__diff-extra--star-difficulty[${HEADER_NOMOD_STAR_ATTR}] .fas.fa-star {
-      font-size: 1em;
-      color: inherit;
-      vertical-align: baseline;
-    }
-
-    .beatmapset-header.oep-diff-beside-picker .beatmapset-header__diff-name {
-      display: none !important;
-    }
-    .beatmapset-header.oep-diff-beside-picker [${HEADER_NOMOD_STAR_ATTR}="1"] {
-      display: none !important;
-    }
-    /*
-     * --diff is mirrored from .beatmap-icon onto the active cell only in JS.
-     * --oep-diff-muted: pastel mix for the active cell frame + meta text (not the outer tray).
-     */
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-header__beatmap-picker-box {
-      width: auto;
-      max-width: none;
-    }
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker__beatmap--active,
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker:has(> .beatmapset-beatmap-picker__beatmap:only-child)
-      > .beatmapset-beatmap-picker__beatmap:only-child {
-      --oep-diff-muted: color-mix(
-        in srgb,
-        var(--diff, hsl(var(--hsl-c1))) 44%,
-        #ffffff
-      );
-    }
-    .beatmapset-header.oep-diff-beside-picker .beatmapset-beatmap-picker {
-      /* Keep tray background height consistent for single vs multi-diff sets. */
-      min-height: 4rem;
-      align-items: stretch;
-      box-sizing: border-box;
-    }
-    /* Active cell: [ icon | diffname / SR ] — two columns, text stacked in column 2. */
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker__beatmap--active,
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker:has(> .beatmapset-beatmap-picker__beatmap:only-child)
-      > .beatmapset-beatmap-picker__beatmap:only-child {
-      display: inline-flex !important;
-      flex-direction: row;
-      flex-wrap: nowrap;
-      align-items: center;
-      gap: 0.5rem 0.65rem;
-      padding: 0.35rem 0.9rem 0.4rem;
-      width: auto !important;
-      height: auto !important;
-      min-height: 2.85rem;
-      box-sizing: border-box;
-      max-width: min(100%, 22rem);
-      position: relative;
-      flex-shrink: 0;
-    }
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker__beatmap--active::before,
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker:has(> .beatmapset-beatmap-picker__beatmap:only-child)
-      > .beatmapset-beatmap-picker__beatmap:only-child::before {
-      z-index: 0;
-      border-color: var(--oep-diff-muted) !important;
-    }
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker__beatmap--active
-      > .beatmap-icon,
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker__beatmap--active
-      > :first-child:not(.oep-picker-active-meta),
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker:has(> .beatmapset-beatmap-picker__beatmap:only-child)
-      > .beatmapset-beatmap-picker__beatmap:only-child
-      > .beatmap-icon,
-    .beatmapset-header.oep-diff-beside-picker
-      .beatmapset-beatmap-picker:has(> .beatmapset-beatmap-picker__beatmap:only-child)
-      > .beatmapset-beatmap-picker__beatmap:only-child
-      > :first-child:not(.oep-picker-active-meta) {
-      flex-shrink: 0;
-      align-self: center;
-      position: relative;
-      z-index: 1;
-    }
-    .beatmapset-header.oep-diff-beside-picker .oep-picker-active-meta {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: center;
-      gap: 0.1rem;
-      min-width: 0;
-      flex: 1 1 auto;
-      line-height: 1.22;
-      text-align: left;
-      position: relative;
-      z-index: 1;
-    }
-    .beatmapset-header.oep-diff-beside-picker .oep-picker-active-meta__title-row {
-      display: flex;
-      flex-direction: row;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 0 0.35rem;
-      min-width: 0;
-      max-width: 100%;
-    }
-    .beatmapset-header.oep-diff-beside-picker .oep-picker-active-meta__version {
-      font-weight: 600;
-      font-size: 1rem;
-      color: var(--oep-diff-muted);
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
-      max-width: 16rem;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      flex: 0 1 auto;
-      min-width: 0;
-    }
-    .beatmapset-header.oep-diff-beside-picker
-      .oep-picker-active-meta__guest.beatmapset-header__diff-extra {
-      flex: 1 1 auto;
-      min-width: 0;
-      max-width: 100%;
-      font-size: 9px;
-      font-weight: 600;
-      margin-left: 0;
-      color: var(--oep-diff-muted);
-    }
-    .beatmapset-header.oep-diff-beside-picker
-      .oep-picker-active-meta__guest.beatmapset-header__diff-extra
-      .oep-picker-active-meta__guest-user {
-      color: inherit;
-      text-decoration: none;
-      cursor: pointer;
-    }
-    .beatmapset-header.oep-diff-beside-picker
-      .oep-picker-active-meta__guest.beatmapset-header__diff-extra
-      .oep-picker-active-meta__guest-user.js-usercard:hover {
-      text-decoration: underline;
-    }
-    .beatmapset-header.oep-diff-beside-picker .oep-picker-active-meta__star {
-      display: inline-flex;
-      align-items: baseline;
-      gap: 0.2em;
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--oep-diff-muted);
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
-    }
-    .beatmapset-header.oep-diff-beside-picker .oep-picker-active-meta__star .fas.fa-star {
-      font-size: 1em;
-      color: var(--oep-diff-muted);
-      vertical-align: baseline;
-    }
-
     /*
      * Beatmap leaderboard hit columns (GREAT/OK/MEH/MISS etc.) — same palette as
      * user-profile score card .oep-score-stats__val--* (see user-profile.js).
@@ -1660,6 +1550,21 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     /* PP column — all rulesets */
     .beatmapset-scoreboard table.beatmap-scoreboard-table__table td.beatmap-scoreboard-table__cell .oep-beatmap-scoreboard-pp-value {
       color: #c4b5fd;
+    }
+    /* Global rank badge next to the leaderboard username. */
+    .oep-scoreboard-rank-badge {
+      display: inline-flex;
+      align-items: baseline;
+      margin-left: 0.4em;
+      padding: 0.05em 0.45em;
+      border-radius: 999px;
+      font-size: 0.78em;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      font-variant-numeric: tabular-nums;
+      color: hsl(var(--hsl-l1, 0 0% 80%));
+      background: hsla(0, 0%, 100%, 0.08);
+      vertical-align: middle;
     }
     /* Prevent overflow when the mod extender tab sits next to the icon. */
     .beatmapset-scoreboard .beatmap-scoreboard-table__mods .beatmap-scoreboard-mod {
@@ -7208,25 +7113,15 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
-   * Shows the in-page “hide custom rate scores” bar only when the table has at
-   * least one `RATE_EDIT_ROW_ATTR` row (including rows hidden by that filter).
+   * The “hide custom rate scores” bar is always shown (not just when the table
+   * currently has a custom-rate row) so the toggle stays reachable regardless of leaderboard content.
    * @param {HTMLElement|null|undefined} scoreboardRoot
    */
   function syncBeatmapRateEditFilterBarVisibility(scoreboardRoot) {
     if (!(scoreboardRoot instanceof HTMLElement)) return;
     const wrap = scoreboardRoot.querySelector(`[${RATE_EDIT_FILTER_BAR_ATTR}]`);
     if (!(wrap instanceof HTMLElement)) return;
-    const tbody = scoreboardRoot.querySelector(
-      "tbody.beatmap-scoreboard-table__body",
-    );
-    if (!tbody) {
-      wrap.hidden = true;
-      return;
-    }
-    const n = tbody.querySelectorAll(
-      `tr.beatmap-scoreboard-table__body-row[${RATE_EDIT_ROW_ATTR}]`,
-    ).length;
-    wrap.hidden = n < 1;
+    wrap.hidden = false;
   }
 
   /**
@@ -7640,6 +7535,149 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     parent.insertBefore(overrideItem, nativeItem);
   }
 
+  const SCOREBOARD_GLOBAL_RANK_BADGE_CLASS = "oep-scoreboard-rank-badge";
+  /** Ranks fluctuate constantly; a short session-only cache just avoids refetching on every re-render. */
+  const SCOREBOARD_GLOBAL_RANK_CACHE_TTL_MS = 5 * 60 * 1000;
+  /** @type {Map<string, { rank: number|null, ts: number }>} */
+  const _scoreboardGlobalRankCache = new Map();
+  /** @type {Set<string>} */
+  const _scoreboardGlobalRankInFlight = new Set();
+
+  /**
+   * @param {string} mode
+   * @param {number} userId
+   */
+  function scoreboardGlobalRankCacheKey(mode, userId) {
+    return `${mode}|${userId}`;
+  }
+
+  /**
+   * @param {HTMLElement} row
+   * @returns {number|null}
+   */
+  function scoreboardRowUserId(row) {
+    const card = row.querySelector("a.js-usercard[data-user-id]");
+    if (card instanceof HTMLElement) {
+      const id = Number(card.getAttribute("data-user-id"));
+      if (Number.isFinite(id) && id > 0) return id;
+    }
+    const link = row.querySelector(
+      "a.beatmap-scoreboard-table__user-link, a[href*='/users/']",
+    );
+    if (link instanceof HTMLAnchorElement) {
+      const m = (link.getAttribute("href") || "").match(/\/users\/(\d+)/);
+      if (m) return Number(m[1]);
+    }
+    return null;
+  }
+
+  /**
+   * @param {HTMLElement} userLink  the username `<a>` to badge
+   * @param {number|null} rank
+   */
+  function paintScoreboardGlobalRankBadge(userLink, rank) {
+    if (!(userLink instanceof HTMLElement)) return;
+    const host = userLink.parentElement || userLink;
+    let badge = host.querySelector(`.${SCOREBOARD_GLOBAL_RANK_BADGE_CLASS}`);
+    if (rank == null) {
+      badge?.remove();
+      return;
+    }
+    const text = `#${Number(rank).toLocaleString()}`;
+    if (!(badge instanceof HTMLElement)) {
+      badge = el("span", {
+        class: SCOREBOARD_GLOBAL_RANK_BADGE_CLASS,
+        title: "Global rank",
+      });
+      userLink.insertAdjacentElement("afterend", badge);
+    }
+    if (badge.textContent !== text) badge.textContent = text;
+  }
+
+  /**
+   * Global rank next to each leaderboard username. Runs on every scoreboard refresh
+   * (sort, mod change, wildcard/player-lookup merge, …); unresolved players are batched
+   * into a single throttled `api.getUsers` call rather than one request per row.
+   * @param {HTMLElement} scoreboardRoot
+   */
+  function syncBeatmapScoreboardGlobalRanks(scoreboardRoot) {
+    if (!(scoreboardRoot instanceof HTMLElement)) return;
+    const rows = Array.from(
+      scoreboardRoot.querySelectorAll("tr.beatmap-scoreboard-table__body-row"),
+    );
+    if (!settings.isEnabled(SCOREBOARD_GLOBAL_RANK_ID)) {
+      for (const row of rows) {
+        row
+          .querySelector(`.${SCOREBOARD_GLOBAL_RANK_BADGE_CLASS}`)
+          ?.remove();
+      }
+      return;
+    }
+
+    const mode = getBeatmapPageRuleset() || "osu";
+    const now = Date.now();
+    /** @type {Map<number, HTMLElement[]>} */
+    const needFetch = new Map();
+
+    for (const row of rows) {
+      if (!(row instanceof HTMLElement) || row.style.display === "none") {
+        continue;
+      }
+      const userLink = row.querySelector("a.js-usercard");
+      if (!(userLink instanceof HTMLElement)) continue;
+      const userId = scoreboardRowUserId(row);
+      if (userId == null) continue;
+
+      const key = scoreboardGlobalRankCacheKey(mode, userId);
+      const cached = _scoreboardGlobalRankCache.get(key);
+      if (cached && now - cached.ts < SCOREBOARD_GLOBAL_RANK_CACHE_TTL_MS) {
+        paintScoreboardGlobalRankBadge(userLink, cached.rank);
+        continue;
+      }
+      if (_scoreboardGlobalRankInFlight.has(key)) continue;
+      if (!needFetch.has(userId)) needFetch.set(userId, []);
+      needFetch.get(userId).push(userLink);
+    }
+
+    if (!needFetch.size) return;
+
+    const ids = Array.from(needFetch.keys());
+    for (const id of ids) {
+      _scoreboardGlobalRankInFlight.add(scoreboardGlobalRankCacheKey(mode, id));
+    }
+
+    OsuExpertPlus.api
+      .getUsers(ids)
+      .then((users) => {
+        /** @type {Map<number, object>} */
+        const byId = new Map();
+        for (const u of Array.isArray(users) ? users : []) {
+          const uid = Number(u?.id);
+          if (Number.isFinite(uid)) byId.set(uid, u);
+        }
+        for (const id of ids) {
+          const u = byId.get(id);
+          const rank = Number(u?.statistics_rulesets?.[mode]?.global_rank);
+          const value = Number.isFinite(rank) && rank > 0 ? rank : null;
+          _scoreboardGlobalRankCache.set(
+            scoreboardGlobalRankCacheKey(mode, id),
+            { rank: value, ts: Date.now() },
+          );
+          for (const userLink of needFetch.get(id) || []) {
+            paintScoreboardGlobalRankBadge(userLink, value);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        for (const id of ids) {
+          _scoreboardGlobalRankInFlight.delete(
+            scoreboardGlobalRankCacheKey(mode, id),
+          );
+        }
+      });
+  }
+
   function refreshBeatmapScoreboardTableEnhancements(scoreboardRoot) {
     syncBeatmapScoreboardPpDecimals(scoreboardRoot);
     syncBeatmapScoreboardHitstatColors(scoreboardRoot);
@@ -7650,6 +7688,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     syncBeatmapScoreboardHeaderSortUi(scoreboardRoot);
     syncBeatmapRateEditFilterBarVisibility(scoreboardRoot);
     refreshBeatmapScoreTopPanel(scoreboardRoot);
+    syncBeatmapScoreboardGlobalRanks(scoreboardRoot);
   }
 
   /**
@@ -9857,6 +9896,40 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
+   * "4.12 avg · 74 ratings" with the numeric values wrapped for a distinct text colour.
+   * @param {number} avgN
+   * @param {boolean} hasAvg
+   * @param {number} cntN
+   * @param {boolean} hasCnt
+   * @returns {(string|Element)[]}
+   */
+  function buildOmdbStatNodes(avgN, hasAvg, cntN, hasCnt) {
+    const nodes = [];
+    if (hasAvg) {
+      nodes.push(
+        el(
+          "span",
+          { class: `${OEP_OMDB_ROW_CLASS}__stat-value` },
+          avgN.toFixed(2),
+        ),
+        " avg",
+      );
+    }
+    if (hasCnt) {
+      if (nodes.length) nodes.push(" · ");
+      nodes.push(
+        el(
+          "span",
+          { class: `${OEP_OMDB_ROW_CLASS}__stat-value` },
+          String(cntN),
+        ),
+        ` rating${cntN === 1 ? "" : "s"}`,
+      );
+    }
+    return nodes;
+  }
+
+  /**
    * @param {number} score
    */
   function formatOmdbDistScoreLabel(score) {
@@ -9956,12 +10029,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     }
 
     if (hasAvg || hasCnt) {
-      const statParts = [];
-      if (hasAvg) statParts.push(`${avgN.toFixed(2)} avg`);
-      if (hasCnt) {
-        statParts.push(`${cntN} rating${cntN === 1 ? "" : "s"}`);
-      }
-      const statText = statParts.join(" · ");
+      const statNodes = buildOmdbStatNodes(avgN, hasAvg, cntN, hasCnt);
       if (useDistPopover && distUi) {
         const anchor = el("span", {
           class: `${OEP_OMDB_ROW_CLASS}__dist-anchor`,
@@ -9973,13 +10041,13 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
             tabindex: "0",
             title: "Rating breakdown",
           },
-          statText,
+          ...statNodes,
         );
         anchor.appendChild(trigger);
         distUi.bindTrigger(trigger, distRows);
         appendChunk(anchor);
       } else {
-        appendChunk(document.createTextNode(statText));
+        appendChunk(el("span", {}, ...statNodes));
       }
     }
     if (ranksEl) appendChunk(ranksEl);
@@ -10078,400 +10146,25 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
-   * Guest credit in the header (osu `hasGuestOwners`): some `owners[].id` differs from
-   * the beatmapset host `user_id`. Uses the same owner list osu shows in
-   * `.beatmapset-header__diff-extra`.
-   * @param {number|null|undefined} beatmapId
-   * @returns {{ show: boolean, owners: Array<{ id: number, username: string }> }}
-   */
-  function getBeatmapGuestMapperOwnersForHeader(beatmapId) {
-    const data = readBeatmapsetJson();
-    const empty = {
-      show: false,
-      owners: /** @type {Array<{ id: number, username: string }>} */ ([]),
-    };
-    if (!data?.beatmaps?.length) return empty;
-    const n = Number(beatmapId);
-    if (!Number.isFinite(n)) return empty;
-    const bm = data.beatmaps.find((b) => Number(b.id) === n);
-    if (!bm || !Array.isArray(bm.owners) || !bm.owners.length) return empty;
-    const setUid = Number(data.user_id);
-    if (!Number.isFinite(setUid)) return empty;
-    const hasGuest = bm.owners.some((o) => Number(o?.id) !== setUid);
-    if (!hasGuest) return empty;
-    const owners = bm.owners.map((o) => ({
-      id: Number(o.id),
-      username: o.username != null ? String(o.username) : "",
-    }));
-    return { show: true, owners };
-  }
-
-  /**
-   * Selected difficulty only: name + nomod SR inside
-   * `a.beatmapset-beatmap-picker__beatmap--active` (same bordered cell as the icon).
-   * Hides `.beatmapset-header__diff-name`; guest “mapped by …” is duplicated here from JSON when applicable.
+   * Shows each difficulty’s name and nomod star rating next to its icon in the picker tray
+   * (still osu’s horizontal, wrapping layout — just with names/SR added per icon).
    * @param {HTMLElement} header
    * @param {RegExp} pathRe
    * @returns {() => void}
    */
-  function startBeatmapHeaderDiffBesidePicker(header, pathRe) {
+  function startPickerDiffNames(header, pathRe) {
     const picker = header.querySelector(".beatmapset-beatmap-picker");
     if (!(picker instanceof HTMLElement)) return () => {};
 
     let disposed = false;
     let raf = 0;
-    /** Avoid guest-row DOM churn (stops MutationObserver ↔ sync loops + osu usercard re-init). */
-    let lastGuestStableKey = "";
 
-    /**
-     * osu-web may omit `--active` when there is only one difficulty in some states.
-     * @returns {HTMLAnchorElement|null}
-     */
-    function getActivePickerAnchor() {
-      const active = picker.querySelector(
-        "a.beatmapset-beatmap-picker__beatmap--active",
-      );
-      if (active instanceof HTMLAnchorElement) return active;
-      const only = picker.querySelector(
-        "a.beatmapset-beatmap-picker__beatmap:only-child",
-      );
-      return only instanceof HTMLAnchorElement ? only : null;
-    }
-
-    function getSelectedBeatmapId() {
-      const a = getActivePickerAnchor();
-      if (!(a instanceof HTMLAnchorElement)) return null;
-      const fromHash = parseBeatmapIdFromPickerLink(a);
-      if (fromHash != null) return fromHash;
-      const href = a.getAttribute("href") || "";
-      const m = href.match(/\/beatmaps\/(\d+)/);
-      if (m) return Number(m[1]);
-      const s = getBeatmapPageBeatmapId();
-      return s != null ? Number(s) : null;
-    }
-
-    /** @type {Text|null} */
-    let ratingTextNode = null;
-
-    function removeLegacySiblingStrip() {
-      for (const dead of header.querySelectorAll(
-        ".oep-header-diff-beside-picker",
-      )) {
-        dead.remove();
-      }
-    }
-
-    function stripInjectedMetaFromPicker() {
-      for (const node of picker.querySelectorAll(
-        `[${DIFF_BESIDE_PICKER_ATTR}="1"]`,
-      )) {
-        node.remove();
-      }
-    }
-
-    /**
-     * @returns {HTMLElement|null}
-     */
-    function ensureAttached() {
-      if (disposed || !pathRe.test(location.pathname)) return null;
-      removeLegacySiblingStrip();
-
-      const active = getActivePickerAnchor();
-      for (const node of picker.querySelectorAll(
-        `[${DIFF_BESIDE_PICKER_ATTR}="1"]`,
-      )) {
-        const host = node.closest("a.beatmapset-beatmap-picker__beatmap");
-        if (host !== active) node.remove();
-      }
-
-      if (!(active instanceof HTMLAnchorElement)) {
-        header.classList.remove("oep-diff-beside-picker");
-        return null;
-      }
-
-      header.classList.add("oep-diff-beside-picker");
-
-      let meta = active.querySelector(`[${DIFF_BESIDE_PICKER_ATTR}="1"]`);
-      if (
-        meta instanceof HTMLElement &&
-        !meta.querySelector(".oep-picker-active-meta__title-row")
-      ) {
-        meta.remove();
-        meta = null;
-      }
-      if (!(meta instanceof HTMLElement)) {
-        const starSpan = el(
-          "span",
-          {
-            class: "oep-picker-active-meta__star",
-            title: "Star rating",
-          },
-          el("i", { class: "fas fa-star", "aria-hidden": "true" }),
-          "",
-        );
-        const icon = starSpan.querySelector(".fa-star");
-        const tn = icon?.nextSibling;
-        ratingTextNode = tn instanceof Text ? tn : null;
-        const titleRow = el(
-          "span",
-          { class: "oep-picker-active-meta__title-row" },
-          el("span", { class: "oep-picker-active-meta__version" }),
-          el("span", {
-            class:
-              "beatmapset-header__diff-extra oep-picker-active-meta__guest",
-          }),
-        );
-        meta = el(
-          "span",
-          {
-            class: "oep-picker-active-meta",
-            [DIFF_BESIDE_PICKER_ATTR]: "1",
-          },
-          titleRow,
-          starSpan,
-        );
-        active.appendChild(meta);
-      } else {
-        const starSpan = meta.querySelector(".oep-picker-active-meta__star");
-        const icon = starSpan?.querySelector(".fa-star");
-        const tn = icon?.nextSibling;
-        ratingTextNode = tn instanceof Text ? tn : null;
-      }
-      return meta;
-    }
-
-    function syncContent() {
-      if (disposed || !pathRe.test(location.pathname)) return;
-      const active = getActivePickerAnchor();
-      if (!(active instanceof HTMLAnchorElement)) {
-        stripInjectedMetaFromPicker();
-        header.classList.remove("oep-diff-beside-picker");
-        lastGuestStableKey = "";
-        ratingTextNode = null;
-        return;
-      }
-
-      const meta = ensureAttached();
-      if (!meta || !ratingTextNode) return;
-
-      const beatmapIcon = active.querySelector(".beatmap-icon");
-      if (beatmapIcon instanceof HTMLElement) {
-        const diffVar =
-          beatmapIcon.style.getPropertyValue("--diff") ||
-          getComputedStyle(beatmapIcon).getPropertyValue("--diff");
-        const trimmed = diffVar?.trim() ?? "";
-        const current = active.style.getPropertyValue("--diff");
-        if (trimmed && current !== trimmed) {
-          active.style.setProperty("--diff", trimmed);
-        } else if (!trimmed && current) {
-          active.style.removeProperty("--diff");
-        }
-      } else if (active.style.getPropertyValue("--diff")) {
-        active.style.removeProperty("--diff");
-      }
-
-      const verEl = meta.querySelector(".oep-picker-active-meta__version");
-      const guestEl = meta.querySelector(".oep-picker-active-meta__guest");
-      const titleRow = meta.querySelector(".oep-picker-active-meta__title-row");
-      if (!(verEl instanceof HTMLElement) || !(guestEl instanceof HTMLElement))
-        return;
-
-      const id = getSelectedBeatmapId();
-      const { version, rating } =
-        id != null
-          ? getBeatmapVersionAndRatingForHeader(id)
-          : { version: "", rating: null };
-      const { show: showGuest, owners: guestOwners } =
-        id != null
-          ? getBeatmapGuestMapperOwnersForHeader(id)
-          : { show: false, owners: [] };
-
-      const hasVer = Boolean(version);
-      if (verEl.textContent !== version) verEl.textContent = version;
-      if (hasVer) {
-        verEl.setAttribute("title", version);
-      } else {
-        verEl.removeAttribute("title");
-      }
-      const verDisplay = hasVer ? "" : "none";
-      if (verEl.style.display !== verDisplay) verEl.style.display = verDisplay;
-
-      const expectGuestNodes = Boolean(showGuest && guestOwners.length);
-      const guestStableKey = `${id ?? ""}|${
-        expectGuestNodes
-          ? guestOwners.map((o) => `${o.id}:${o.username}`).join(",")
-          : ""
-      }`;
-      const shouldRebuildGuest =
-        guestStableKey !== lastGuestStableKey ||
-        (expectGuestNodes && guestEl.childNodes.length === 0) ||
-        (!expectGuestNodes && guestEl.childNodes.length > 0);
-
-      if (shouldRebuildGuest) {
-        lastGuestStableKey = guestStableKey;
-        guestEl.replaceChildren();
-        if (showGuest && guestOwners.length) {
-          if (guestEl.style.display !== "") guestEl.style.display = "";
-          guestEl.append(document.createTextNode("mapped by "));
-          guestOwners.forEach((o, i) => {
-            if (i > 0) guestEl.append(document.createTextNode(", "));
-            const uid = Number(o.id);
-            const uname = o.username.trim() || `User ${uid}`;
-            const profileUrl =
-              Number.isFinite(uid) && uid > 0 ? `/users/${uid}` : null;
-            /*
-             * Span + js-usercard (not <a>): nested links inside the picker’s <a> are invalid
-             * HTML and break osu’s card positioning; stable guest DOM avoids lookup spam.
-             */
-            /** @type {Record<string, string | ((e: Event) => void)>} */
-            const spanAttrs = {
-              class: "oep-picker-active-meta__guest-user js-usercard",
-              role: "link",
-              tabindex: "0",
-              onclick: (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (profileUrl) window.location.assign(profileUrl);
-              },
-              onkeydown: (e) => {
-                const ke = /** @type {KeyboardEvent} */ (e);
-                if (ke.key !== "Enter" && ke.key !== " ") return;
-                ke.preventDefault();
-                ke.stopPropagation();
-                if (profileUrl) window.location.assign(profileUrl);
-              },
-              onauxclick: (e) => {
-                const me = /** @type {MouseEvent} */ (e);
-                if (me.button !== 1 || !profileUrl) return;
-                me.preventDefault();
-                me.stopPropagation();
-                window.open(profileUrl, "_blank", "noopener,noreferrer");
-              },
-            };
-            if (profileUrl) {
-              spanAttrs.title = `View ${uname}'s profile`;
-              spanAttrs["data-user-id"] = String(uid);
-            }
-            guestEl.append(el("span", spanAttrs, uname));
-          });
-        } else {
-          if (guestEl.style.display !== "none") guestEl.style.display = "none";
-        }
-      } else {
-        const wantDisplay = expectGuestNodes ? "" : "none";
-        if (guestEl.style.display !== wantDisplay)
-          guestEl.style.display = wantDisplay;
-      }
-
-      const hasTitle = hasVer || (showGuest && guestOwners.length > 0);
-      if (titleRow instanceof HTMLElement) {
-        const titleDisplay = hasTitle ? "" : "none";
-        if (titleRow.style.display !== titleDisplay)
-          titleRow.style.display = titleDisplay;
-      }
-
-      const starEl = meta.querySelector(".oep-picker-active-meta__star");
-      if (rating == null) {
-        if (starEl instanceof HTMLElement && starEl.style.display !== "none")
-          starEl.style.display = "none";
-        if (ratingTextNode.textContent !== "") ratingTextNode.textContent = "";
-        const metaDisplay = hasTitle ? "" : "none";
-        if (meta.style.display !== metaDisplay)
-          meta.style.display = metaDisplay;
-        return;
-      }
-      if (meta.style.display !== "") meta.style.display = "";
-      if (starEl instanceof HTMLElement && starEl.style.display !== "")
-        starEl.style.display = "";
-      const starText = ` ${formatBeatmapsetHeaderStarRatingText(rating)}`;
-      if (ratingTextNode.textContent !== starText)
-        ratingTextNode.textContent = starText;
-    }
-
-    function scheduleSync() {
-      if (raf) return;
-      raf = window.requestAnimationFrame(() => {
-        raf = 0;
-        syncContent();
-      });
-    }
-
-    function onRouteHashSignal() {
-      scheduleSync();
-    }
-
-    syncContent();
-
-    window.addEventListener("hashchange", onRouteHashSignal, { passive: true });
-    window.addEventListener("popstate", onRouteHashSignal, { passive: true });
-
-    const mo = new MutationObserver(scheduleSync);
-    mo.observe(picker, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["class", "href"],
-    });
-
-    return () => {
-      disposed = true;
-      if (raf) window.cancelAnimationFrame(raf);
-      raf = 0;
-      window.removeEventListener("hashchange", onRouteHashSignal);
-      window.removeEventListener("popstate", onRouteHashSignal);
-      mo.disconnect();
-      stripInjectedMetaFromPicker();
-      removeLegacySiblingStrip();
-      header.classList.remove("oep-diff-beside-picker");
-      lastGuestStableKey = "";
-      ratingTextNode = null;
-    };
-  }
-
-  /**
-   * Diff name + nomod SR below the picker tray when “Difficulty name & stars in the active
-   * picker cell” is enabled. Follows the active difficulty; while the cursor is over another
-   * icon, previews that diff.
-   * @param {HTMLElement} header
-   * @param {RegExp} pathRe
-   * @returns {() => void}
-   */
-  function startPickerHoverHint(header, pathRe) {
-    const picker = header.querySelector(".beatmapset-beatmap-picker");
-    if (!(picker instanceof HTMLElement)) return () => {};
-
-    function syncPickerHoverHintVisibility() {
+    function syncEnabledClass() {
       header.classList.toggle(
-        "oep-picker-hover-hint-enabled",
-        settings.isEnabled(DIFF_NAME_BESIDE_PICKER_ID),
+        "oep-picker-diff-names-enabled",
+        settings.isEnabled(PICKER_DIFF_NAMES_ID),
       );
     }
-    syncPickerHoverHintVisibility();
-    const unsubPickerHintSetting = settings.onChange(
-      DIFF_NAME_BESIDE_PICKER_ID,
-      syncPickerHoverHintVisibility,
-    );
-
-    const versionEl = el("span", { class: "oep-picker-hover-hint__version" });
-    const starEl = el(
-      "span",
-      { class: "oep-picker-hover-hint__star" },
-      el("i", { class: "fas fa-star", "aria-hidden": "true" }),
-    );
-    const starValueTn = document.createTextNode("");
-    starEl.appendChild(starValueTn);
-    const hintEl = el(
-      "div",
-      { class: "oep-picker-hover-hint" },
-      versionEl,
-      starEl,
-    );
-
-    picker.insertAdjacentElement("afterend", hintEl);
-
-    let disposed = false;
-    let hoveredBeatmapId = /** @type {number|null} */ (null);
-    let raf = 0;
 
     function beatmapIdFromPickerAnchor(a) {
       if (!(a instanceof HTMLAnchorElement)) return null;
@@ -10481,73 +10174,76 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       return m ? Number(m[1]) : null;
     }
 
-    function getActiveBeatmapIdFromPicker() {
-      const a = picker.querySelector(
-        "a.beatmapset-beatmap-picker__beatmap--active",
-      );
-      return beatmapIdFromPickerAnchor(a);
-    }
-
-    /**
-     * @param {number|null|undefined} bid
-     * @returns {HTMLAnchorElement|null}
-     */
-    function findPickerAnchorForBeatmapId(bid) {
-      if (bid == null || !Number.isFinite(Number(bid))) return null;
-      const n = Number(bid);
-      for (const node of picker.querySelectorAll(
-        "a.beatmapset-beatmap-picker__beatmap",
-      )) {
-        if (!(node instanceof HTMLAnchorElement)) continue;
-        const pid = beatmapIdFromPickerAnchor(node);
-        if (pid === n) return node;
+    function syncRow(a) {
+      if (!settings.isEnabled(PICKER_DIFF_NAMES_ID)) {
+        a.querySelector(`[${PICKER_DIFF_NAMES_META_ATTR}]`)?.remove();
+        return;
       }
-      return null;
-    }
 
-    function resolvedBeatmapId() {
-      if (hoveredBeatmapId != null) return hoveredBeatmapId;
-      const fromPicker = getActiveBeatmapIdFromPicker();
-      if (fromPicker != null) return fromPicker;
-      const pageId = getBeatmapPageBeatmapId();
-      return pageId != null ? Number(pageId) : null;
-    }
-
-    function syncHint() {
-      if (disposed || !pathRe.test(location.pathname)) return;
-      const id = resolvedBeatmapId();
-      const anchor =
-        id != null
-          ? findPickerAnchorForBeatmapId(id)
-          : picker.querySelector("a.beatmapset-beatmap-picker__beatmap--active");
-
+      const id = beatmapIdFromPickerAnchor(a);
       const { version, rating } =
         id != null
           ? getBeatmapVersionAndRatingForHeader(id)
           : { version: "", rating: null };
 
-      const icon =
-        anchor instanceof HTMLAnchorElement
-          ? anchor.querySelector(".beatmap-icon")
-          : null;
+      let meta = a.querySelector(`[${PICKER_DIFF_NAMES_META_ATTR}]`);
+      if (!(meta instanceof HTMLElement)) {
+        meta = el(
+          "span",
+          {
+            class: "oep-picker-diff-names__meta",
+            [PICKER_DIFF_NAMES_META_ATTR]: "1",
+          },
+          el("span", { class: "oep-picker-diff-names__version" }),
+          el(
+            "span",
+            { class: "oep-picker-diff-names__star" },
+            el("i", { class: "fas fa-star", "aria-hidden": "true" }),
+          ),
+        );
+        a.appendChild(meta);
+      }
+
+      const icon = a.querySelector(".beatmap-icon");
       const diffVar = icon
         ? (
             icon.style.getPropertyValue("--diff") ||
             getComputedStyle(icon).getPropertyValue("--diff")
           ).trim()
         : "";
-      if (diffVar) hintEl.style.setProperty("--oep-hint-diff", diffVar);
-      else hintEl.style.removeProperty("--oep-hint-diff");
+      if (diffVar) meta.style.setProperty("--oep-diff-muted-src", diffVar);
+      else meta.style.removeProperty("--oep-diff-muted-src");
 
-      versionEl.textContent = version || "";
-      versionEl.style.display = version ? "" : "none";
+      const verEl = meta.querySelector(".oep-picker-diff-names__version");
+      if (verEl instanceof HTMLElement && verEl.textContent !== version) {
+        verEl.textContent = version;
+      }
 
-      if (rating != null) {
-        starValueTn.textContent = ` ${formatBeatmapsetHeaderStarRatingText(rating)}`;
-        starEl.style.display = "";
-      } else {
-        starValueTn.textContent = "";
-        starEl.style.display = "none";
+      const starEl = meta.querySelector(".oep-picker-diff-names__star");
+      if (starEl instanceof HTMLElement) {
+        const starIcon = starEl.querySelector(".fa-star");
+        let starTn = starIcon?.nextSibling;
+        if (!(starTn instanceof Text)) {
+          starTn = document.createTextNode("");
+          starEl.appendChild(starTn);
+        }
+        if (rating != null) {
+          starTn.textContent = ` ${formatBeatmapsetHeaderStarRatingText(rating)}`;
+          starEl.style.display = "";
+        } else {
+          starTn.textContent = "";
+          starEl.style.display = "none";
+        }
+      }
+    }
+
+    function syncAll() {
+      if (disposed || !pathRe.test(location.pathname)) return;
+      syncEnabledClass();
+      for (const a of picker.querySelectorAll(
+        "a.beatmapset-beatmap-picker__beatmap",
+      )) {
+        if (a instanceof HTMLAnchorElement) syncRow(a);
       }
     }
 
@@ -10555,39 +10251,21 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       if (raf) return;
       raf = window.requestAnimationFrame(() => {
         raf = 0;
-        syncHint();
+        syncAll();
       });
     }
 
-    /**
-     * @param {MouseEvent} e
-     */
-    function onPickerMouseOver(e) {
-      if (disposed || !pathRe.test(location.pathname)) return;
-      const t = e.target;
-      if (!(t instanceof Element)) return;
-      const a = t.closest("a.beatmapset-beatmap-picker__beatmap");
-      if (!(a instanceof HTMLAnchorElement) || !picker.contains(a)) return;
-      const id = beatmapIdFromPickerAnchor(a);
-      if (id == null) return;
-      hoveredBeatmapId = id;
-      scheduleSync();
-    }
-
-    function onPickerMouseLeave() {
-      hoveredBeatmapId = null;
-      scheduleSync();
-    }
-
     function onRouteSignal() {
-      hoveredBeatmapId = null;
       scheduleSync();
     }
 
-    syncHint();
+    const unsubSetting = settings.onChange(
+      PICKER_DIFF_NAMES_ID,
+      scheduleSync,
+    );
 
-    picker.addEventListener("mouseover", onPickerMouseOver);
-    picker.addEventListener("mouseleave", onPickerMouseLeave);
+    syncAll();
+
     window.addEventListener("hashchange", onRouteSignal, { passive: true });
     window.addEventListener("popstate", onRouteSignal, { passive: true });
 
@@ -10603,166 +10281,16 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       disposed = true;
       if (raf) window.cancelAnimationFrame(raf);
       raf = 0;
-      unsubPickerHintSetting();
-      header.classList.remove("oep-picker-hover-hint-enabled");
-      picker.removeEventListener("mouseover", onPickerMouseOver);
-      picker.removeEventListener("mouseleave", onPickerMouseLeave);
+      unsubSetting();
+      header.classList.remove("oep-picker-diff-names-enabled");
       window.removeEventListener("hashchange", onRouteSignal);
       window.removeEventListener("popstate", onRouteSignal);
       mo.disconnect();
-      hintEl.remove();
-    };
-  }
-
-  /**
-   * Nomod star rating in the header difficulty line: always visible with a star icon
-   * (osu-web only mounts the native span while hovering the picker).
-   * @param {HTMLElement} header
-   * @param {RegExp} pathRe
-   * @returns {() => void}
-   */
-  function startBeatmapHeaderNomodStarLine(header, pathRe) {
-    const picker = header.querySelector(".beatmapset-beatmap-picker");
-    if (!(picker instanceof HTMLElement)) return () => {};
-
-    let hoveredBeatmapId = /** @type {number|null} */ (null);
-    let disposed = false;
-    let raf = 0;
-
-    function getActiveBeatmapIdFromPicker() {
-      const a = picker.querySelector(
-        "a.beatmapset-beatmap-picker__beatmap--active",
-      );
-      if (!(a instanceof HTMLAnchorElement)) return null;
-      const fromHash = parseBeatmapIdFromPickerLink(a);
-      if (fromHash != null) return fromHash;
-      const href = a.getAttribute("href") || "";
-      const m = href.match(/\/beatmaps\/(\d+)/);
-      return m ? Number(m[1]) : null;
-    }
-
-    function currentDisplayedBeatmapId() {
-      if (hoveredBeatmapId != null) return hoveredBeatmapId;
-      const fromPicker = getActiveBeatmapIdFromPicker();
-      if (fromPicker != null) return fromPicker;
-      const s = getBeatmapPageBeatmapId();
-      return s != null ? Number(s) : null;
-    }
-
-    function getDifficultyRatingForBeatmap(beatmapId) {
-      return getBeatmapVersionAndRatingForHeader(beatmapId).rating;
-    }
-
-    function buildStarSpan() {
-      const attrs = {
-        class:
-          "beatmapset-header__diff-extra beatmapset-header__diff-extra--star-difficulty",
-        title: "Star rating",
-      };
-      attrs[HEADER_NOMOD_STAR_ATTR] = "1";
-      return el(
-        "span",
-        attrs,
-        el("i", { class: "fas fa-star", "aria-hidden": "true" }),
-        "",
-      );
-    }
-
-    /** @type {Text|null} */
-    let ratingTextNode = null;
-
-    function ensureAttached() {
-      if (disposed || !pathRe.test(location.pathname)) return null;
-      const diffName = header.querySelector(".beatmapset-header__diff-name");
-      const row = diffName?.parentElement;
-      if (!(diffName instanceof HTMLElement) || !(row instanceof HTMLElement))
-        return null;
-
-      let span = row.querySelector(`[${HEADER_NOMOD_STAR_ATTR}="1"]`);
-      if (!(span instanceof HTMLSpanElement)) span = buildStarSpan();
-      diffName.insertAdjacentElement("afterend", span);
-
-      const icon = span.querySelector(".fa-star");
-      const tn = icon?.nextSibling;
-      ratingTextNode = tn instanceof Text ? tn : null;
-      return span;
-    }
-
-    function syncContent() {
-      if (disposed || !pathRe.test(location.pathname)) return;
-      const span = ensureAttached();
-      if (!span || !ratingTextNode) return;
-      const id = currentDisplayedBeatmapId();
-      const r = id != null ? getDifficultyRatingForBeatmap(id) : null;
-      if (r == null) {
-        span.style.display = "none";
-        ratingTextNode.textContent = "";
-        return;
+      for (const node of picker.querySelectorAll(
+        `[${PICKER_DIFF_NAMES_META_ATTR}]`,
+      )) {
+        node.remove();
       }
-      span.style.display = "";
-      ratingTextNode.textContent = ` ${formatBeatmapsetHeaderStarRatingText(r)}`;
-    }
-
-    function scheduleSync() {
-      if (raf) return;
-      raf = window.requestAnimationFrame(() => {
-        raf = 0;
-        syncContent();
-      });
-    }
-
-    /**
-     * @param {MouseEvent} e
-     */
-    function onPickerMouseOver(e) {
-      const t = e.target;
-      if (!(t instanceof Element)) return;
-      const a = t.closest("a.beatmapset-beatmap-picker__beatmap");
-      if (!(a instanceof HTMLAnchorElement) || !picker.contains(a)) return;
-      const id = parseBeatmapIdFromPickerLink(a);
-      if (id != null) {
-        hoveredBeatmapId = id;
-        scheduleSync();
-        return;
-      }
-      const href = a.getAttribute("href") || "";
-      const m = href.match(/\/beatmaps\/(\d+)/);
-      if (m) {
-        hoveredBeatmapId = Number(m[1]);
-        scheduleSync();
-      }
-    }
-
-    function onPickerMouseLeave() {
-      hoveredBeatmapId = null;
-      scheduleSync();
-    }
-
-    function onRouteHashSignal() {
-      hoveredBeatmapId = null;
-      scheduleSync();
-    }
-
-    syncContent();
-
-    picker.addEventListener("mouseover", onPickerMouseOver);
-    picker.addEventListener("mouseleave", onPickerMouseLeave);
-    window.addEventListener("hashchange", onRouteHashSignal, { passive: true });
-    window.addEventListener("popstate", onRouteHashSignal, { passive: true });
-
-    const mo = new MutationObserver(scheduleSync);
-    mo.observe(header, { subtree: true, childList: true });
-
-    return () => {
-      disposed = true;
-      if (raf) window.cancelAnimationFrame(raf);
-      raf = 0;
-      picker.removeEventListener("mouseover", onPickerMouseOver);
-      picker.removeEventListener("mouseleave", onPickerMouseLeave);
-      window.removeEventListener("hashchange", onRouteHashSignal);
-      window.removeEventListener("popstate", onRouteHashSignal);
-      mo.disconnect();
-      header.querySelector(`[${HEADER_NOMOD_STAR_ATTR}="1"]`)?.remove();
     };
   }
 
@@ -11614,37 +11142,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     bag.add(startBeatmapDiscussionPreviewManager(pathRe));
     bag.add(startDiscussionTabLinkPatcher(beatmapsetId));
     bag.add(startBeatmapsetFavouriteButtonPinkIndicator(header));
-    bag.add(startPickerHoverHint(header, pathRe));
-
-    /** @type {null|(() => void)} */
-    let headerStarOrDiffBesideCleanup = null;
-    function refreshHeaderStarLineOrDiffBesidePicker() {
-      try {
-        headerStarOrDiffBesideCleanup?.();
-      } catch (_) {}
-      headerStarOrDiffBesideCleanup = null;
-      if (!pathRe.test(location.pathname) || !document.body.contains(header)) {
-        return;
-      }
-      headerStarOrDiffBesideCleanup = settings.isEnabled(
-        DIFF_NAME_BESIDE_PICKER_ID,
-      )
-        ? startBeatmapHeaderDiffBesidePicker(header, pathRe)
-        : startBeatmapHeaderNomodStarLine(header, pathRe);
-    }
-    refreshHeaderStarLineOrDiffBesidePicker();
-    bag.add(
-      settings.onChange(
-        DIFF_NAME_BESIDE_PICKER_ID,
-        refreshHeaderStarLineOrDiffBesidePicker,
-      ),
-    );
-    bag.add(() => {
-      try {
-        headerStarOrDiffBesideCleanup?.();
-      } catch (_) {}
-      headerStarOrDiffBesideCleanup = null;
-    });
+    bag.add(startPickerDiffNames(header, pathRe));
 
     /** @type {null|(() => void)} */
     let beatconnectCleanup = null;
@@ -11708,6 +11206,15 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
     bag.add(
       settings.onChange(SCORE_PP_DECIMALS_ID, () => {
+        const root = findBeatmapScoreboardRoot();
+        if (root instanceof HTMLElement) {
+          refreshBeatmapScoreboardTableEnhancements(root);
+        }
+      }),
+    );
+
+    bag.add(
+      settings.onChange(SCOREBOARD_GLOBAL_RANK_ID, () => {
         const root = findBeatmapScoreboardRoot();
         if (root instanceof HTMLElement) {
           refreshBeatmapScoreboardTableEnhancements(root);

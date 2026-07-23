@@ -548,10 +548,140 @@ OsuExpertPlus.pages.userProfile = (() => {
     .oep-clear-sr-cache-btn:active {
       opacity: 0.7;
     }
+
+    .oep-recent-score-card-link {
+      cursor: pointer;
+    }
+
+    .oep-score-options-wrap {
+      position: relative;
+      display: inline-flex;
+    }
+    .oep-score-options-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.45);
+      cursor: pointer;
+      padding: 4px 8px;
+      font-size: 13px;
+      line-height: 1;
+      border-radius: 4px;
+      transition: color 100ms ease, background-color 100ms ease;
+    }
+    .oep-score-options-btn:hover {
+      color: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .oep-score-options-menu {
+      position: fixed;
+      z-index: 9999;
+      background: #2a2a3a;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      min-width: 130px;
+      padding: 4px 0;
+      display: none;
+    }
+    .oep-score-options-menu[data-open] {
+      display: block;
+    }
+    .oep-score-options-item {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.87);
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+      padding: 8px 14px;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background-color 80ms ease;
+    }
+    .oep-score-options-item:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .oep-score-options-item--pending {
+      opacity: 0.55;
+      cursor: wait;
+      pointer-events: none;
+    }
+    .oep-score-options-item--done {
+      color: rgba(160, 255, 160, 0.9);
+    }
+    .oep-score-options-item--error {
+      color: rgba(255, 180, 100, 0.9);
+    }
   `;
   const playDetailStyle = manageStyle(PLAY_DETAIL_STYLE_ID, PLAY_DETAIL_CSS);
 
   const SCORE_STATS_ATTR = "data-oep-stats";
+
+  /**
+   * Extract the beatmap ID from a play-detail row's title link.
+   * Returns null when the link is absent or not yet rendered.
+   * @param {HTMLElement} rowEl
+   * @returns {string|null}
+   */
+  function _beatmapIdFromRow(rowEl) {
+    const href = rowEl.querySelector("a.play-detail__title")?.href ?? "";
+    const m = href.match(/#\w+\/(\d+)/);
+    return m ? m[1] : null;
+  }
+
+  /**
+   * Build a Map<beatmapId, score[]> from an array of API score objects.
+   * Multiple scores may share the same beatmap ID (e.g. different mods),
+   * so each key maps to an ordered list rather than a single value.
+   * @param {Object[]} scores
+   * @returns {Map<string, Object[]>}
+   */
+  function _buildScoresByBeatmapId(scores) {
+    const map = new Map();
+    for (const s of scores) {
+      const id = String(s?.beatmap?.id ?? "");
+      if (!id) continue;
+      if (!map.has(id)) map.set(id, []);
+      map.get(id).push(s);
+    }
+    return map;
+  }
+
+  /**
+   * Iterate `elements` and call `fn(rowEl, score)` for each row that can be
+   * matched to a score by beatmap ID.  Rows without a recognisable beatmap
+   * URL are silently skipped.  When several scores share the same beatmap ID
+   * (rare – e.g. DT vs HDDT on the same map) they are consumed in encounter
+   * order; `usageCount` is mutated in place and must be shared across
+   * consecutive calls that work on the same underlying scores array.
+   *
+   * @param {HTMLElement[]} elements
+   * @param {Map<string, Object[]>} byBeatmap  from _buildScoresByBeatmapId
+   * @param {Map<string, number>}  usageCount  caller-owned, mutated here
+   * @param {(rowEl: HTMLElement, score: Object) => void} fn
+   */
+  function _applyByBeatmapId(elements, byBeatmap, usageCount, fn) {
+    elements.forEach((rowEl) => {
+      const bmId = _beatmapIdFromRow(rowEl);
+      if (!bmId) return;
+      const candidates = byBeatmap.get(bmId);
+      if (!candidates) return;
+      const idx = usageCount.get(bmId) ?? 0;
+      const score = candidates[idx];
+      if (!score) return;
+      usageCount.set(bmId, idx + 1);
+      fn(rowEl, score);
+    });
+  }
 
   /** GET /users/{id}/scores/{type} paginated; same order as DOM. */
   async function fetchScores(userId, mode, type) {
@@ -991,11 +1121,14 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   function applyMostWatchedPp(listEl, scores) {
-    Array.from(listEl.querySelectorAll(".play-detail")).forEach((rowEl, i) => {
-      const score = scores[i];
-      if (!score) return;
-      injectMostWatchedPpRow(rowEl, score);
-    });
+    const byBeatmap = _buildScoresByBeatmapId(scores);
+    const usageCount = new Map();
+    _applyByBeatmapId(
+      Array.from(listEl.querySelectorAll(".play-detail")),
+      byBeatmap,
+      usageCount,
+      injectMostWatchedPpRow,
+    );
   }
 
   function revertMostWatchedPp(listEl) {
@@ -1049,6 +1182,23 @@ OsuExpertPlus.pages.userProfile = (() => {
   const BEATMAP_ATTRS_CACHE_GM_KEY = "oep.beatmapAttributesCache.v1";
   const BEATMAP_ATTRS_CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
   const BEATMAP_ATTRS_CACHE_MAX_ENTRIES = 600;
+
+  /**
+   * Bump this string whenever a SR rework ships.  Any install that has a
+   * different value stored will have its entire persistent SR cache wiped on
+   * the next page load.  The version should be the rework date (YYYY-MM-DD).
+   */
+  const SR_CACHE_VERSION = "2026-07-23";
+  const SR_CACHE_VERSION_GM_KEY = "oep.srCacheVersion";
+
+  (function _initSrCacheVersion() {
+    try {
+      const stored = GM_getValue(SR_CACHE_VERSION_GM_KEY, "");
+      if (stored === SR_CACHE_VERSION) return;
+      GM_setValue(BEATMAP_ATTRS_CACHE_GM_KEY, "{}");
+      GM_setValue(SR_CACHE_VERSION_GM_KEY, SR_CACHE_VERSION);
+    } catch (_) {}
+  })();
 
   const RANKED_STATUS_RANKED = 1;
   const RANKED_STATUS_LOVED = 4;
@@ -1372,11 +1522,9 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   function processElements(elements, scores) {
-    elements.forEach((rowEl, i) => {
-      const score = scores[i];
-      if (!score) return;
-      injectStatsRow(rowEl, score);
-    });
+    const byBeatmap = _buildScoresByBeatmapId(scores);
+    const usageCount = new Map();
+    _applyByBeatmapId(elements, byBeatmap, usageCount, injectStatsRow);
   }
 
   const SCORE_PLACE_NUMBER_ID = IDS.SCORE_CARD_PLACE_NUMBER;
@@ -1681,14 +1829,33 @@ OsuExpertPlus.pages.userProfile = (() => {
               });
             } else if (scoresMap.has(type)) {
               const scores = scoresMap.get(type);
-              allEls.forEach((rowEl, i) => {
+              const byBeatmap = _buildScoresByBeatmapId(scores);
+              const usageCount = new Map();
+              // First pass: count already-matched rows so duplicate-beatmapId
+              // candidates are consumed in the correct order.
+              allEls.forEach((rowEl) => {
+                const already =
+                  rowEl.hasAttribute(SCORE_STATS_ATTR) &&
+                  rowEl.querySelector(".oep-score-stats");
+                if (!already) return;
+                const bmId = _beatmapIdFromRow(rowEl);
+                if (bmId) usageCount.set(bmId, (usageCount.get(bmId) ?? 0) + 1);
+              });
+              // Second pass: inject only rows that are missing stats.
+              allEls.forEach((rowEl) => {
                 const needsReinjection =
                   !rowEl.hasAttribute(SCORE_STATS_ATTR) ||
                   !rowEl.querySelector(".oep-score-stats");
                 if (!needsReinjection) return;
                 rowEl.removeAttribute(SCORE_STATS_ATTR);
-                const score = scores[i];
+                const bmId = _beatmapIdFromRow(rowEl);
+                if (!bmId) return;
+                const candidates = byBeatmap.get(bmId);
+                if (!candidates) return;
+                const idx = usageCount.get(bmId) ?? 0;
+                const score = candidates[idx];
                 if (!score) return;
+                usageCount.set(bmId, idx + 1);
                 injectStatsRow(rowEl, score);
               });
             }
@@ -1696,10 +1863,22 @@ OsuExpertPlus.pages.userProfile = (() => {
 
           if (type === "most_watched" && scoresMap.has(type)) {
             const scores = scoresMap.get(type);
-            allEls.forEach((rowEl, i) => {
-              if (rowEl.querySelector(`.${MW_PP_CLASS}`)) return;
-              const score = scores[i];
+            const byBeatmap = _buildScoresByBeatmapId(scores);
+            const usageCount = new Map();
+            allEls.forEach((rowEl) => {
+              if (rowEl.querySelector(`.${MW_PP_CLASS}`)) {
+                const bmId = _beatmapIdFromRow(rowEl);
+                if (bmId) usageCount.set(bmId, (usageCount.get(bmId) ?? 0) + 1);
+                return;
+              }
+              const bmId = _beatmapIdFromRow(rowEl);
+              if (!bmId) return;
+              const candidates = byBeatmap.get(bmId);
+              if (!candidates) return;
+              const idx = usageCount.get(bmId) ?? 0;
+              const score = candidates[idx];
               if (!score) return;
+              usageCount.set(bmId, idx + 1);
               injectMostWatchedPpRow(rowEl, score);
             });
             if (settings.isEnabled(SCORE_PP_DECIMALS_ID))
@@ -2841,6 +3020,148 @@ OsuExpertPlus.pages.userProfile = (() => {
     );
   }
 
+  const SCORE_OPTIONS_WRAP_CLASS = "oep-score-options-wrap";
+  const SCORE_OPTIONS_BTN_CLASS = "oep-score-options-btn";
+  const SCORE_OPTIONS_MENU_CLASS = "oep-score-options-menu";
+  const SCORE_OPTIONS_ITEM_CLASS = "oep-score-options-item";
+
+  function _closeAllScoreOptionsMenus() {
+    document
+      .querySelectorAll(`.${SCORE_OPTIONS_MENU_CLASS}[data-open]`)
+      .forEach((m) => m.removeAttribute("data-open"));
+  }
+
+  let _scoreOptionsDocListenerAdded = false;
+  function _ensureScoreOptionsDocListener() {
+    if (_scoreOptionsDocListenerAdded) return;
+    _scoreOptionsDocListenerAdded = true;
+    // Menus are portaled to <body> so we cannot use .closest() from the menu
+    // element. Instead, close everything unless the click lands on a wrap button
+    // or inside an open menu.
+    document.addEventListener(
+      "click",
+      (e) => {
+        const inWrap = e.target.closest(`.${SCORE_OPTIONS_WRAP_CLASS}`);
+        const inMenu = e.target.closest(`.${SCORE_OPTIONS_MENU_CLASS}`);
+        if (!inWrap && !inMenu) _closeAllScoreOptionsMenus();
+      },
+      { capture: true },
+    );
+  }
+
+  /**
+   * Build the "⋯" options button + dropdown for a recent-score row.
+   * The dropdown is portaled to <body> to escape any CSS stacking-context
+   * created by transforms/filters on parent score cards.
+   * Returns the button wrapper element, or null when the score has no usable id.
+   * @param {Object} score
+   * @returns {HTMLElement|null}
+   */
+  function buildScoreOptionsMenu(score) {
+    const scoreId = score?.id;
+    if (scoreId == null) return null;
+
+    _ensureScoreOptionsDocListener();
+
+    // Portal: menu lives in <body>, completely outside the card hierarchy.
+    const menu = el("div", { class: SCORE_OPTIONS_MENU_CLASS });
+    document.body.appendChild(menu);
+
+    const viewLink = el(
+      "a",
+      {
+        class: SCORE_OPTIONS_ITEM_CLASS,
+        href: `https://osu.ppy.sh/scores/${scoreId}`,
+        target: "_blank",
+        rel: "noopener noreferrer",
+      },
+      "View details",
+    );
+    viewLink.addEventListener("click", () => menu.removeAttribute("data-open"));
+    menu.appendChild(viewLink);
+
+    const isOwnProfile =
+      getProfileUserId() != null &&
+      getCurrentUserIdFromHeader() != null &&
+      String(getProfileUserId()) === String(getCurrentUserIdFromHeader());
+
+    if (isOwnProfile) {
+    const pinBtn = el(
+      "button",
+      { type: "button", class: SCORE_OPTIONS_ITEM_CLASS },
+      "Pin",
+    );
+    pinBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (pinBtn.classList.contains(`${SCORE_OPTIONS_ITEM_CLASS}--pending`)) return;
+
+      pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--pending`);
+      pinBtn.textContent = "Pinning…";
+      try {
+        const headers = {
+          Accept: "application/json, text/javascript, */*; q=0.01",
+          "X-Requested-With": "XMLHttpRequest",
+        };
+        const csrf = maybeCsrfToken();
+        if (csrf) headers["X-CSRF-Token"] = csrf;
+        const resp = await fetch(`/score-pins/${scoreId}`, {
+          method: "PUT",
+          credentials: "include",
+          headers,
+        });
+        pinBtn.classList.remove(`${SCORE_OPTIONS_ITEM_CLASS}--pending`);
+        if (resp.ok || resp.status === 204) {
+          pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--done`);
+          pinBtn.textContent = "Pinned!";
+        } else {
+          pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--error`);
+          pinBtn.textContent = `Failed (${resp.status})`;
+        }
+      } catch {
+        pinBtn.classList.remove(`${SCORE_OPTIONS_ITEM_CLASS}--pending`);
+        pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--error`);
+        pinBtn.textContent = "Error";
+      }
+      setTimeout(() => {
+        pinBtn.classList.remove(
+          `${SCORE_OPTIONS_ITEM_CLASS}--done`,
+          `${SCORE_OPTIONS_ITEM_CLASS}--error`,
+        );
+        pinBtn.textContent = "Pin";
+        menu.removeAttribute("data-open");
+      }, 2000);
+    });
+    menu.appendChild(pinBtn);
+    } // end isOwnProfile
+
+    const btn = el(
+      "button",
+      {
+        type: "button",
+        class: SCORE_OPTIONS_BTN_CLASS,
+        title: "Options",
+      },
+      el("i", { class: "fas fa-ellipsis-h" }),
+    );
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = menu.hasAttribute("data-open");
+      _closeAllScoreOptionsMenus();
+      if (!isOpen) {
+        const rect = btn.getBoundingClientRect();
+        menu.style.top = `${rect.bottom + 2}px`;
+        menu.style.right = `${window.innerWidth - rect.right}px`;
+        menu.setAttribute("data-open", "");
+      }
+    });
+
+    // Attach menu reference to the button so it can be cleaned up when the
+    // score list is repopulated (populateRecentScoresInnerList).
+    btn._oepMenu = menu;
+
+    return el("div", { class: SCORE_OPTIONS_WRAP_CLASS }, btn);
+  }
+
   /**
    * @param {Object|null|undefined} score
    * @returns {string}
@@ -3088,6 +3409,10 @@ OsuExpertPlus.pages.userProfile = (() => {
     modTemplate,
     emptyMessage,
   ) {
+    // Remove portaled option menus from a previous render before clearing the list.
+    innerList.querySelectorAll(`.${SCORE_OPTIONS_BTN_CLASS}`).forEach((b) => {
+      b._oepMenu?.remove();
+    });
     innerList.textContent = "";
     innerList.classList.toggle(
       SCORE_LIST_LAYOUT_CLASS,
@@ -3102,7 +3427,23 @@ OsuExpertPlus.pages.userProfile = (() => {
     }
     const tpl = modTemplate instanceof HTMLElement ? modTemplate : null;
     const rows = scores.map((s) => buildPlayDetailRowFromApiScore(s, tpl));
-    rows.forEach((r) => innerList.appendChild(r));
+    rows.forEach((r, i) => {
+      const score = scores[i];
+
+      const moreEl = r.querySelector(".play-detail__more");
+      const optionsMenu = buildScoreOptionsMenu(score);
+      if (moreEl && optionsMenu) moreEl.appendChild(optionsMenu);
+
+      if (score?.id) {
+        r.classList.add("oep-recent-score-card-link");
+        r.addEventListener("click", (e) => {
+          if (e.target.closest("a, button, input, select, textarea")) return;
+          window.location.href = `/scores/${score.id}`;
+        });
+      }
+
+      innerList.appendChild(r);
+    });
     applyHideWeightedPp(innerList);
     if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) {
       applyPpDecimals(innerList);
@@ -6681,6 +7022,13 @@ OsuExpertPlus.pages.userProfile = (() => {
         open: "[centre]",
         close: "[/centre]",
       },
+      {
+        label: "Right",
+        title: "Right",
+        icon: "fas fa-align-right",
+        open: "[right]",
+        close: "[/right]",
+      },
     ];
 
     return specs.map((spec) =>
@@ -6725,6 +7073,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     "c",
     "code",
     "centre",
+    "right",
     "url",
     "profile",
     "list",
@@ -7095,6 +7444,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       ["quote", "blockquote"],
       ["heading", "h3"],
       ["centre", 'div style="text-align:center;"'],
+      ["right", 'div style="text-align:right;"'],
     ];
     wrapPairs.forEach(([bb, tag]) => {
       const open = tag.includes(" ") ? `<${tag}>` : `<${tag}>`;

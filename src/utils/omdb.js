@@ -29,6 +29,10 @@ OsuExpertPlus.omdb = (() => {
   /**
    * GET /api/set/{beatmapset_id} — per-beatmap rating rows or null if no API key.
    * A difficulty from this set may be omitted from the array when it is blacklisted on OMDB.
+   *
+   * Response is an object (`{ SetID, Artist, Title, Nominators, Difficulties }`) whose
+   * `Difficulties` array holds the per-beatmap rows; older API versions returned that
+   * array directly, so both shapes are accepted here.
    * @param {string|number} beatmapsetId
    * @returns {Promise<object[]|null>}
    */
@@ -47,10 +51,15 @@ OsuExpertPlus.omdb = (() => {
     } catch {
       throw new Error(MSG_BEATMAPSET_RESPONSE_UNEXPECTED);
     }
-    if (!Array.isArray(data)) {
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.Difficulties)
+        ? data.Difficulties
+        : null;
+    if (!list) {
       throw new Error(MSG_BEATMAPSET_RESPONSE_UNEXPECTED);
     }
-    return data;
+    return list;
   }
 
   /**

@@ -261,6 +261,81 @@ OsuExpertPlus.api = (() => {
     return { scores };
   }
 
+  /**
+   * Batch-fetch users by id ([Get Users](https://osu.ppy.sh/docs/#get-users)); each result
+   * includes `statistics_rulesets.{osu,taiko,fruits,mania}.global_rank`. The endpoint caps
+   * out at 50 ids per request, so larger lists are split into sequential batches with a
+   * short delay between each (see `_pumpUsersQueue`) to stay well under the API rate limit.
+   */
+  const USERS_BATCH_SIZE = 50;
+  const USERS_MIN_START_GAP_MS = 250;
+
+  let _usersRunning = false;
+  /** @type {number}  Earliest time the next batch may start (performance.now()). */
+  let _usersNextStartMs = 0;
+  /** @type {{ run: () => Promise<unknown>, resolve: (v: unknown) => void, reject: (e: unknown) => void }[]} */
+  const _usersQueue = [];
+
+  function _pumpUsersQueue() {
+    if (_usersRunning || !_usersQueue.length) return;
+    const now = performance.now();
+    if (now < _usersNextStartMs) {
+      setTimeout(_pumpUsersQueue, Math.ceil(_usersNextStartMs - now));
+      return;
+    }
+    _usersNextStartMs = now + USERS_MIN_START_GAP_MS;
+    const item = _usersQueue.shift();
+    if (!item) return;
+    _usersRunning = true;
+    Promise.resolve()
+      .then(() => item.run())
+      .then(item.resolve, item.reject)
+      .finally(() => {
+        _usersRunning = false;
+        _pumpUsersQueue();
+      });
+  }
+
+  /**
+   * GET /users?ids[]=… — up to 50 users per request, batched/throttled automatically
+   * for larger id lists.
+   * @param {(string|number)[]|string|number} ids
+   * @returns {Promise<object[]>}
+   */
+  function getUsers(ids) {
+    const unique = Array.from(
+      new Set(
+        (Array.isArray(ids) ? ids : [ids])
+          .map((n) => Number(n))
+          .filter((n) => Number.isFinite(n) && n > 0),
+      ),
+    );
+    if (!unique.length) return Promise.resolve([]);
+
+    const batches = [];
+    for (let i = 0; i < unique.length; i += USERS_BATCH_SIZE) {
+      batches.push(unique.slice(i, i + USERS_BATCH_SIZE));
+    }
+
+    const fetchBatch = (batchIds) =>
+      new Promise((resolve, reject) => {
+        _usersQueue.push({
+          // Response is `{ users: [...] }`, not a bare array.
+          run: () =>
+            get(`${BASE}/users`, { "ids[]": batchIds }).then(
+              (data) => (Array.isArray(data?.users) ? data.users : []),
+            ),
+          resolve,
+          reject,
+        });
+        _pumpUsersQueue();
+      });
+
+    return Promise.all(batches.map(fetchBatch)).then((results) =>
+      results.flat(),
+    );
+  }
+
   /** Throttle concurrent beatmap attributes calls (profile SR badges, etc.). */
   const BEATMAP_ATTRS_MAX_CONCURRENT = 2;
   const BEATMAP_ATTRS_MIN_START_GAP_MS = 120;
@@ -389,6 +464,7 @@ OsuExpertPlus.api = (() => {
     getBeatmapset,
     getBeatmap,
     getUser,
+    getUsers,
     searchBeatmapsets,
     getUserBestScores,
     getUserRecentScores,

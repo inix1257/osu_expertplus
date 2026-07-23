@@ -189,26 +189,28 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
-      id: "beatmapDetail.scoreboardHideCustomRateScores",
-      label: "Hide custom rate scores on leaderboard",
+      id: "beatmapDetail.pickerDiffNames",
+      label: "Difficulty names next to picker icons",
       description:
-        "On beatmapset scoreboards, hides leaderboard rows whose speed mod rate is not the osu! default (1.00×, or 1.50× for DT/NC, or 0.75× for HT/DC)—the same rows Expert+ dims as rate-edited. A checkbox under the mod filters mirrors this option.",
+        "On beatmapset pages, shows each difficulty’s name and nomod star rating next to its icon in the (still horizontal, wrapping) picker tray.",
       group: "Beatmap Detail",
-      default: false,
+      default: true,
     },
     {
-      id: "beatmapDetail.diffNameBesidePicker",
-      label: "Difficulty name & stars in the active picker cell",
+      id: "beatmapDetail.scoreboardGlobalRank",
+      label: "Player global rank on leaderboard",
       description:
-        "On beatmapset pages, puts the selected difficulty’s name, guest mapper credit when applicable (mapped by …), and nomod star rating inside the same bordered box as the active difficulty icon. Hides the duplicate header diff line and the separate nomod star chip.",
+        "On beatmap scoreboards, shows each player’s global rank next to their username. Fetches ranks via a batched `/users` API call (up to 50 players per request, throttled between batches) rather than one request per row, and caches results briefly to avoid refetching on every leaderboard refresh.",
       group: "Beatmap Detail",
-      default: false,
+      default: true,
     },
   ];
 
   /** GM keys used by UI elsewhere (not listed in the options panel). */
   const PANEL_HIDDEN_BOOLEAN_DEFAULTS = Object.freeze({
     "userProfile.recentScoresShowFails": true,
+    // Controlled solely by the always-visible checkbox above the beatmap leaderboard.
+    "beatmapDetail.scoreboardHideCustomRateScores": false,
   });
 
   (function migrateScoreListDetails() {
@@ -348,7 +350,8 @@ OsuExpertPlus.settings = (() => {
     SCOREBOARD_HIDE_CUSTOM_RATE_SCORES:
       "beatmapDetail.scoreboardHideCustomRateScores",
     SCOREBOARD_PLAYER_LOOKUP: "beatmapDetail.scoreboardPlayerLookup",
-    DIFF_NAME_BESIDE_PICKER: "beatmapDetail.diffNameBesidePicker",
+    PICKER_DIFF_NAMES: "beatmapDetail.pickerDiffNames",
+    SCOREBOARD_GLOBAL_RANK: "beatmapDetail.scoreboardGlobalRank",
   });
 
   return {
