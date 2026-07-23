@@ -953,8 +953,15 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       .beatmapset-beatmap-picker {
       flex-direction: row;
       flex-wrap: wrap;
-      width: auto;
+      /* width: auto on a flex container stretches to fill the row; osu's own
+         fit-content default (which we were overriding) is what keeps the
+         background hugging the actual icons instead of spanning the header. */
+      width: -moz-fit-content;
+      width: fit-content;
       max-width: 100%;
+      /* Native tray uses a negative margin sized to its 7px item padding; our items use
+         their own (larger) padding, so drop that offset instead of keeping it in sync. */
+      margin: 0 0 10px;
     }
     .beatmapset-header.oep-picker-diff-names-enabled
       .beatmapset-beatmap-picker__beatmap {
@@ -965,7 +972,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       gap: 0.6rem;
       width: auto !important;
       height: auto !important;
-      padding: 0.3rem 0.9rem 0.3rem 0.5rem;
+      padding: 0.55rem 1.1rem 0.55rem 0.7rem;
       box-sizing: border-box;
       position: relative;
     }
