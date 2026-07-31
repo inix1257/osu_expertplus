@@ -35,6 +35,7 @@ A userscript for [osu.ppy.sh](https://osu.ppy.sh). Some QoL changes are included
 - Beatmap background as score card background
 - Score place number on rank cards
 - Period filter for pinned/top plays
+- OTR rating rank card for osu!standard with ranks, tier, and match/game statistics (needs an OTR API key)
 
 **Beatmap Page**
 

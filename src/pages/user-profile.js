@@ -9419,6 +9419,12 @@ OsuExpertPlus.pages.userProfile = (() => {
     );
 
     cleanups.push(startRanksDateHighlightManager());
+    cleanups.push(
+      OsuExpertPlus.otrRating.start({
+        getProfileUserId,
+        getCurrentMode,
+      }),
+    );
     cleanups.push(startBwsRankingManager());
     cleanups.push(startProfileBadgesCollapseManager());
     cleanups.push(startProfileSectionCollapseManager());

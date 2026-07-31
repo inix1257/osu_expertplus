@@ -12,6 +12,7 @@
 // @connect      omdb.nyahh.net
 // @connect      assets.ppy.sh
 // @connect      api.kirino.sh
+// @connect      otr.stagec.net
 // @grant        GM_addStyle
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -1074,6 +1075,119 @@ OsuExpertPlus.omdb = (() => {
   };
 })();
 
+/* ── src/utils/otr.js ── */
+/** osu! Tournament Rating API client; bearer key in GM storage. */
+/* global GM_deleteValue, GM_getValue, GM_setValue, GM_xmlhttpRequest */
+
+window.OsuExpertPlus = window.OsuExpertPlus || {};
+
+OsuExpertPlus.otr = (() => {
+  const KEY_API = "oep_otr_api_key";
+  const API_BASE = "https://otr.stagec.net/api";
+  const CACHE_TTL_MS = 5 * 60 * 1000;
+  const playerStatsCache = new Map();
+
+  function getApiKey() {
+    return String(GM_getValue(KEY_API, "") || "").trim();
+  }
+
+  function setApiKey(value) {
+    GM_setValue(KEY_API, String(value || "").trim());
+    playerStatsCache.clear();
+  }
+
+  function clearApiKey() {
+    GM_deleteValue(KEY_API);
+    playerStatsCache.clear();
+  }
+
+  function isConfigured() {
+    return getApiKey().length > 0;
+  }
+
+  function request(method, path, body = null) {
+    const key = getApiKey();
+    if (!key) {
+      return Promise.reject(
+        new Error("[osu! Expert+] OTR API key is not configured."),
+      );
+    }
+
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method,
+        url: `${API_BASE}${path}`,
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${key}`,
+          ...(body == null ? {} : { "Content-Type": "application/json" }),
+        },
+        data: body == null ? undefined : JSON.stringify(body),
+        timeout: 15000,
+        onload: (response) => {
+          let json = null;
+          try {
+            json = response.responseText
+              ? JSON.parse(response.responseText)
+              : null;
+          } catch (_) {}
+
+          if (response.status < 200 || response.status >= 300) {
+            const message =
+              json?.error || json?.message || `HTTP ${response.status}`;
+            reject(new Error(`[osu! Expert+] OTR API: ${message}`));
+            return;
+          }
+          resolve(json);
+        },
+        ontimeout: () =>
+          reject(new Error("[osu! Expert+] OTR API request timed out.")),
+        onerror: () =>
+          reject(new Error("[osu! Expert+] OTR API request failed.")),
+      });
+    });
+  }
+
+  async function fetchPlayerStats(osuId) {
+    const id = Number(osuId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error("[osu! Expert+] Invalid osu! user ID for OTR.");
+    }
+
+    const cacheKey = String(id);
+    const cached = playerStatsCache.get(cacheKey);
+    if (cached && Date.now() - cached.time < CACHE_TTL_MS) {
+      return cached.value;
+    }
+
+    const json = await request(
+      "GET",
+      `/players/${encodeURIComponent(
+        String(id),
+      )}/stats?keyType=osu&ruleset=0`,
+    );
+    if (!json || typeof json !== "object" || Array.isArray(json)) {
+      throw new Error("[osu! Expert+] Unexpected OTR player stats response.");
+    }
+
+    playerStatsCache.set(cacheKey, { time: Date.now(), value: json });
+    return json;
+  }
+
+  function verifyApiKey() {
+    return request("GET", "/stats/platform");
+  }
+
+  return {
+    getApiKey,
+    setApiKey,
+    clearApiKey,
+    isConfigured,
+    fetchPlayerStats,
+    verifyApiKey,
+  };
+})();
+
 /* ── src/utils/settings.js ── */
 /** GM-backed feature toggles: isEnabled, set, onChange, IDS.* */
 
@@ -1158,6 +1272,14 @@ OsuExpertPlus.settings = (() => {
       label: "Extra rankings in profile header",
       description:
         "Shows extra rankings in the profile header next to global and country: BWS (badge-weighted) and ranked-score rank from api.kirino.sh. BWS uses keyword-filtered badge count and rank ^ (0.9937 ^ (badges ^ 2)); optional session-only badge input.",
+      group: "User Profile",
+      default: true,
+    },
+    {
+      id: "userProfile.otrRating",
+      label: "OTR rating rank card",
+      description:
+        "Adds an OTR rating card beside the global and country ranks on osu!standard profiles. Hover it for OTR ranks, tier, match/game records, win rates, and best win streak. Requires an OTR API key in Expert+ settings.",
       group: "User Profile",
       default: true,
     },
@@ -1411,6 +1533,7 @@ OsuExpertPlus.settings = (() => {
     SCORE_CARD_PLACE_NUMBER: "userProfile.scoreCardPlaceNumber",
     SCORE_PERIOD_HIGHLIGHT: "scores.periodHighlight",
     BWS_RANKING: "userProfile.bwsRanking",
+    OTR_RATING: "userProfile.otrRating",
     PROFILE_SECTION_COLLAPSE_REMOVE_FROM_PAGE:
       "userProfile.profileSectionCollapseRemoveFromPage",
     RECENT_SCORES_SHOW_FAILS: "userProfile.recentScoresShowFails",
@@ -1439,6 +1562,543 @@ OsuExpertPlus.settings = (() => {
     onChange,
     resetPanelTogglesToDefaults,
   };
+})();
+
+/* ── src/features/otr-rating.js ── */
+/** OTR rating card and hover details for user profile rank statistics. */
+
+window.OsuExpertPlus = window.OsuExpertPlus || {};
+
+OsuExpertPlus.otrRating = (() => {
+  const { el, manageStyle } = OsuExpertPlus.dom;
+  const settings = OsuExpertPlus.settings;
+  const otr = OsuExpertPlus.otr;
+  const FEATURE_ID = settings.IDS.OTR_RATING;
+  const STYLE_ID = "osu-expertplus-otr-rating";
+  const RANK_ROW_CLASS = "oep-otr-rank-row";
+  const ATTR = "data-oep-otr-rating";
+
+  const CSS = `
+    .profile-detail-stats__chart-numbers--top
+      .profile-detail-stats__values.${RANK_ROW_CLASS},
+    .profile-detail__chart-numbers--top
+      .profile-detail__values.${RANK_ROW_CLASS} {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      column-gap: 1.25rem;
+      row-gap: 0.35rem;
+      overflow: visible;
+    }
+    .oep-otr-summary {
+      position: relative;
+      z-index: 5;
+      overflow: visible;
+      outline: none;
+      cursor: help;
+    }
+    .oep-otr-summary:hover,
+    .oep-otr-summary:focus-within {
+      z-index: 30;
+    }
+    .oep-otr-summary:focus-visible {
+      border-radius: 4px;
+      outline: 2px solid hsl(var(--hsl-pink, 333 100% 65%));
+      outline-offset: 3px;
+    }
+    .oep-otr-hover-panel {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 50%;
+      z-index: 40;
+      min-width: 220px;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border: 1px solid hsl(var(--hsl-b5, 333 18% 30%));
+      border-radius: 7px;
+      background: hsl(var(--hsl-b3, 333 18% 14%));
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translate(-50%, 4px);
+      transition:
+        opacity 120ms ease,
+        transform 120ms ease,
+        visibility 120ms ease;
+      white-space: nowrap;
+    }
+    .oep-otr-hover-panel::before {
+      content: "";
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      width: 8px;
+      height: 8px;
+      border-top: 1px solid hsl(var(--hsl-b5, 333 18% 30%));
+      border-left: 1px solid hsl(var(--hsl-b5, 333 18% 30%));
+      background: hsl(var(--hsl-b3, 333 18% 14%));
+      transform: translate(-50%, 5px) rotate(45deg);
+    }
+    .oep-otr-summary:hover .oep-otr-hover-panel,
+    .oep-otr-summary:focus-within .oep-otr-hover-panel {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(-50%, 0);
+    }
+    .oep-otr-hover-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 11px;
+      line-height: 1.65;
+    }
+    .oep-otr-hover-row--section {
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px solid hsl(var(--hsl-b5, 333 18% 26%));
+    }
+    .oep-otr-hover-label {
+      color: hsl(var(--hsl-l2, 0 0% 72%));
+    }
+    .oep-otr-hover-value {
+      color: hsl(var(--hsl-l1, 0 0% 92%));
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+  `;
+
+  function currentLocale() {
+    return typeof window.currentLocale === "string"
+      ? window.currentLocale
+      : document.documentElement.lang || undefined;
+  }
+
+  function ratingLabel() {
+    return "OTR Rating";
+  }
+
+  function formatWholeNumber(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    const rounded = Math.round(number);
+    try {
+      return rounded.toLocaleString(currentLocale());
+    } catch {
+      return String(rounded);
+    }
+  }
+
+  function formatRank(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0
+      ? `#${formatWholeNumber(number)}`
+      : "—";
+  }
+
+  function formatPercentage(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    const percent = number >= 0 && number <= 1 ? number * 100 : number;
+    return `${percent.toFixed(1)}%`;
+  }
+
+  function formatWinLoss(wins, losses) {
+    const won = Number(wins);
+    const lost = Number(losses);
+    if (!Number.isFinite(won) || !Number.isFinite(lost)) return "—";
+    return `${formatWholeNumber(won)} / ${formatWholeNumber(lost)}`;
+  }
+
+  function formatTier(tierProgress) {
+    const tier = String(tierProgress?.currentTier || "").trim();
+    if (!tier) return "—";
+    const subTier = Number(tierProgress?.currentSubTier);
+    const roman = ["", "I", "II", "III"][subTier] || "";
+    return `${tier}${roman ? ` ${roman}` : ""}`;
+  }
+
+  function findRankRow() {
+    return (
+      document.querySelector(
+        ".profile-detail-stats__chart-numbers--top .profile-detail-stats__values",
+      ) ||
+      document.querySelector(
+        ".profile-detail__chart-numbers--top .profile-detail__values",
+      )
+    );
+  }
+
+  function emptyDetails(value) {
+    return {
+      globalRank: value,
+      countryRank: value,
+      tier: value,
+      matches: value,
+      matchRecord: value,
+      matchWinRate: value,
+      bestWinStreak: value,
+      games: value,
+      gameRecord: value,
+      gameWinRate: value,
+    };
+  }
+
+  function displayState(state) {
+    if (state.status === "ready") {
+      const ratingData = state.data?.rating;
+      const matchStats = state.data?.matchStats;
+      const rating = Number(ratingData?.rating);
+      return {
+        display: formatWholeNumber(rating),
+        description: Number.isFinite(rating)
+          ? `${ratingLabel()}: ${rating.toFixed(2)}`
+          : ratingLabel(),
+        globalRank: formatRank(ratingData?.globalRank),
+        countryRank: formatRank(ratingData?.countryRank),
+        tier: formatTier(ratingData?.tierProgress),
+        matches: formatWholeNumber(
+          ratingData?.matchesPlayed ?? matchStats?.matchesPlayed,
+        ),
+        matchRecord: formatWinLoss(
+          matchStats?.matchesWon,
+          matchStats?.matchesLost,
+        ),
+        matchWinRate: formatPercentage(matchStats?.matchWinRate),
+        bestWinStreak: formatWholeNumber(matchStats?.bestWinStreak),
+        games: formatWholeNumber(matchStats?.gamesPlayed),
+        gameRecord: formatWinLoss(
+          matchStats?.gamesWon,
+          matchStats?.gamesLost,
+        ),
+        gameWinRate: formatPercentage(matchStats?.gameWinRate),
+      };
+    }
+
+    if (state.status === "missing") {
+      return {
+        display: "Unranked",
+        description: "No OTR rating is available for this player.",
+        ...emptyDetails("—"),
+      };
+    }
+
+    if (state.status === "error") {
+      return {
+        display: "—",
+        description:
+          state.error.replace("[osu! Expert+] ", "") ||
+          "OTR rating request failed.",
+        ...emptyDetails("—"),
+      };
+    }
+
+    return {
+      display: "…",
+      description: "Loading OTR rating…",
+      ...emptyDetails("…"),
+    };
+  }
+
+  function buildHoverRow(label, valueClass, value, sectionStart = false) {
+    return el(
+      "div",
+      {
+        class: `oep-otr-hover-row${
+          sectionStart ? " oep-otr-hover-row--section" : ""
+        }`,
+      },
+      el("span", { class: "oep-otr-hover-label" }, label),
+      el(
+        "span",
+        { class: `oep-otr-hover-value ${valueClass}` },
+        value,
+      ),
+    );
+  }
+
+  function buildRatingCard(state) {
+    return el(
+      "div",
+      {
+        class: "value-display value-display--rank oep-otr-summary",
+        [ATTR]: "1",
+        tabindex: "0",
+      },
+      el(
+        "div",
+        {
+          class:
+            "value-display__label u-ellipsis-overflow oep-otr-rating-label",
+        },
+        ratingLabel(),
+      ),
+      el(
+        "div",
+        { class: "value-display__value u-ellipsis-overflow" },
+        el(
+          "div",
+          { class: "rank-value rank-value--base oep-otr-rating-value" },
+          state.display,
+        ),
+      ),
+      el(
+        "div",
+        { class: "oep-otr-hover-panel", "aria-hidden": "true" },
+        buildHoverRow(
+          "Global Rank",
+          "oep-otr-global-rank-value",
+          state.globalRank,
+        ),
+        buildHoverRow(
+          "Country Rank",
+          "oep-otr-country-rank-value",
+          state.countryRank,
+        ),
+        buildHoverRow("Tier", "oep-otr-tier-value", state.tier),
+        buildHoverRow(
+          "Matches",
+          "oep-otr-matches-value",
+          state.matches,
+          true,
+        ),
+        buildHoverRow(
+          "Match W / L",
+          "oep-otr-match-record-value",
+          state.matchRecord,
+        ),
+        buildHoverRow(
+          "Match Win Rate",
+          "oep-otr-match-win-rate-value",
+          state.matchWinRate,
+        ),
+        buildHoverRow(
+          "Best Win Streak",
+          "oep-otr-best-win-streak-value",
+          state.bestWinStreak,
+        ),
+        buildHoverRow(
+          "Games",
+          "oep-otr-games-value",
+          state.games,
+          true,
+        ),
+        buildHoverRow(
+          "Game W / L",
+          "oep-otr-game-record-value",
+          state.gameRecord,
+        ),
+        buildHoverRow(
+          "Game Win Rate",
+          "oep-otr-game-win-rate-value",
+          state.gameWinRate,
+        ),
+      ),
+    );
+  }
+
+  function teardown() {
+    document.querySelectorAll(`[${ATTR}="1"]`).forEach((node) => node.remove());
+    document
+      .querySelectorAll(`.${RANK_ROW_CLASS}`)
+      .forEach((node) => node.classList.remove(RANK_ROW_CLASS));
+  }
+
+  function start({ getProfileUserId, getCurrentMode }) {
+    const style = manageStyle(STYLE_ID, CSS);
+    let debounceTimer = 0;
+    let revision = 0;
+    let reschedule = () => {};
+    const state = {
+      key: "",
+      status: "idle",
+      data: null,
+      error: "",
+    };
+
+    const profileContext = () => {
+      if (String(getCurrentMode() || "").toLowerCase() !== "osu") {
+        return null;
+      }
+      const userId = getProfileUserId();
+      if (userId == null) return null;
+      return { userId, key: String(userId) };
+    };
+
+    const resetState = (force = false) => {
+      const nextKey = profileContext()?.key || "";
+      if (!force && state.key === nextKey) return;
+      if (force) revision += 1;
+      state.key = nextKey;
+      state.status = "idle";
+      state.data = null;
+      state.error = "";
+    };
+
+    const ensureFetch = () => {
+      if (!settings.isEnabled(FEATURE_ID) || !otr.isConfigured()) return;
+      const context = profileContext();
+      if (!context) return;
+      resetState();
+      if (state.status !== "idle") return;
+
+      state.status = "loading";
+      const fetchKey = `${state.key}:${revision}`;
+      otr
+        .fetchPlayerStats(context.userId)
+        .then((stats) => {
+          resetState();
+          if (`${state.key}:${revision}` !== fetchKey) return;
+          const rating = Number(stats?.rating?.rating);
+          if (!stats?.rating || !Number.isFinite(rating)) {
+            state.status = "missing";
+            state.data = null;
+          } else {
+            state.status = "ready";
+            state.data = stats;
+          }
+          reschedule();
+        })
+        .catch((error) => {
+          resetState();
+          if (`${state.key}:${revision}` !== fetchKey) return;
+          state.status = "error";
+          state.data = null;
+          state.error = String(error?.message || error || "");
+          reschedule();
+        });
+    };
+
+    const sync = () => {
+      if (!settings.isEnabled(FEATURE_ID) || !otr.isConfigured()) {
+        teardown();
+        return;
+      }
+      if (!profileContext()) {
+        teardown();
+        return;
+      }
+
+      const rankRow = findRankRow();
+      if (!(rankRow instanceof HTMLElement)) {
+        teardown();
+        return;
+      }
+
+      rankRow.classList.add(RANK_ROW_CLASS);
+      ensureFetch();
+      const next = displayState(state);
+      let card = rankRow.querySelector(`[${ATTR}="1"]`);
+      if (!(card instanceof HTMLElement)) {
+        card = buildRatingCard(next);
+      }
+
+      const nativeRankCards = rankRow.querySelectorAll(
+        `:scope > .value-display--rank:not([${ATTR}])`,
+      );
+      const countryRankCard = nativeRankCards[1];
+      if (countryRankCard && countryRankCard.nextElementSibling !== card) {
+        countryRankCard.insertAdjacentElement("afterend", card);
+      } else if (!countryRankCard && card.parentElement !== rankRow) {
+        rankRow.appendChild(card);
+      }
+
+      const values = {
+        ".oep-otr-rating-value": next.display,
+        ".oep-otr-global-rank-value": next.globalRank,
+        ".oep-otr-country-rank-value": next.countryRank,
+        ".oep-otr-tier-value": next.tier,
+        ".oep-otr-matches-value": next.matches,
+        ".oep-otr-match-record-value": next.matchRecord,
+        ".oep-otr-match-win-rate-value": next.matchWinRate,
+        ".oep-otr-best-win-streak-value": next.bestWinStreak,
+        ".oep-otr-games-value": next.games,
+        ".oep-otr-game-record-value": next.gameRecord,
+        ".oep-otr-game-win-rate-value": next.gameWinRate,
+        ".oep-otr-rating-label": ratingLabel(),
+      };
+      for (const [selector, value] of Object.entries(values)) {
+        const node = card.querySelector(selector);
+        if (node instanceof HTMLElement && node.textContent !== value) {
+          node.textContent = value;
+        }
+      }
+
+      card.setAttribute(
+        "aria-label",
+        [
+          next.description,
+          `Global Rank: ${next.globalRank}`,
+          `Country Rank: ${next.countryRank}`,
+          `Tier: ${next.tier}`,
+          `Matches: ${next.matches}`,
+          `Match W / L: ${next.matchRecord}`,
+          `Match Win Rate: ${next.matchWinRate}`,
+          `Best Win Streak: ${next.bestWinStreak}`,
+          `Games: ${next.games}`,
+          `Game W / L: ${next.gameRecord}`,
+          `Game Win Rate: ${next.gameWinRate}`,
+        ].join("; "),
+      );
+    };
+
+    const schedule = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        if (settings.isEnabled(FEATURE_ID) && otr.isConfigured()) {
+          style.inject();
+          sync();
+        } else {
+          teardown();
+          style.remove();
+        }
+      }, 50);
+    };
+    reschedule = schedule;
+
+    resetState(true);
+    schedule();
+
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+
+    const unsubscribe = settings.onChange(FEATURE_ID, (enabled) => {
+      if (enabled) {
+        resetState(true);
+        style.inject();
+        schedule();
+      } else {
+        teardown();
+        style.remove();
+      }
+    });
+
+    const onApiKeyChanged = () => {
+      resetState(true);
+      schedule();
+    };
+    window.addEventListener("oep-otr-api-key-changed", onApiKeyChanged);
+
+    return () => {
+      reschedule = () => {};
+      clearTimeout(debounceTimer);
+      observer.disconnect();
+      try {
+        unsubscribe();
+      } catch (_) {}
+      window.removeEventListener("oep-otr-api-key-changed", onApiKeyChanged);
+      revision += 1;
+      teardown();
+      style.remove();
+    };
+  }
+
+  return { start };
 })();
 
 /* ── src/utils/beatmap-preview.js ── */
@@ -26399,6 +27059,12 @@ OsuExpertPlus.pages.userProfile = (() => {
     );
 
     cleanups.push(startRanksDateHighlightManager());
+    cleanups.push(
+      OsuExpertPlus.otrRating.start({
+        getProfileUserId,
+        getCurrentMode,
+      }),
+    );
     cleanups.push(startBwsRankingManager());
     cleanups.push(startProfileBadgesCollapseManager());
     cleanups.push(startProfileSectionCollapseManager());
@@ -26767,7 +27433,7 @@ OsuExpertPlus.Router = class Router {
 };
 
 /* ── src/ui/settings-panel.js ── */
-/** FAB + modal: feature toggles, osu OAuth, OMDB key. init() once; survives SPA (re-attach if body replaced). */
+/** FAB + modal: feature toggles and API credentials. init() once; survives SPA. */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
@@ -26776,6 +27442,7 @@ OsuExpertPlus.settingsPanel = (() => {
   const settings = OsuExpertPlus.settings;
   const auth = OsuExpertPlus.auth;
   const omdb = OsuExpertPlus.omdb;
+  const otr = OsuExpertPlus.otr;
 
   const ROOT_ID = "osu-expertplus-settings";
   const FAB_ANCHOR_ID = "osu-expertplus-fab-anchor";
@@ -26843,7 +27510,10 @@ OsuExpertPlus.settingsPanel = (() => {
         ? "osu! API credentials — saved"
         : "osu! API credentials — not set";
     }
-    return filled ? "OMDB API key — saved" : "OMDB API key — not set";
+    if (kind === "omdb") {
+      return filled ? "OMDB API key — saved" : "OMDB API key — not set";
+    }
+    return filled ? "OTR API key — saved" : "OTR API key — not set";
   }
 
   const CSS = `
@@ -27581,6 +28251,112 @@ OsuExpertPlus.settingsPanel = (() => {
     );
   }
 
+  function buildOtrCredentialsSection(onConfiguredChange) {
+    const apiKeyInput = el("input", {
+      type: "password",
+      placeholder: "API Key",
+      autocomplete: "new-password",
+      spellcheck: "false",
+    });
+
+    if (otr.isConfigured()) {
+      apiKeyInput.placeholder = "(saved — enter to change)";
+    }
+
+    const statusEl = el("div", {
+      class:
+        "osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--info",
+    });
+
+    function setStatus(message, type = "info") {
+      statusEl.textContent = message;
+      statusEl.className = `osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--${type}`;
+    }
+
+    setStatus(
+      otr.isConfigured() ? "API key saved." : "No API key configured.",
+      otr.isConfigured() ? "ok" : "info",
+    );
+
+    const saveBtn = el(
+      "button",
+      {
+        class:
+          "osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--save",
+      },
+      "Save",
+    );
+    const clearBtn = el(
+      "button",
+      {
+        class:
+          "osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--clear",
+      },
+      "Clear",
+    );
+
+    saveBtn.addEventListener("click", async () => {
+      const key = apiKeyInput.value.trim() || otr.getApiKey();
+      if (!key) {
+        setStatus("API key is required.", "error");
+        return;
+      }
+
+      otr.setApiKey(key);
+      apiKeyInput.value = "";
+      apiKeyInput.placeholder = "(saved — enter to change)";
+      setStatus("Verifying…");
+
+      try {
+        await otr.verifyApiKey();
+        setStatus("API key saved & verified.", "ok");
+      } catch (error) {
+        setStatus(
+          `Verification failed: ${String(error?.message || error).replace(
+            "[osu! Expert+] ",
+            "",
+          )}`,
+          "error",
+        );
+      } finally {
+        onConfiguredChange?.();
+        window.dispatchEvent(new Event("oep-otr-api-key-changed"));
+      }
+    });
+
+    clearBtn.addEventListener("click", () => {
+      otr.clearApiKey();
+      apiKeyInput.value = "";
+      apiKeyInput.placeholder = "API Key";
+      setStatus("API key cleared.");
+      onConfiguredChange?.();
+      window.dispatchEvent(new Event("oep-otr-api-key-changed"));
+    });
+
+    const hint = el("div", { class: "osu-expertplus-panel__creds-hint" });
+    hint.innerHTML =
+      'Sign in at <a href="https://otr.stagec.net/settings" target="_blank" rel="noopener noreferrer">otr.stagec.net/settings</a>, create an API key, then paste it above.';
+
+    return el(
+      "div",
+      { class: "osu-expertplus-panel__creds" },
+      el(
+        "div",
+        { class: "osu-expertplus-panel__creds-field" },
+        el("label", {}, "API Key"),
+        apiKeyInput,
+      ),
+      el(
+        "div",
+        { class: "osu-expertplus-panel__creds-actions" },
+        saveBtn,
+        clearBtn,
+      ),
+      statusEl,
+      hint,
+    );
+  }
+
   function buildSection(
     title,
     contentNodes,
@@ -27670,9 +28446,11 @@ OsuExpertPlus.settingsPanel = (() => {
     const rows = [];
     const hasSavedCreds = auth.isConfigured();
     const hasSavedOmdb = omdb.isConfigured();
+    const hasSavedOtr = otr.isConfigured();
 
     const osuSyncHolder = { sync: null };
     const omdbSyncHolder = { sync: null };
+    const otrSyncHolder = { sync: null };
 
     rows.push(
       buildSection(
@@ -27689,6 +28467,26 @@ OsuExpertPlus.settingsPanel = (() => {
             filled: hasSavedCreds,
             stableTitleId: "oep-settings-section-osu-api",
             syncHolder: osuSyncHolder,
+          },
+        },
+      ),
+    );
+
+    rows.push(
+      buildSection(
+        "",
+        [
+          buildOtrCredentialsSection(() =>
+            otrSyncHolder.sync?.(otr.isConfigured()),
+          ),
+        ],
+        {
+          collapsedByDefault: hasSavedOtr,
+          credential: {
+            kind: "otr",
+            filled: hasSavedOtr,
+            stableTitleId: "oep-settings-section-otr-api",
+            syncHolder: otrSyncHolder,
           },
         },
       ),
@@ -27752,14 +28550,15 @@ OsuExpertPlus.settingsPanel = (() => {
       {
         type: "button",
         class: "osu-expertplus-panel__footer-reset",
-        title: "Set every toggle above to its default (API keys are not changed)",
+        title:
+          "Set every toggle above to its default (API keys are not changed)",
       },
       "Reset to defaults",
     );
     resetDefaultsBtn.addEventListener("click", () => {
       if (
         !window.confirm(
-          "Reset all Expert+ options to their defaults? osu! and OMDB API keys will not be changed.",
+          "Reset all Expert+ options to their defaults? osu!, OMDB, and OTR API keys will not be changed.",
         )
       ) {
         return;

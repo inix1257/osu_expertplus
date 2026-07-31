@@ -20,7 +20,9 @@ const FILES = [
   "src/utils/auth.js",
   "src/utils/api.js",
   "src/utils/omdb.js",
+  "src/utils/otr.js",
   "src/utils/settings.js",
+  "src/features/otr-rating.js",
   "src/utils/beatmap-preview.js",
   "src/utils/beatmap-card-extra.js",
   "src/utils/beatmap-card-stats.js",
@@ -53,6 +55,7 @@ const METADATA = `\
 // @connect      omdb.nyahh.net
 // @connect      assets.ppy.sh
 // @connect      api.kirino.sh
+// @connect      otr.stagec.net
 // @grant        GM_addStyle
 // @grant        GM_getValue
 // @grant        GM_setValue

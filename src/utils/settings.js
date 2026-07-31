@@ -85,6 +85,14 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
+      id: "userProfile.otrRating",
+      label: "OTR rating rank card",
+      description:
+        "Adds an OTR rating card beside the global and country ranks on osu!standard profiles. Hover it for OTR ranks, tier, match/game records, win rates, and best win streak. Requires an OTR API key in Expert+ settings.",
+      group: "User Profile",
+      default: true,
+    },
+    {
       id: "userProfile.profileSectionCollapseRemoveFromPage",
       label: "Hide collapsed profile sections",
       description:
@@ -334,6 +342,7 @@ OsuExpertPlus.settings = (() => {
     SCORE_CARD_PLACE_NUMBER: "userProfile.scoreCardPlaceNumber",
     SCORE_PERIOD_HIGHLIGHT: "scores.periodHighlight",
     BWS_RANKING: "userProfile.bwsRanking",
+    OTR_RATING: "userProfile.otrRating",
     PROFILE_SECTION_COLLAPSE_REMOVE_FROM_PAGE:
       "userProfile.profileSectionCollapseRemoveFromPage",
     RECENT_SCORES_SHOW_FAILS: "userProfile.recentScoresShowFails",
