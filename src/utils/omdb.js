@@ -27,7 +27,7 @@ OsuExpertPlus.omdb = (() => {
   }
 
   /**
-   * GET /api/set/{beatmapset_id} — per-beatmap rating rows or null if no API key.
+   * GET /api/set.php?id=&key= — per-beatmap rating rows or null if no API key.
    * A difficulty from this set may be omitted from the array when it is blacklisted on OMDB.
    *
    * Response is an object (`{ SetID, Artist, Title, Nominators, Difficulties }`) whose
@@ -39,7 +39,7 @@ OsuExpertPlus.omdb = (() => {
   async function fetchBeatmapsetRatings(beatmapsetId) {
     const key = getApiKey();
     if (!key) return null;
-    const url = `${API_BASE}/api/set/${encodeURIComponent(String(beatmapsetId))}?key=${encodeURIComponent(key)}`;
+    const url = `${API_BASE}/api/set.php?id=${encodeURIComponent(String(beatmapsetId))}&key=${encodeURIComponent(key)}`;
     const resp = await fetch(url, { credentials: 'omit' });
     const raw = await resp.text().catch(() => '');
     if (!resp.ok) {
@@ -63,7 +63,7 @@ OsuExpertPlus.omdb = (() => {
   }
 
   /**
-   * GET /api/rate/{beatmap_id}?key=&score= — score 0.0–5.0 (0.5 steps), or -2 to clear your rating.
+   * GET /api/rate.php?id=&key=&score= — score 0.0–5.0 (0.5 steps), or -2 to clear your rating.
    * @param {string|number} beatmapId
    * @param {number} score
    * @returns {Promise<unknown>}
@@ -80,7 +80,7 @@ OsuExpertPlus.omdb = (() => {
       s = Math.round(s0 * 2) / 2;
       if (s < 0 || s > 5) throw new Error('Score must be between 0 and 5');
     }
-    const url = `${API_BASE}/api/rate/${encodeURIComponent(String(beatmapId))}?key=${encodeURIComponent(key)}&score=${encodeURIComponent(String(s))}`;
+    const url = `${API_BASE}/api/rate.php?id=${encodeURIComponent(String(beatmapId))}&key=${encodeURIComponent(key)}&score=${encodeURIComponent(String(s))}`;
     const resp = await fetch(url, { credentials: 'omit' });
     if (!resp.ok) {
       const t = await resp.text().catch(() => '');
