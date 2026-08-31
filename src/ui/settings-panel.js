@@ -1,4 +1,4 @@
-/** FAB + modal: feature toggles, osu OAuth, OMDB key. init() once; survives SPA (re-attach if body replaced). */
+/** FAB + modal: feature toggles and API credentials. init() once; survives SPA. */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
@@ -7,6 +7,7 @@ OsuExpertPlus.settingsPanel = (() => {
   const settings = OsuExpertPlus.settings;
   const auth = OsuExpertPlus.auth;
   const omdb = OsuExpertPlus.omdb;
+  const otr = OsuExpertPlus.otr;
 
   const ROOT_ID = "osu-expertplus-settings";
   const FAB_ANCHOR_ID = "osu-expertplus-fab-anchor";
@@ -74,7 +75,10 @@ OsuExpertPlus.settingsPanel = (() => {
         ? "osu! API credentials — saved"
         : "osu! API credentials — not set";
     }
-    return filled ? "OMDB API key — saved" : "OMDB API key — not set";
+    if (kind === "omdb") {
+      return filled ? "OMDB API key — saved" : "OMDB API key — not set";
+    }
+    return filled ? "OTR API key — saved" : "OTR API key — not set";
   }
 
   const CSS = `
@@ -812,6 +816,112 @@ OsuExpertPlus.settingsPanel = (() => {
     );
   }
 
+  function buildOtrCredentialsSection(onConfiguredChange) {
+    const apiKeyInput = el("input", {
+      type: "password",
+      placeholder: "API Key",
+      autocomplete: "new-password",
+      spellcheck: "false",
+    });
+
+    if (otr.isConfigured()) {
+      apiKeyInput.placeholder = "(saved — enter to change)";
+    }
+
+    const statusEl = el("div", {
+      class:
+        "osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--info",
+    });
+
+    function setStatus(message, type = "info") {
+      statusEl.textContent = message;
+      statusEl.className = `osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--${type}`;
+    }
+
+    setStatus(
+      otr.isConfigured() ? "API key saved." : "No API key configured.",
+      otr.isConfigured() ? "ok" : "info",
+    );
+
+    const saveBtn = el(
+      "button",
+      {
+        class:
+          "osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--save",
+      },
+      "Save",
+    );
+    const clearBtn = el(
+      "button",
+      {
+        class:
+          "osu-expertplus-panel__creds-btn osu-expertplus-panel__creds-btn--clear",
+      },
+      "Clear",
+    );
+
+    saveBtn.addEventListener("click", async () => {
+      const key = apiKeyInput.value.trim() || otr.getApiKey();
+      if (!key) {
+        setStatus("API key is required.", "error");
+        return;
+      }
+
+      otr.setApiKey(key);
+      apiKeyInput.value = "";
+      apiKeyInput.placeholder = "(saved — enter to change)";
+      setStatus("Verifying…");
+
+      try {
+        await otr.verifyApiKey();
+        setStatus("API key saved & verified.", "ok");
+      } catch (error) {
+        setStatus(
+          `Verification failed: ${String(error?.message || error).replace(
+            "[osu! Expert+] ",
+            "",
+          )}`,
+          "error",
+        );
+      } finally {
+        onConfiguredChange?.();
+        window.dispatchEvent(new Event("oep-otr-api-key-changed"));
+      }
+    });
+
+    clearBtn.addEventListener("click", () => {
+      otr.clearApiKey();
+      apiKeyInput.value = "";
+      apiKeyInput.placeholder = "API Key";
+      setStatus("API key cleared.");
+      onConfiguredChange?.();
+      window.dispatchEvent(new Event("oep-otr-api-key-changed"));
+    });
+
+    const hint = el("div", { class: "osu-expertplus-panel__creds-hint" });
+    hint.innerHTML =
+      'Sign in at <a href="https://otr.stagec.net/settings" target="_blank" rel="noopener noreferrer">otr.stagec.net/settings</a>, create an API key, then paste it above.';
+
+    return el(
+      "div",
+      { class: "osu-expertplus-panel__creds" },
+      el(
+        "div",
+        { class: "osu-expertplus-panel__creds-field" },
+        el("label", {}, "API Key"),
+        apiKeyInput,
+      ),
+      el(
+        "div",
+        { class: "osu-expertplus-panel__creds-actions" },
+        saveBtn,
+        clearBtn,
+      ),
+      statusEl,
+      hint,
+    );
+  }
+
   function buildSection(
     title,
     contentNodes,
@@ -901,9 +1011,11 @@ OsuExpertPlus.settingsPanel = (() => {
     const rows = [];
     const hasSavedCreds = auth.isConfigured();
     const hasSavedOmdb = omdb.isConfigured();
+    const hasSavedOtr = otr.isConfigured();
 
     const osuSyncHolder = { sync: null };
     const omdbSyncHolder = { sync: null };
+    const otrSyncHolder = { sync: null };
 
     rows.push(
       buildSection(
@@ -920,6 +1032,26 @@ OsuExpertPlus.settingsPanel = (() => {
             filled: hasSavedCreds,
             stableTitleId: "oep-settings-section-osu-api",
             syncHolder: osuSyncHolder,
+          },
+        },
+      ),
+    );
+
+    rows.push(
+      buildSection(
+        "",
+        [
+          buildOtrCredentialsSection(() =>
+            otrSyncHolder.sync?.(otr.isConfigured()),
+          ),
+        ],
+        {
+          collapsedByDefault: hasSavedOtr,
+          credential: {
+            kind: "otr",
+            filled: hasSavedOtr,
+            stableTitleId: "oep-settings-section-otr-api",
+            syncHolder: otrSyncHolder,
           },
         },
       ),
@@ -983,14 +1115,15 @@ OsuExpertPlus.settingsPanel = (() => {
       {
         type: "button",
         class: "osu-expertplus-panel__footer-reset",
-        title: "Set every toggle above to its default (API keys are not changed)",
+        title:
+          "Set every toggle above to its default (API keys are not changed)",
       },
       "Reset to defaults",
     );
     resetDefaultsBtn.addEventListener("click", () => {
       if (
         !window.confirm(
-          "Reset all Expert+ options to their defaults? osu! and OMDB API keys will not be changed.",
+          "Reset all Expert+ options to their defaults? osu!, OMDB, and OTR API keys will not be changed.",
         )
       ) {
         return;
