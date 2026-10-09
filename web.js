@@ -910,11 +910,16 @@ let osuAccessToken = "";
 let osuAccessTokenExpireTime = 0;
 let lock = false;
 let queue = [];
-const clientID = 34956;
-const clientSecret = "PKT6PQoydMhjFq9jNRCJsIUV9hSXfQ7PPEiWmg7J";
 const GetToken = async () => {
     if(!lock){
         lock = true;
+        const clientID = GM_getValue("oep_client_id", "");
+        const clientSecret = GM_getValue("oep_client_secret", "");
+        if(!clientID || !clientSecret){
+            lock = false;
+            console.assert(false, "osu! OAuth client_id/client_secret are not configured.");
+            return "";
+        }
         if(osuAccessToken === "" || new Date().getTime() > osuAccessTokenExpireTime){
             const response = await fetch("https://osu.ppy.sh/oauth/token", {
                 method: "POST",
