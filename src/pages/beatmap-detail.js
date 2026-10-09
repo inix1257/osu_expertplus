@@ -2364,6 +2364,13 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     }
   }
 
+  /** Drop the wildcard loading overlay everywhere (an aborted fetch never clears its own). */
+  function clearWildcardLoadingOverlays() {
+    document
+      .querySelectorAll(`.${WILDCARD_LOADING_CLASS}`)
+      .forEach((n) => n.classList.remove(WILDCARD_LOADING_CLASS));
+  }
+
   /** Reset all wildcard state (used on teardown or beatmap change). */
   function clearWildcardState() {
     mergedModCycleStep.clear();
@@ -2375,6 +2382,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       wildcardAbortCtrl.abort();
       wildcardAbortCtrl = null;
     }
+    clearWildcardLoadingOverlays();
   }
 
   /** @returns {string[]} Acronyms currently in wildcard state. */
@@ -2781,6 +2789,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     if (wildcardAbortCtrl) {
       wildcardAbortCtrl.abort();
       wildcardAbortCtrl = null;
+      // Re-added below if this call starts a new fetch.
+      clearWildcardLoadingOverlays();
     }
 
     const wildcards = getWildcardMods();
@@ -2816,6 +2826,14 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     wildcardAbortCtrl = new AbortController();
     const signal = wildcardAbortCtrl.signal;
 
+    const removeLoadingOverlay = () => {
+      // A newer fetch has taken over this table's overlay; leave it alone.
+      if (wildcardAbortCtrl && wildcardAbortCtrl.signal !== signal) return;
+      if (tableWrap instanceof HTMLElement) {
+        tableWrap.classList.remove(WILDCARD_LOADING_CLASS);
+      }
+    };
+
     wildcardDebounceTimer = window.setTimeout(() => {
       wildcardDebounceTimer = 0;
       const leaderboardType =
@@ -2829,18 +2847,14 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         leaderboardType,
       )
         .then((merged) => {
+          removeLoadingOverlay();
           if (signal.aborted) return;
-          if (tableWrap instanceof HTMLElement) {
-            tableWrap.classList.remove(WILDCARD_LOADING_CLASS);
-          }
           if (merged.length > 0) {
             renderWildcardMergedLeaderboard(scoreboardRoot, merged);
           }
         })
         .catch(() => {
-          if (tableWrap instanceof HTMLElement) {
-            tableWrap.classList.remove(WILDCARD_LOADING_CLASS);
-          }
+          removeLoadingOverlay();
         });
     }, 1000);
   }
