@@ -4,6 +4,7 @@
  * API as rows scroll into view.
  */
 
+import { observe } from "../../core/observe.js";
 import {
   beatmapsetIdFromPath,
   isBeatmapsetDiscussion,
@@ -271,27 +272,28 @@ export function startDiscussionVotersTooltips(beatmapsetId) {
     hydrateVisibleRows(list);
   };
 
-  const processExisting = () => {
-    const tips = document.querySelectorAll('[role="tooltip"], .tooltip, .qtip');
-    tips.forEach((tip) => maybeEnhanceTooltip(tip));
+  const TOOLTIP_SEL = '[role="tooltip"], .tooltip, .qtip';
+  const enhanceWithin = (node) => {
+    maybeEnhanceTooltip(node);
+    node
+      .querySelectorAll(TOOLTIP_SEL)
+      .forEach((tip) => maybeEnhanceTooltip(tip));
   };
 
-  const obs = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      for (const n of m.addedNodes) {
-        if (!(n instanceof HTMLElement)) continue;
-        maybeEnhanceTooltip(n);
-        n.querySelectorAll?.('[role="tooltip"], .tooltip, .qtip').forEach(
-          (tip) => maybeEnhanceTooltip(tip),
-        );
+  const unsubscribe = observe.subscribe(
+    { selector: TOOLTIP_SEL, schedule: "sync", label: "discussion/voters" },
+    ({ added }) => {
+      for (const node of added) {
+        if (node instanceof HTMLElement) enhanceWithin(node);
       }
-    }
-  });
-  obs.observe(document.documentElement, { childList: true, subtree: true });
-  processExisting();
+    },
+  );
+  document
+    .querySelectorAll(TOOLTIP_SEL)
+    .forEach((tip) => maybeEnhanceTooltip(tip));
 
   return () => {
-    obs.disconnect();
+    unsubscribe();
     document.querySelectorAll(`[${ENHANCED_ATTR}]`).forEach((n) => {
       n.removeAttribute(ENHANCED_ATTR);
       n.classList.remove("oep-discussion-voters-tooltip");

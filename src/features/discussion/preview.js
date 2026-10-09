@@ -4,6 +4,7 @@
  * rendered preview below it.
  */
 
+import { observe } from "../../core/observe.js";
 import {
   beatmapsetIdFromPath,
   isDiscussionReviewsTotal,
@@ -521,24 +522,21 @@ export function startDiscussionPreview(beatmapsetId) {
     reviveReplyPreviewIfNeeded();
   };
 
-  let debounceTimer = 0;
-  const schedule = () => {
-    window.clearTimeout(debounceTimer);
-    debounceTimer = window.setTimeout(run, 80);
-  };
-
-  const obs = new MutationObserver(schedule);
-  obs.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["class", "style", "hidden", "aria-hidden"],
-  });
-  schedule();
+  // Our own DOM writes inside `run` are dropped by `mutate`, so they do not
+  // schedule another pass (the B02 loop was this manager re-triggering itself).
+  const runQuietly = () => observe.mutate(run);
+  const unsubscribe = observe.subscribe(
+    {
+      attributes: ["class", "style", "hidden", "aria-hidden"],
+      schedule: 80,
+      label: "discussion/preview",
+    },
+    runQuietly,
+  );
+  runQuietly();
 
   return () => {
-    window.clearTimeout(debounceTimer);
-    obs.disconnect();
+    unsubscribe();
     document.querySelectorAll(`[${TOGGLE_ATTR}]`).forEach((n) => n.remove());
     document.querySelectorAll(`[${PREVIEW_ATTR}]`).forEach((n) => n.remove());
     document.querySelectorAll(`[${HELPER_ATTR}]`).forEach((n) => n.remove());
