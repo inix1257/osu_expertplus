@@ -9,9 +9,9 @@ import {
   BBHELP_BTN_ICON_CLASS,
   BBHELP_BTN_TEXT_CLASS,
 } from "./constants.js";
-import { _openColorPicker, _openSizePicker } from "./pickers.js";
+import { openColorPicker, openSizePicker } from "./pickers.js";
 
-export function _createBbcodeButtons(textarea) {
+export function createBbcodeButtons(textarea) {
   const specs = [
     {
       label: "Bold",
@@ -73,13 +73,13 @@ export function _createBbcodeButtons(textarea) {
       label: "Color",
       title: "Font color",
       icon: "fas fa-palette",
-      onClick: () => _openColorPicker(textarea),
+      onClick: () => openColorPicker(textarea),
     },
     {
       label: "Size",
       title: "Font size",
       icon: "fas fa-text-height",
-      onClick: () => _openSizePicker(textarea),
+      onClick: () => openSizePicker(textarea),
     },
     {
       label: "Link",

@@ -37,7 +37,7 @@ export function renderBbcodePreviewInto(body, source) {
   body.replaceChildren(sanitizeTree(renderBbcode(source, { document })));
 }
 
-export function _ensureBbcodeLivePreview(editorEl, textarea) {
+export function ensureBbcodeLivePreview(editorEl, textarea) {
   let previewEnabled = false;
   let repaintTimer = 0;
 

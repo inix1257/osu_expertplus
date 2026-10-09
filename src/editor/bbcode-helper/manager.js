@@ -21,14 +21,14 @@ import {
   BBHELP_WRAP_CLASS,
   BBHELP_WRAP_FOR_ATTR,
 } from "./constants.js";
-import { _openImagemapHelper } from "./imagemap.js";
-import { _ensureBbcodeFormatChecker } from "./linter.js";
-import { _ensureBbcodeLivePreview } from "./live-preview.js";
+import { openImagemapHelper } from "./imagemap.js";
+import { ensureBbcodeFormatChecker } from "./linter.js";
+import { ensureBbcodeLivePreview } from "./live-preview.js";
 import {
   injectBbcodeHelperStyles,
   removeBbcodeHelperStyles,
 } from "./styles.js";
-import { _createBbcodeButtons } from "./toolbar.js";
+import { createBbcodeButtons } from "./toolbar.js";
 
 /**
  * True when a mutation batch contains an added node that matches selector
@@ -52,13 +52,13 @@ function mutationsIncludeSelector(mutations, selector) {
   return false;
 }
 
-export function _enhanceSingleBbcodeEditor(editorEl) {
+function enhanceSingleBbcodeEditor(editorEl) {
   if (!(editorEl instanceof HTMLElement)) return;
 
   const textarea = editorEl.querySelector(BBHELP_INPUT_SELECTOR);
   if (!(textarea instanceof HTMLTextAreaElement)) return;
-  _ensureBbcodeFormatChecker(editorEl, textarea);
-  _ensureBbcodeLivePreview(editorEl, textarea);
+  ensureBbcodeFormatChecker(editorEl, textarea);
+  ensureBbcodeLivePreview(editorEl, textarea);
   if (editorEl.hasAttribute(BBHELP_DONE_ATTR)) return;
 
   let editorId = editorEl.getAttribute(BBHELP_EDITOR_ID_ATTR);
@@ -78,7 +78,7 @@ export function _enhanceSingleBbcodeEditor(editorEl) {
     [BBHELP_WRAP_FOR_ATTR]: editorId,
   });
   const row = el("div", { class: BBHELP_ROW_CLASS });
-  _createBbcodeButtons(textarea).forEach((btn) => row.appendChild(btn));
+  createBbcodeButtons(textarea).forEach((btn) => row.appendChild(btn));
   wrap.appendChild(row);
 
   const row2 = el("div", {
@@ -92,7 +92,7 @@ export function _enhanceSingleBbcodeEditor(editorEl) {
         type: "button",
         class: BBHELP_BTN_CLASS,
         title: "Open ImageMap helper",
-        onclick: () => _openImagemapHelper(textarea),
+        onclick: () => openImagemapHelper(textarea),
       },
       el("span", { class: `${BBHELP_BTN_ICON_CLASS} fas fa-map-marked-alt` }),
       el("span", { class: BBHELP_BTN_TEXT_CLASS }, "Imagemap helper"),
@@ -104,7 +104,7 @@ export function _enhanceSingleBbcodeEditor(editorEl) {
   editorEl.setAttribute(BBHELP_DONE_ATTR, "1");
 }
 
-export function _isElementActuallyVisible(node) {
+function isElementActuallyVisible(node) {
   if (!(node instanceof HTMLElement)) return false;
   if (!node.isConnected) return false;
   if (node.hidden) return false;
@@ -114,7 +114,7 @@ export function _isElementActuallyVisible(node) {
   return true;
 }
 
-export function teardownBbcodeHelpers() {
+function teardownBbcodeHelpers() {
   document
     .querySelectorAll(`.${BBHELP_MODAL_CLASS}`)
     .forEach((n) => n.remove());
@@ -159,7 +159,7 @@ export function startBbcodeHelperManager() {
         : null;
       if (
         !(editor instanceof HTMLElement) ||
-        !_isElementActuallyVisible(editor)
+        !isElementActuallyVisible(editor)
       ) {
         if (editor instanceof HTMLElement) {
           editor.removeAttribute(BBHELP_DONE_ATTR);
@@ -168,8 +168,8 @@ export function startBbcodeHelperManager() {
       }
     });
     document.querySelectorAll(BBHELP_EDITOR_SELECTOR).forEach((editorEl) => {
-      if (_isElementActuallyVisible(editorEl))
-        _enhanceSingleBbcodeEditor(editorEl);
+      if (isElementActuallyVisible(editorEl))
+        enhanceSingleBbcodeEditor(editorEl);
     });
   };
 

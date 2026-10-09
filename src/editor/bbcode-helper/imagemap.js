@@ -8,7 +8,7 @@ import { safeHttpUrl } from "../sanitize.js";
 import { replaceRange } from "../textarea.js";
 import { BBHELP_BTN_CLASS, BBHELP_MODAL_CLASS } from "./constants.js";
 
-export function _openImagemapHelper(textarea) {
+export function openImagemapHelper(textarea) {
   // State
   const hotspots = []; // { x, y, w, h, url, title }
   let imgLoaded = false;

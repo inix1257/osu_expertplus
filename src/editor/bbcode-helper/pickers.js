@@ -6,7 +6,7 @@ import { el } from "../../features/legacy.js";
 import { toggleWrap } from "../textarea.js";
 import { BBHELP_BTN_CLASS, BBHELP_MODAL_CLASS } from "./constants.js";
 
-export function _openColorPicker(textarea) {
+export function openColorPicker(textarea) {
   const overlay = el("div", { class: BBHELP_MODAL_CLASS });
   const card = el("div", { class: `${BBHELP_MODAL_CLASS}__card` });
   const title = el(
@@ -92,7 +92,7 @@ export function _openColorPicker(textarea) {
   updateSwatch();
 }
 
-export function _openSizePicker(textarea) {
+export function openSizePicker(textarea) {
   const uid = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   const modeName = `oep-size-mode-${uid}`;
   const modePresetId = `oep-size-mode-preset-${uid}`;

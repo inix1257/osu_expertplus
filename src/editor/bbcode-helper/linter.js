@@ -5,7 +5,7 @@
 import { el } from "../../features/legacy.js";
 import { BBHELP_CHECKER_DONE_ATTR, BBHELP_WARN_CLASS } from "./constants.js";
 
-export function _parseBbcodeTagName(rawTag) {
+export function parseBbcodeTagName(rawTag) {
   const s = String(rawTag || "").trim();
   if (!s) return "";
   const noSlash = s.startsWith("/") ? s.slice(1).trim() : s;
@@ -43,7 +43,7 @@ export const KNOWN_BBCODE_TAGS = new Set([
   "notice",
 ]);
 
-export function _firstBbcodeFormatIssue(text) {
+export function firstBbcodeFormatIssue(text) {
   const value = String(text || "");
   /** @type {string[]} */
   const stack = [];
@@ -67,7 +67,7 @@ export function _firstBbcodeFormatIssue(text) {
       return "Empty BBCode tag `[]` is invalid.";
     }
     const isClosing = rawTag.startsWith("/");
-    const name = _parseBbcodeTagName(rawTag);
+    const name = parseBbcodeTagName(rawTag);
     if (!name || !/^[a-z*]+$/.test(name)) {
       return `Invalid tag name in \`[${rawTag}]\`.`;
     }
@@ -96,7 +96,7 @@ export function _firstBbcodeFormatIssue(text) {
   return null;
 }
 
-export function _ensureBbcodeFormatChecker(editorEl, textarea) {
+export function ensureBbcodeFormatChecker(editorEl, textarea) {
   let warnEl = editorEl.querySelector(`:scope > .${BBHELP_WARN_CLASS}`);
   if (!(warnEl instanceof HTMLElement)) {
     warnEl = el("div", { class: BBHELP_WARN_CLASS, hidden: "hidden" });
@@ -105,7 +105,7 @@ export function _ensureBbcodeFormatChecker(editorEl, textarea) {
   if (textarea.hasAttribute(BBHELP_CHECKER_DONE_ATTR)) return;
 
   const refresh = () => {
-    const issue = _firstBbcodeFormatIssue(textarea.value);
+    const issue = firstBbcodeFormatIssue(textarea.value);
     if (!issue) {
       warnEl.hidden = true;
       warnEl.textContent = "";
