@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   createGeneration,
+  listen,
   mountSettingFeature,
   safeStart,
 } from "../../src/core/lifecycle.js";
@@ -125,4 +126,19 @@ test("createGeneration", () => {
   assert.equal(gen.isCurrent(a), false);
   assert.equal(gen.isCurrent(b), true);
   assert.equal(gen.current(), b);
+});
+
+test("listen removes the listener when the signal aborts", () => {
+  const target = new EventTarget();
+  const ac = new AbortController();
+  let calls = 0;
+  listen(target, "ping", () => calls++, ac.signal, { capture: true });
+  target.dispatchEvent(new Event("ping"));
+  ac.abort();
+  target.dispatchEvent(new Event("ping"));
+  assert.equal(calls, 1);
+
+  listen(target, "ping", () => calls++, ac.signal);
+  target.dispatchEvent(new Event("ping"));
+  assert.equal(calls, 1, "an aborted signal adds nothing");
 });

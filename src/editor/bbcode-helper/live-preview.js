@@ -5,6 +5,7 @@
  * osu-web's markup, not the English "Cancel" label (B45).
  */
 
+import { listen } from "../../core/lifecycle.js";
 import { el } from "../../features/legacy.js";
 import { renderBbcode } from "../bbcode-render.js";
 import { placeBbcodePreviewToggle } from "../preview-toggle.js";
@@ -13,7 +14,6 @@ import {
   BBHELP_PREVIEW_ATTR,
   BBHELP_PREVIEW_BODY_CLASS,
   BBHELP_PREVIEW_CLASS,
-  BBHELP_PREVIEW_DONE_ATTR,
   BBHELP_PREVIEW_EMPTY_CLASS,
   BBHELP_PREVIEW_TITLE_CLASS,
   BBHELP_PREVIEW_TOGGLE_ATTR,
@@ -37,28 +37,56 @@ export function renderBbcodePreviewInto(body, source) {
   body.replaceChildren(sanitizeTree(renderBbcode(source, { document })));
 }
 
-export function ensureBbcodeLivePreview(editorEl, textarea) {
-  let previewEnabled = false;
-  let repaintTimer = 0;
+/**
+ * @typedef {{
+ *   enabled: boolean,
+ *   timer: number,
+ *   toggle: HTMLButtonElement,
+ *   preview: HTMLElement,
+ *   body: HTMLElement,
+ * }} PreviewState
+ */
 
-  let toggleBtn = editorEl.querySelector(`[${BBHELP_PREVIEW_TOGGLE_ATTR}]`);
-  if (!(toggleBtn instanceof HTMLButtonElement)) {
-    toggleBtn = el(
-      "button",
-      {
-        type: "button",
-        class: BBHELP_PREVIEW_TOGGLE_CLASS,
-        [BBHELP_PREVIEW_TOGGLE_ATTR]: "1",
-        "aria-pressed": "false",
-        title: "Toggle live preview",
-      },
-      "Live preview",
+/**
+ * @param {HTMLTextAreaElement} textarea
+ * @param {PreviewState} state
+ */
+function paintPreview(textarea, state) {
+  window.clearTimeout(state.timer);
+  state.timer = 0;
+  state.preview.hidden = !state.enabled;
+  state.toggle.setAttribute("aria-pressed", state.enabled ? "true" : "false");
+  if (state.enabled) renderBbcodePreviewInto(state.body, textarea.value || "");
+}
+
+/**
+ * Add the preview toggle and panel to an editor, once per textarea per
+ * helper session (B50): the input and click listeners are bound when the
+ * state is created and go away with `session.signal`; later calls only put
+ * the toggle and panel back in place if osu-web moved or dropped them. The
+ * preview is rendered only while it is shown, 70ms after the last input.
+ * @param {HTMLElement} editorEl
+ * @param {HTMLTextAreaElement} textarea
+ * @param {{ signal: AbortSignal, previews: WeakMap<HTMLTextAreaElement, PreviewState> }} session
+ */
+export function ensureBbcodeLivePreview(editorEl, textarea, session) {
+  let state = session.previews.get(textarea);
+  if (!state) {
+    const toggle = /** @type {HTMLButtonElement} */ (
+      el(
+        "button",
+        {
+          type: "button",
+          class: BBHELP_PREVIEW_TOGGLE_CLASS,
+          [BBHELP_PREVIEW_TOGGLE_ATTR]: "1",
+          "aria-pressed": "false",
+          title: "Toggle live preview",
+        },
+        "Live preview",
+      )
     );
-  }
-
-  let preview = editorEl.querySelector(`[${BBHELP_PREVIEW_ATTR}]`);
-  if (!(preview instanceof HTMLElement)) {
-    preview = el(
+    const body = el("div", { class: BBHELP_PREVIEW_BODY_CLASS });
+    const preview = el(
       "section",
       {
         class: BBHELP_PREVIEW_CLASS,
@@ -66,39 +94,43 @@ export function ensureBbcodeLivePreview(editorEl, textarea) {
         hidden: "hidden",
       },
       el("p", { class: BBHELP_PREVIEW_TITLE_CLASS }, "Live preview"),
-      el("div", { class: BBHELP_PREVIEW_BODY_CLASS }),
+      body,
     );
-    textarea.insertAdjacentElement("afterend", preview);
-  }
-
-  const previewBody = preview.querySelector(`.${BBHELP_PREVIEW_BODY_CLASS}`);
-  if (!(previewBody instanceof HTMLElement)) return;
-
-  const placeToggle = () => {
-    placeBbcodePreviewToggle(editorEl, textarea, toggleBtn);
-  };
-
-  const repaint = () => {
-    renderBbcodePreviewInto(previewBody, textarea.value || "");
-    preview.hidden = !previewEnabled;
-    toggleBtn.setAttribute("aria-pressed", previewEnabled ? "true" : "false");
-    placeToggle();
-  };
-  const repaintSoon = () => {
-    window.clearTimeout(repaintTimer);
-    repaintTimer = window.setTimeout(repaint, 70);
-  };
-
-  if (!textarea.hasAttribute(BBHELP_PREVIEW_DONE_ATTR)) {
-    textarea.addEventListener("input", repaintSoon);
-    toggleBtn.addEventListener("click", () => {
-      previewEnabled = !previewEnabled;
-      repaint();
+    const created = { enabled: false, timer: 0, toggle, preview, body };
+    state = created;
+    session.previews.set(textarea, created);
+    const { signal } = session;
+    listen(
+      toggle,
+      "click",
+      () => {
+        created.enabled = !created.enabled;
+        paintPreview(textarea, created);
+      },
+      signal,
+    );
+    listen(
+      textarea,
+      "input",
+      () => {
+        if (!created.enabled) return;
+        window.clearTimeout(created.timer);
+        created.timer = window.setTimeout(
+          () => paintPreview(textarea, created),
+          70,
+        );
+      },
+      signal,
+    );
+    signal.addEventListener("abort", () => window.clearTimeout(created.timer), {
+      once: true,
     });
-    textarea.setAttribute(BBHELP_PREVIEW_DONE_ATTR, "1");
-  } else {
-    previewEnabled = toggleBtn.getAttribute("aria-pressed") === "true";
   }
-
-  repaint();
+  if (
+    state.preview.parentElement !== textarea.parentElement ||
+    !state.preview.isConnected
+  ) {
+    textarea.insertAdjacentElement("afterend", state.preview);
+  }
+  placeBbcodePreviewToggle(editorEl, textarea, state.toggle);
 }

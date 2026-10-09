@@ -94,3 +94,23 @@ export function createGeneration() {
     isCurrent: (token) => token === gen,
   };
 }
+
+/**
+ * `addEventListener` until `signal` aborts. Removes the listener itself on
+ * abort instead of passing `{ signal }`: a userscript sandbox's AbortSignal
+ * is not always accepted by the page's DOM (and jsdom rejects Node's).
+ * @param {EventTarget} target
+ * @param {string} type
+ * @param {(event: any) => void} handler
+ * @param {AbortSignal} signal
+ * @param {boolean | AddEventListenerOptions} [options] without `signal`
+ */
+export function listen(target, type, handler, signal, options) {
+  if (signal.aborted) return;
+  target.addEventListener(type, handler, options);
+  signal.addEventListener(
+    "abort",
+    () => target.removeEventListener(type, handler, options),
+    { once: true },
+  );
+}

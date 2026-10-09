@@ -2,8 +2,9 @@
  * BBCode format warning shown under the editor (WS-40).
  */
 
+import { listen } from "../../core/lifecycle.js";
 import { el } from "../../features/legacy.js";
-import { BBHELP_CHECKER_DONE_ATTR, BBHELP_WARN_CLASS } from "./constants.js";
+import { BBHELP_WARN_CLASS } from "./constants.js";
 
 export function parseBbcodeTagName(rawTag) {
   const s = String(rawTag || "").trim();
@@ -96,26 +97,26 @@ export function firstBbcodeFormatIssue(text) {
   return null;
 }
 
-export function ensureBbcodeFormatChecker(editorEl, textarea) {
-  let warnEl = editorEl.querySelector(`:scope > .${BBHELP_WARN_CLASS}`);
-  if (!(warnEl instanceof HTMLElement)) {
-    warnEl = el("div", { class: BBHELP_WARN_CLASS, hidden: "hidden" });
-    textarea.insertAdjacentElement("afterend", warnEl);
+/**
+ * Add the format warning under an editor's textarea, once per textarea per
+ * helper session (B50). The input listener goes away with `session.signal`.
+ * @param {HTMLElement} _editorEl
+ * @param {HTMLTextAreaElement} textarea
+ * @param {{ signal: AbortSignal, warnings: WeakMap<HTMLTextAreaElement, HTMLElement> }} session
+ */
+export function ensureBbcodeFormatChecker(_editorEl, textarea, session) {
+  let warnEl = session.warnings.get(textarea);
+  if (!warnEl) {
+    const created = el("div", { class: BBHELP_WARN_CLASS, hidden: "hidden" });
+    warnEl = created;
+    session.warnings.set(textarea, created);
+    const refresh = () => {
+      const issue = firstBbcodeFormatIssue(textarea.value);
+      created.hidden = !issue;
+      created.textContent = issue ? `BBCode format warning: ${issue}` : "";
+    };
+    listen(textarea, "input", refresh, session.signal);
+    refresh();
   }
-  if (textarea.hasAttribute(BBHELP_CHECKER_DONE_ATTR)) return;
-
-  const refresh = () => {
-    const issue = firstBbcodeFormatIssue(textarea.value);
-    if (!issue) {
-      warnEl.hidden = true;
-      warnEl.textContent = "";
-      return;
-    }
-    warnEl.hidden = false;
-    warnEl.textContent = `BBCode format warning: ${issue}`;
-  };
-
-  textarea.addEventListener("input", refresh);
-  textarea.setAttribute(BBHELP_CHECKER_DONE_ATTR, "1");
-  refresh();
+  if (!warnEl.isConnected) textarea.insertAdjacentElement("afterend", warnEl);
 }

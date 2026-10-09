@@ -8,14 +8,12 @@ import {
   BBHELP_BTN_CLASS,
   BBHELP_BTN_ICON_CLASS,
   BBHELP_BTN_TEXT_CLASS,
-  BBHELP_CHECKER_DONE_ATTR,
   BBHELP_DONE_ATTR,
   BBHELP_EDITOR_ID_ATTR,
   BBHELP_EDITOR_SELECTOR,
   BBHELP_INPUT_SELECTOR,
   BBHELP_MODAL_CLASS,
   BBHELP_PREVIEW_CLASS,
-  BBHELP_PREVIEW_DONE_ATTR,
   BBHELP_PREVIEW_TOGGLE_CLASS,
   BBHELP_ROW_CLASS,
   BBHELP_WARN_CLASS,
@@ -28,13 +26,17 @@ import { ensureBbcodeLivePreview } from "./live-preview.js";
 import { acquireBbcodeHelperStyles } from "./styles.js";
 import { createBbcodeButtons } from "./toolbar.js";
 
-function enhanceSingleBbcodeEditor(editorEl) {
+/**
+ * @param {Element} editorEl
+ * @param {any} session  see startBbcodeHelperManager
+ */
+function enhanceSingleBbcodeEditor(editorEl, session) {
   if (!(editorEl instanceof HTMLElement)) return;
 
   const textarea = editorEl.querySelector(BBHELP_INPUT_SELECTOR);
   if (!(textarea instanceof HTMLTextAreaElement)) return;
-  ensureBbcodeFormatChecker(editorEl, textarea);
-  ensureBbcodeLivePreview(editorEl, textarea);
+  ensureBbcodeFormatChecker(editorEl, textarea, session);
+  ensureBbcodeLivePreview(editorEl, textarea, session);
   if (editorEl.hasAttribute(BBHELP_DONE_ATTR)) return;
 
   let editorId = editorEl.getAttribute(BBHELP_EDITOR_ID_ATTR);
@@ -105,12 +107,6 @@ function teardownBbcodeHelpers() {
   document
     .querySelectorAll(`${BBHELP_EDITOR_SELECTOR}[${BBHELP_DONE_ATTR}]`)
     .forEach((n) => n.removeAttribute(BBHELP_DONE_ATTR));
-  document
-    .querySelectorAll(`${BBHELP_INPUT_SELECTOR}[${BBHELP_CHECKER_DONE_ATTR}]`)
-    .forEach((n) => n.removeAttribute(BBHELP_CHECKER_DONE_ATTR));
-  document
-    .querySelectorAll(`${BBHELP_INPUT_SELECTOR}[${BBHELP_PREVIEW_DONE_ATTR}]`)
-    .forEach((n) => n.removeAttribute(BBHELP_PREVIEW_DONE_ATTR));
 }
 
 /**
@@ -121,6 +117,15 @@ function teardownBbcodeHelpers() {
 export function startBbcodeHelperManager() {
   const releaseStyles = acquireBbcodeHelperStyles();
   const ac = new AbortController();
+  // Per-textarea state lives only as long as this run, so a later run binds
+  // fresh listeners and the old ones are already gone with ac (B50).
+  const session = {
+    signal: ac.signal,
+    /** @type {WeakMap<HTMLTextAreaElement, any>} */
+    previews: new WeakMap(),
+    /** @type {WeakMap<HTMLTextAreaElement, HTMLElement>} */
+    warnings: new WeakMap(),
+  };
 
   const scan = () => {
     document.querySelectorAll(`.${BBHELP_WRAP_CLASS}`).forEach((wrap) => {
@@ -149,7 +154,7 @@ export function startBbcodeHelperManager() {
     });
     document.querySelectorAll(BBHELP_EDITOR_SELECTOR).forEach((editorEl) => {
       if (isElementActuallyVisible(editorEl))
-        enhanceSingleBbcodeEditor(editorEl);
+        enhanceSingleBbcodeEditor(editorEl, session);
     });
   };
 
