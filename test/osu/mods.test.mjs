@@ -21,7 +21,7 @@ import {
   speedChangeFromMod,
 } from "../../src/osu/mods.js";
 import { loadScripts } from "../helpers/load-script.mjs";
-import { LEGACY_SCOREBOARD, USER_PROFILE, legacyFn } from "./legacy.mjs";
+import { LEGACY_SCOREBOARD, LEGACY_PROFILE, legacyFn } from "./legacy.mjs";
 
 const SPEED_DEPS = {
   SCOREBOARD_MOD_DEFAULT_SPEED_UP: 1.5,
@@ -51,7 +51,7 @@ test("modAcronym / modAcronyms: strings and objects", () => {
   for (const [mod, expected] of cases) {
     assert.equal(modAcronym(mod), expected, JSON.stringify(mod));
   }
-  const old = legacyFn(USER_PROFILE, "modsAcronymsFromApiMods");
+  const old = legacyFn(LEGACY_PROFILE, "modsAcronymsFromApiMods");
   const list = [
     "HD",
     { acronym: "DT" },
@@ -239,7 +239,9 @@ test("difficultyMods matches user-profile _diffMods", () => {
     "TC",
   ]);
   assert.deepEqual([...DIFFICULTY_MODS].sort(), [...oldSet].sort());
-  const old = legacyFn(USER_PROFILE, "_diffMods", { DIFFICULTY_MODS: oldSet });
+  const old = legacyFn(LEGACY_PROFILE, "_diffMods", {
+    DIFFICULTY_MODS: oldSet,
+  });
   for (const list of [
     ["HD", "dt", "HR"],
     ["NF", "SD"],

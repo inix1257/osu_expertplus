@@ -14,7 +14,7 @@ import {
 import {
   LEGACY_BEATMAPSET,
   CARD_EXTRA,
-  USER_PROFILE,
+  LEGACY_PROFILE,
   legacyFn,
   LEGACY_SCOREBOARD,
 } from "./legacy.mjs";
@@ -285,7 +285,7 @@ test("beatmapsetIdFromLinks / anywhere match the legacy parsers", () => {
   const oldCard = legacyFn(CARD_EXTRA, "parseBeatmapsetId", {
     location: win.location,
   });
-  const oldProfile = legacyFn(USER_PROFILE, "getRanksRowBeatmapsetId");
+  const oldProfile = legacyFn(LEGACY_PROFILE, "getRanksRowBeatmapsetId");
   const cases = [
     [
       ["/beatmapsets/discussions", "https://osu.ppy.sh/beatmapsets/42#osu/1"],

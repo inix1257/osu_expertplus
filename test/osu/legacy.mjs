@@ -57,6 +57,8 @@ export function legacyFn(file, name, deps = {}) {
 }
 
 export const USER_PROFILE = "src/pages/user-profile.js";
+/** Score features moved out of user-profile by WS-41 (frozen copy). */
+export const LEGACY_PROFILE = "test/fixtures/legacy/user-profile-scores.js";
 /** Scoreboard helpers moved out of beatmap-detail by WS-31 (frozen copy). */
 export const LEGACY_SCOREBOARD =
   "test/fixtures/legacy/beatmap-detail-scoreboard.js";

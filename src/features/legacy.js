@@ -53,3 +53,40 @@ export function omdb() {
 export function manageStyle(...args) {
   return OsuExpertPlus.dom.manageStyle(...args);
 }
+
+/** `OsuExpertPlus.dom.waitForStaleElementToLeave` */
+export function waitForStaleElementToLeave(...args) {
+  return OsuExpertPlus.dom.waitForStaleElementToLeave(...args);
+}
+
+/** `OsuExpertPlus.dom.parseLocaleNumber` */
+export function parseLocaleNumber(...args) {
+  return OsuExpertPlus.dom.parseLocaleNumber(...args);
+}
+
+/** `OsuExpertPlus.dom.formatDecimalPp` */
+export function formatDecimalPp(...args) {
+  return OsuExpertPlus.dom.formatDecimalPp(...args);
+}
+
+/** `OsuExpertPlus.modIconsAsAcronyms.applyModIconsAsAcronyms` */
+export function applyModIconsAsAcronyms(...args) {
+  return OsuExpertPlus.modIconsAsAcronyms.applyModIconsAsAcronyms(...args);
+}
+
+/** `OsuExpertPlus.modIconsAsAcronyms.injectModIconsAcronymStyles` */
+export function injectModIconsAcronymStyles(...args) {
+  return OsuExpertPlus.modIconsAsAcronyms.injectModIconsAcronymStyles(...args);
+}
+
+/** `OsuExpertPlus.modIconsAsAcronyms.stripOepModAcronymFromClonedMod` */
+export function stripOepModAcronymFromClonedMod(...args) {
+  return OsuExpertPlus.modIconsAsAcronyms.stripOepModAcronymFromClonedMod(
+    ...args,
+  );
+}
+
+/** `OsuExpertPlus.modIconsAsAcronyms.modTypeClassForAcronym` */
+export function modTypeClassForAcronym(...args) {
+  return OsuExpertPlus.modIconsAsAcronyms.modTypeClassForAcronym(...args);
+}

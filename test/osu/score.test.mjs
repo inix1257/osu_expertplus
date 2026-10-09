@@ -17,13 +17,13 @@ import {
   scoreMergeKey,
   statsCells,
 } from "../../src/osu/score.js";
-import { LEGACY_SCOREBOARD, USER_PROFILE, legacyFn } from "./legacy.mjs";
+import { LEGACY_SCOREBOARD, LEGACY_PROFILE, legacyFn } from "./legacy.mjs";
 
 const PROFILE = { legacyOsuGreat: "300+geki" };
 const SCOREBOARD = { legacyOsuGreat: "300" };
 
 test("scoreGrade matches scoreRankForApiScore (and sanitized grade cells)", () => {
-  const old = legacyFn(USER_PROFILE, "scoreRankForApiScore");
+  const old = legacyFn(LEGACY_PROFILE, "scoreRankForApiScore");
   const cases = [
     [{ rank: "XH" }, "XH", "XH"],
     [{ rank: { name: "SH" } }, "SH", "SH"],
@@ -42,7 +42,7 @@ test("scoreGrade matches scoreRankForApiScore (and sanitized grade cells)", () =
 });
 
 test("formatAccuracy: profile vs scoreboard", () => {
-  const oldProfile = legacyFn(USER_PROFILE, "formatAccuracyPercent");
+  const oldProfile = legacyFn(LEGACY_PROFILE, "formatAccuracyPercent");
   const oldScoreboard = (acc) =>
     typeof acc === "number" ? `${(acc * 100).toFixed(2)}%` : "";
   const cases = [
@@ -85,7 +85,7 @@ test("isPerfectAccuracy and formatCombo", () => {
 });
 
 test("normalizeStatistics: osu lazer and legacy", () => {
-  const old = legacyFn(USER_PROFILE, "_normalizeOsuStatistics");
+  const old = legacyFn(LEGACY_PROFILE, "_normalizeOsuStatistics");
   const cases = [
     // statistics, profile (300+geki), scoreboard (300)
     [
@@ -409,7 +409,7 @@ test("scoreIndicatesPerfectCombo matches scoreApiIndicatesComboPerfect", () => {
 });
 
 test("beatmapMaxComboFromScore matches _beatmapMaxComboFromScore except B68", () => {
-  const old = legacyFn(USER_PROFILE, "_beatmapMaxComboFromScore");
+  const old = legacyFn(LEGACY_PROFILE, "_beatmapMaxComboFromScore");
   const same = [
     { beatmap: { max_combo: 1234 } },
     { beatmap: { max_combo: "77" }, maximum_statistics: { great: 1 } },
@@ -491,7 +491,7 @@ test("leaderboardScoreId matches beatmap-detail", () => {
 });
 
 test("scoreMergeKey matches _recentScoreMergeKey", () => {
-  const old = legacyFn(USER_PROFILE, "_recentScoreMergeKey");
+  const old = legacyFn(LEGACY_PROFILE, "_recentScoreMergeKey");
   const cases = [
     [{ id: 5, legacy_score_id: 9 }, "s:9"],
     [{ id: 5 }, "s:5"],

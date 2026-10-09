@@ -11,7 +11,7 @@ import {
   rulesetId,
 } from "../../src/osu/ruleset.js";
 import { modeIndexForRuleset } from "../../src/api/kirino.js";
-import { legacyFn, USER_PROFILE } from "./legacy.mjs";
+import { legacyFn, LEGACY_PROFILE } from "./legacy.mjs";
 
 test("RULESETS order matches ruleset ids", () => {
   assert.deepEqual([...RULESETS], ["osu", "taiko", "fruits", "mania"]);
@@ -19,7 +19,7 @@ test("RULESETS order matches ruleset ids", () => {
 });
 
 test("rulesetFromId matches user-profile rulesetIdToMode", () => {
-  const old = legacyFn(USER_PROFILE, "rulesetIdToMode");
+  const old = legacyFn(LEGACY_PROFILE, "rulesetIdToMode");
   for (const id of [0, 1, 2, 3, "0", "3", 4, -1, null, undefined, "x"]) {
     assert.equal(rulesetFromId(id), old(id), `id ${String(id)}`);
   }
@@ -82,7 +82,7 @@ test("rulesetFromProfileUrl matches user-profile getModeFromUrl", () => {
     ["/users/2", "?mode=catch", null],
   ];
   for (const [pathname, search, expected] of cases) {
-    const old = legacyFn(USER_PROFILE, "getModeFromUrl", {
+    const old = legacyFn(LEGACY_PROFILE, "getModeFromUrl", {
       PROFILE_MODES: RULESETS,
       location: { pathname, search },
     });
