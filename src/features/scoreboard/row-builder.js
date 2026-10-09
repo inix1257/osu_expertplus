@@ -3,6 +3,17 @@
  * API score (wildcard merges, player lookup, extended leaderboard).
  */
 
+import { flagFilename, formatRelativeShort } from "../../osu/format.js";
+import {
+  ACCURACY_FORMAT,
+  formatAccuracy,
+  formatCombo,
+  hitstatValue,
+  isFullCombo,
+  isPerfectAccuracy,
+  leaderboardScoreId,
+  scoreGrade,
+} from "../../osu/score.js";
 import {
   EXTENDED_SCORE_ROW_ATTR,
   SCOREBOARD_PP_ORIGINAL_ATTR,
@@ -11,52 +22,6 @@ import {
 } from "./context.js";
 import { applyScoreboardModsCell } from "./row-mods.js";
 import { leaderboardTableScoreNumber } from "./sort.js";
-
-/**
- * Stable numeric id for sorting extended score rows.
- * @param {object|null|undefined} score
- * @returns {string|null}
- */
-export function leaderboardScoreId(score) {
-  if (!score || typeof score !== "object") return null;
-  const raw =
-    score.id ??
-    score.legacy_score_id ??
-    score.score_id ??
-    score.scoreId ??
-    score.scoreID ??
-    score.score?.id ??
-    score.score?.legacy_score_id ??
-    score.score?.score_id ??
-    null;
-  if (raw == null) return null;
-  const n = Number(raw);
-  if (Number.isFinite(n)) return n > 0 ? String(n) : null;
-  const s = String(raw).trim();
-  return s ? s : null;
-}
-
-/**
- * Short relative labels similar to osu leaderboard (`now`, `2d`, `5mo`, `3y`).
- * @param {string} iso
- */
-export function formatScoreboardShortAgo(iso) {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return "";
-  const sec = Math.max(0, Math.floor((Date.now() - then) / 1000));
-  if (sec < 45) return "now";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h`;
-  const day = Math.floor(hr / 24);
-  if (day < 30) return `${day}d`;
-  const mo = Math.floor(day / 30);
-  if (mo < 12) return `${mo}mo`;
-  const y = Math.floor(day / 365);
-  if (y < 1) return `${mo}mo`;
-  return `${y}y`;
-}
 
 /**
  * @param {HTMLTableRowElement} templateRow
@@ -130,19 +95,6 @@ export function toggleScoreboardCellPerfectClass(cls, on) {
 }
 
 /**
- * API v2 Score (solo) uses `is_perfect_combo` / `legacy_perfect`; some payloads still expose `perfect`.
- * @param {object} score
- * @returns {boolean}
- */
-export function scoreApiIndicatesComboPerfect(score) {
-  if (!score || typeof score !== "object") return false;
-  if (score.perfect === true) return true;
-  if (score.is_perfect_combo === true) return true;
-  if (score.legacy_perfect === true) return true;
-  return false;
-}
-
-/**
  * @param {HTMLTableCellElement|null|undefined} td
  * @param {HTMLTableCellElement|null|undefined} refTd
  * @param {object} score
@@ -150,29 +102,11 @@ export function scoreApiIndicatesComboPerfect(score) {
  */
 export function applyScoreboardComboCell(td, refTd, score, mapFullCombo) {
   if (!td) return;
-  const comboStr = `${Number(score.max_combo ?? 0).toLocaleString("en-US")}x`;
+  const comboStr = formatCombo(score.max_combo);
   const a = td.querySelector("a.beatmap-scoreboard-table__cell-content");
   const refA = refTd?.querySelector("a.beatmap-scoreboard-table__cell-content");
   if (!a || !refA) return;
-  const maxCombo = Number(score.max_combo ?? 0);
-  const stats =
-    score?.statistics && typeof score.statistics === "object"
-      ? score.statistics
-      : {};
-  const maxComboFromStats = Number(
-    score.maximum_statistics?.max_combo ??
-      score.maximum_statistics?.maxCombo ??
-      stats.max_combo ??
-      stats.maxCombo,
-  );
-  const mapFull = mapFullCombo != null ? Number(mapFullCombo) : NaN;
-  const hasMapFull = Number.isFinite(mapFull) && mapFull > 0;
-  const inferredPerfect = hasMapFull
-    ? maxCombo > 0 && maxCombo === mapFull
-    : Number.isFinite(maxComboFromStats) &&
-      maxComboFromStats > 0 &&
-      maxCombo === maxComboFromStats;
-  const perfect = scoreApiIndicatesComboPerfect(score) || inferredPerfect;
+  const perfect = isFullCombo(score, mapFullCombo, { apiFlags: true });
   a.className = toggleScoreboardCellPerfectClass(refA.className, perfect);
   const refChild = refA.firstElementChild;
   if (refChild instanceof HTMLElement) {
@@ -191,14 +125,11 @@ export function applyScoreboardComboCell(td, refTd, score, mapFullCombo) {
  */
 export function applyScoreboardAccuracyCell(td, refTd, score) {
   if (!td) return;
-  const accStr =
-    typeof score.accuracy === "number"
-      ? `${(score.accuracy * 100).toFixed(2)}%`
-      : "";
+  const accStr = formatAccuracy(score.accuracy, ACCURACY_FORMAT.scoreboard);
   const a = td.querySelector("a.beatmap-scoreboard-table__cell-content");
   const refA = refTd?.querySelector("a.beatmap-scoreboard-table__cell-content");
   if (!a || !refA) return;
-  const perfect = typeof score.accuracy === "number" && score.accuracy >= 1;
+  const perfect = isPerfectAccuracy(score.accuracy);
   a.className = toggleScoreboardCellPerfectClass(refA.className, perfect);
   const refChild = refA.firstElementChild;
   if (refChild instanceof HTMLElement) {
@@ -266,7 +197,7 @@ export function applyScoreboardTimeCell(td, refTd, iso) {
   const refTime = refTd?.querySelector("time");
   if (!(timeEl instanceof HTMLTimeElement)) return;
   timeEl.setAttribute("datetime", iso);
-  timeEl.textContent = formatScoreboardShortAgo(iso);
+  timeEl.textContent = formatRelativeShort(iso, { rounding: "floor" });
   if (refTime) {
     timeEl.className = refTime.className;
     timeEl.setAttribute("title", new Date(iso).toISOString());
@@ -295,25 +226,12 @@ export function applyScoreboardFlagCell(td, refTd, user, ruleset) {
   }
   a.href = `https://osu.ppy.sh/rankings/${encodeURIComponent(ruleset)}/performance?country=${encodeURIComponent(code)}`;
 
-  // osu-web uses unicode-indicator SVGs for flags.
-  // Example: `RU` -> `1f1f7-1f1fa.svg`.
-  function toUnicodeFlagFilename(cc) {
-    const c = String(cc || "")
-      .trim()
-      .toUpperCase();
-    if (!/^[A-Z]{2}$/.test(c)) return null;
-    const A = c.charCodeAt(0) - 65;
-    const B = c.charCodeAt(1) - 65;
-    const u1 = 0x1f1e6 + A;
-    const u2 = 0x1f1e6 + B;
-    return `${u1.toString(16)}-${u2.toString(16)}`;
-  }
-
+  // osu-web uses unicode-indicator SVGs for flags (`RU` → `1f1f7-1f1fa.svg`).
   const codeLower = code.toLowerCase();
   const refFlagSpan = refA?.querySelector?.("span.flag-country") ?? null;
   const useSpan = refFlagSpan instanceof HTMLSpanElement;
 
-  const uni = toUnicodeFlagFilename(code);
+  const uni = flagFilename(code);
 
   if (useSpan) {
     // Existing rows use `span.flag-country` + `background-image`.
@@ -498,109 +416,14 @@ export function buildBeatmapScoreboardColumnMap(templateRow, table) {
 }
 
 /**
- * @param {string} labelRaw  from `<th>` (hit-stat short label)
- * @param {object|null|undefined} score  full API score (statistics + legacy fields)
- */
-export function hitstatTextFromHeaderLabel(labelRaw, score) {
-  const statsSource =
-    score?.statistics && typeof score.statistics === "object"
-      ? score.statistics
-      : score && typeof score === "object"
-        ? score
-        : {};
-
-  const pick = (...keys) => {
-    for (const k of keys) {
-      const v = statsSource?.[k];
-      if (v != null && v !== "" && Number.isFinite(Number(v))) return String(v);
-    }
-    return "0";
-  };
-
-  const hasLazer =
-    statsSource?.great != null ||
-    statsSource?.perfect != null ||
-    statsSource?.ok != null ||
-    statsSource?.meh != null ||
-    statsSource?.miss != null;
-
-  const n300 = hasLazer
-    ? Number(statsSource?.great ?? 0) + Number(statsSource?.perfect ?? 0)
-    : statsSource?.count_300 != null
-      ? Number(statsSource.count_300)
-      : statsSource?.count300 != null
-        ? Number(statsSource.count300)
-        : Number(statsSource?.count_geki ?? statsSource?.countgeki ?? 0);
-  const n100 = hasLazer
-    ? Number(statsSource?.ok ?? 0)
-    : Number(statsSource?.count_100 ?? statsSource?.count100 ?? 0);
-  const n50 = hasLazer
-    ? Number(statsSource?.meh ?? 0)
-    : Number(statsSource?.count_50 ?? statsSource?.count50 ?? 0);
-  const nMiss = hasLazer
-    ? Number(statsSource?.miss ?? 0)
-    : Number(statsSource?.count_miss ?? statsSource?.countmiss ?? 0);
-
-  const lab = String(labelRaw).trim().toLowerCase();
-
-  // osu standard: prefer exact numeric hit counts.
-  if (lab === "miss" || lab === "m" || lab.includes("miss"))
-    return String(nMiss);
-
-  if (lab === "mania_perfect")
-    return pick("count_geki", "countgeki", "perfect", "great");
-  if (lab === "mania_good")
-    return pick("count_katu", "countkatu", "good", "great");
-
-  if (lab === "ctb_l" || (lab === "l" && getBeatmapPageRuleset() === "fruits"))
-    return pick("large_tick_hit", "large_bonus");
-  if (lab === "ctb_drp" || lab === "drp")
-    return pick("small_tick_hit", "small_bonus");
-
-  // Order matters: mania uses `320` and it contains `300`.
-  if (lab === "geki" || lab === "max" || lab === "320")
-    return pick("count_geki", "countgeki", "perfect", "great");
-
-  if (/(^|[^0-9])300([^0-9]|$)/.test(lab) || lab === "great")
-    return String(n300);
-
-  if (lab === "katu" || lab === "200")
-    return pick("count_katu", "countkatu", "good", "great");
-
-  if (/(^|[^0-9])100([^0-9]|$)/.test(lab) || lab === "ok") return String(n100);
-
-  if (/(^|[^0-9])50([^0-9]|$)/.test(lab) || lab === "meh") return String(n50);
-
-  if (lab.includes("tick") || lab === "tail")
-    return pick(
-      "large_tick_hit",
-      "small_tick_hit",
-      "slider_tail_hit",
-      "large_tick_miss",
-    );
-
-  return "0";
-}
-
-/**
  * @param {HTMLTableCellElement|null|undefined} td
  * @param {HTMLTableCellElement|null|undefined} refTd
  * @param {object} score
  */
 export function applyScoreboardGradeCell(td, refTd, score) {
   if (!td) return;
-  const r =
-    typeof score.rank === "string"
-      ? score.rank
-      : score.rank &&
-          typeof score.rank === "object" &&
-          typeof score.rank.name === "string"
-        ? score.rank.name
-        : score.passed === false
-          ? "F"
-          : "D";
   // osu-web rank classes use the API rank casing (e.g. `XH`, `SH`, `F`).
-  const rankKey = String(r).replace(/[^A-Za-z0-9]+/g, "") || "D";
+  const rankKey = scoreGrade(score, { sanitize: true });
   const link = td.querySelector("a.beatmap-scoreboard-table__cell-content");
   const refLink = refTd?.querySelector(
     "a.beatmap-scoreboard-table__cell-content",
@@ -718,7 +541,7 @@ export function applyApiScoreToBeatmapScoreRow(
     applyScoreboardTextCellLikeRef(
       tds[i],
       refHit,
-      hitstatTextFromHeaderLabel(label, score),
+      hitstatValue(label, score, { ruleset }),
     );
   }
 

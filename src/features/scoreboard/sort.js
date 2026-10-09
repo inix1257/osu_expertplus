@@ -3,17 +3,16 @@
  * state, sorting the table rows, and sorting API score lists the same way.
  */
 
-import { el, parseLocaleNumber } from "../legacy.js";
+import { leaderboardScoreId } from "../../osu/score.js";
+import { parseLocaleNumber } from "../../osu/format.js";
+import { el } from "../legacy.js";
 import {
   SCOREBOARD_HTML_TABLE_SEL,
   findBeatmapScoreboardRoot,
   isLazerModeEnabledForLeaderboard,
 } from "./context.js";
 import { refreshBeatmapScoreboardTableEnhancements } from "./refresh.js";
-import {
-  buildBeatmapScoreboardColumnMap,
-  leaderboardScoreId,
-} from "./row-builder.js";
+import { buildBeatmapScoreboardColumnMap } from "./row-builder.js";
 
 /** Marks the per-column sort control in `<th>` (re-mounted after osu-web React refresh). */
 export const SCOREBOARD_SORT_ARROW_ATTR = "data-oep-scoreboard-sort-arrow";

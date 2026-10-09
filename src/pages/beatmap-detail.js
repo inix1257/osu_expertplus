@@ -4,6 +4,8 @@
  * still the legacy IIFE below.
  */
 
+import { isNonDefaultSpeed, scoreHasNonstandardRate } from "../osu/mods.js";
+import { leaderboardScoreId } from "../osu/score.js";
 import {
   EXTENDED_SCORE_ROW_ATTR,
   MOD_GRID_CLASS,
@@ -25,13 +27,8 @@ import {
 import {
   applyApiScoreToBeatmapScoreRow,
   buildBeatmapScoreboardColumnMap,
-  leaderboardScoreId,
 } from "../features/scoreboard/row-builder.js";
-import {
-  resolveBeatmapScoreboardModTemplateEl,
-  scoreHasNonstandardRate,
-  shouldShowScoreboardModSpeedIndicator,
-} from "../features/scoreboard/row-mods.js";
+import { resolveBeatmapScoreboardModTemplateEl } from "../features/scoreboard/row-mods.js";
 import {
   applyBeatmapScoreboardLeaderboardSort,
   sortLeaderboardScoresLikeTable,
@@ -4656,10 +4653,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       const rate = parseFloat(
         (extSpan.textContent ?? "").replace(/[^\d.]/g, ""),
       );
-      if (
-        Number.isFinite(rate) &&
-        shouldShowScoreboardModSpeedIndicator(acronym, rate)
-      ) {
+      if (Number.isFinite(rate) && isNonDefaultSpeed(acronym, rate)) {
         return true;
       }
     }
@@ -4682,7 +4676,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    * Scan all visible leaderboard body rows and mark those with a custom rate
    * using RATE_EDIT_ROW_ATTR.  For each .mod__extender span, walks up to the
    * nearest .mod container to read data-acronym from the sibling .mod__icon,
-   * then delegates to shouldShowScoreboardModSpeedIndicator.  Only DT/NC/HT/DC
+   * then delegates to isNonDefaultSpeed (src/osu/mods).  Only DT/NC/HT/DC
    * extenders are considered — DA difficulty-adjust extenders (e.g. "AR9") are
    * intentionally ignored.  Works for both native osu-web rows and our injected
    * rows; neither requires the .beatmap-scoreboard-mod wrapper class.

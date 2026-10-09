@@ -18,18 +18,3 @@ export function settingIds() {
 export function el(...args) {
   return OsuExpertPlus.dom.el(...args);
 }
-
-/** `OsuExpertPlus.dom.qs` */
-export function qs(...args) {
-  return OsuExpertPlus.dom.qs(...args);
-}
-
-/** `OsuExpertPlus.dom.parseLocaleNumber` */
-export function parseLocaleNumber(...args) {
-  return OsuExpertPlus.dom.parseLocaleNumber(...args);
-}
-
-/** `OsuExpertPlus.dom.formatDecimalPp` */
-export function formatDecimalPp(...args) {
-  return OsuExpertPlus.dom.formatDecimalPp(...args);
-}

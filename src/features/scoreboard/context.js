@@ -4,7 +4,13 @@
  * ruleset, active mod filters, Lazer toggle).
  */
 
-import { qs } from "../legacy.js";
+import {
+  getCurrentBeatmapId,
+  getCurrentRuleset,
+  readBeatmapsetJson,
+} from "../../osu/beatmapset-data.js";
+
+export { readBeatmapsetJson };
 
 export const MOD_GRID_CLASS = "oep-beatmap-scoreboard-mods";
 
@@ -43,66 +49,18 @@ export function findBeatmapScoreboardRoot() {
 }
 
 /**
+ * The beatmap shown on the page, as a string (callers use it in keys and
+ * string comparisons; `getCurrentBeatmapId` returns a number).
  * @returns {string|null}
  */
 export function getBeatmapPageBeatmapId() {
-  const fromHash = location.hash.match(/^#(osu|taiko|fruits|mania)\/(\d+)/i);
-  if (fromHash) return fromHash[2];
-
-  const a = document.querySelector(
-    "a.beatmapset-beatmap-picker__beatmap--active",
-  );
-  if (a) {
-    const href = a.getAttribute("href") || "";
-    const fromPickerHash = href.match(/#(osu|taiko|fruits|mania)\/(\d+)/i);
-    if (fromPickerHash) return fromPickerHash[2];
-    const fromPath = href.match(/\/beatmaps\/(\d+)/);
-    if (fromPath) return fromPath[1];
-  }
-
-  const data = readBeatmapsetJson();
-  const mode = getBeatmapPageRuleset();
-  if (data?.beatmaps?.length) {
-    const bm = data.beatmaps.find((b) => b.mode === mode) || data.beatmaps[0];
-    if (bm?.id != null) return String(bm.id);
-  }
-
-  return null;
+  const id = getCurrentBeatmapId();
+  return id == null ? null : String(id);
 }
 
-/**
- * @returns {string}
- */
+/** @returns {string}  ruleset of the shown beatmap (`osu` when unknown) */
 export function getBeatmapPageRuleset() {
-  const fromHash = location.hash.match(/^#(osu|taiko|fruits|mania)\//i);
-  if (fromHash) return fromHash[1].toLowerCase();
-  const a = document.querySelector(
-    "a.beatmapset-beatmap-picker__beatmap--active",
-  );
-  if (a) {
-    const href = a.getAttribute("href") || "";
-    let m = href.match(/#(osu|taiko|fruits|mania)\//i);
-    if (m) return m[1].toLowerCase();
-    m = href.match(/\/beatmaps\/(\d+)/);
-    if (m) {
-      const data = readBeatmapsetJson();
-      const id = Number(m[1]);
-      const found = data?.beatmaps?.find((b) => b.id === id);
-      if (found?.mode) return String(found.mode).toLowerCase();
-    }
-  }
-  return "osu";
-}
-
-export function readBeatmapsetJson() {
-  const script = qs("#json-beatmapset");
-  const raw = script?.textContent?.trim();
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  return getCurrentRuleset();
 }
 
 /**

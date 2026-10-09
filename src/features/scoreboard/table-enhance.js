@@ -4,12 +4,9 @@
  * rows.
  */
 
-import {
-  formatDecimalPp,
-  parseLocaleNumber,
-  settingIds,
-  settings,
-} from "../legacy.js";
+import { formatDecimal, parseLocaleNumber } from "../../osu/format.js";
+import { hitstatClassFromLabel } from "../../osu/score.js";
+import { settingIds, settings } from "../legacy.js";
 import {
   SCOREBOARD_HTML_TABLE_SEL,
   SCOREBOARD_PP_ORIGINAL_ATTR,
@@ -76,7 +73,7 @@ export function syncBeatmapScoreboardPpDecimals(scoreboardRoot) {
             String(textNode.textContent || "").trim(),
           );
         }
-        textNode.textContent = formatDecimalPp(n);
+        textNode.textContent = formatDecimal(n);
       } else if (span.hasAttribute(SCOREBOARD_PP_ORIGINAL_ATTR)) {
         textNode.textContent =
           span.getAttribute(SCOREBOARD_PP_ORIGINAL_ATTR) ||
@@ -85,32 +82,6 @@ export function syncBeatmapScoreboardPpDecimals(scoreboardRoot) {
       }
     }
   }
-}
-
-/**
- * Map hit-stat column label (from `buildBeatmapScoreboardColumnMap`) to profile palette class.
- * @param {string} labelRaw
- * @returns {string}
- */
-export function beatmapHitstatColorClassFromLabel(labelRaw) {
-  const lab = String(labelRaw).trim().toLowerCase();
-  if (!lab) return "";
-  if (lab === "mania_perfect") return "oep-score-stats__val--mania-perfect";
-  if (lab === "mania_good") return "oep-score-stats__val--mania-good";
-  if (lab === "ctb_l") return "oep-score-stats__val--ctb-l";
-  if (lab === "ctb_drp") return "oep-score-stats__val--ctb-drp";
-  if (lab === "miss" || lab === "m" || lab.includes("miss"))
-    return "oep-score-stats__val--miss";
-  if (lab === "meh" || /(^|[^0-9])50([^0-9]|$)/.test(lab))
-    return "oep-score-stats__val--50";
-  if (lab === "geki" || lab === "max" || lab === "320")
-    return "oep-score-stats__val--300";
-  if (lab === "katu" || lab === "200") return "oep-score-stats__val--100";
-  if (lab === "ok" || /(^|[^0-9])100([^0-9]|$)/.test(lab))
-    return "oep-score-stats__val--100";
-  if (/(^|[^0-9])300([^0-9]|$)/.test(lab) || lab === "great")
-    return "oep-score-stats__val--300";
-  return "";
 }
 
 /**
@@ -162,7 +133,7 @@ export function syncBeatmapScoreboardHitstatColors(scoreboardRoot) {
 
     for (const i of indices) {
       const label = colMap.hitstatLabelsByIndex?.[i] ?? "";
-      const colorClass = beatmapHitstatColorClassFromLabel(label);
+      const colorClass = hitstatClassFromLabel(label);
 
       const th = [...table.querySelectorAll("thead th")].find(
         (t) => t instanceof HTMLTableCellElement && t.cellIndex === i,

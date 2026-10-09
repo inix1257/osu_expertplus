@@ -3,6 +3,15 @@
  * table's effective first row (merged, filtered or sorted).
  */
 
+import { flagFilename, formatRelativeShort } from "../../osu/format.js";
+import {
+  ACCURACY_FORMAT,
+  formatAccuracy,
+  formatCombo,
+  hitstatValue,
+  leaderboardScoreId,
+  scoreGrade,
+} from "../../osu/score.js";
 import {
   EXTENDED_SCORE_ROW_ATTR,
   SCOREBOARD_HTML_TABLE_SEL,
@@ -11,10 +20,6 @@ import {
   _rowScoreMap,
   getBeatmapPageRuleset,
 } from "./context.js";
-import {
-  hitstatTextFromHeaderLabel,
-  leaderboardScoreId,
-} from "./row-builder.js";
 import { leaderboardTableScoreNumber } from "./sort.js";
 
 /** Marks an OEP-managed `.beatmap-scoreboard-top__item` that overrides the native panel. */
@@ -49,38 +54,6 @@ export function getEffectiveBoardTopRow(scoreboardRoot) {
 }
 
 /**
- * Converts a two-letter country code to the unicode flag SVG filename used by osu-web.
- * @param {string} cc
- * @returns {string|null}
- */
-export function _scoreTopFlagFilename(cc) {
-  if (!/^[A-Za-z]{2}$/.test(cc || "")) return null;
-  const upper = cc.toUpperCase();
-  const u1 = (0x1f1e6 + upper.charCodeAt(0) - 65).toString(16);
-  const u2 = (0x1f1e6 + upper.charCodeAt(1) - 65).toString(16);
-  return `${u1}-${u2}`;
-}
-
-/**
- * Returns a short relative-time string (e.g. "3mo", "2y") from an ISO timestamp.
- * @param {string} iso
- * @returns {string}
- */
-export function _scoreTopRelativeTime(iso) {
-  if (!iso) return "";
-  try {
-    const abs = Math.abs(Date.now() - new Date(iso).getTime());
-    if (abs < 3_600_000) return `${Math.round(abs / 60_000)}m`;
-    if (abs < 86_400_000) return `${Math.round(abs / 3_600_000)}h`;
-    if (abs < 2_592_000_000) return `${Math.round(abs / 86_400_000)}d`;
-    if (abs < 31_536_000_000) return `${Math.round(abs / 2_592_000_000)}mo`;
-    return `${Math.round(abs / 31_536_000_000)}y`;
-  } catch {
-    return "";
-  }
-}
-
-/**
  * Updates a cloned `.beatmap-scoreboard-top__item` with data from a score API object.
  * @param {HTMLElement} item
  * @param {object} score
@@ -101,17 +74,7 @@ export function applyApiScoreToTopItem(item, score, row) {
   const linkEl = item.querySelector("a.beatmap-score-top__link-container");
   if (linkEl instanceof HTMLAnchorElement && scoreUrl) linkEl.href = scoreUrl;
 
-  const gradeStr =
-    typeof score.rank === "string"
-      ? score.rank
-      : score.rank &&
-          typeof score.rank === "object" &&
-          typeof score.rank.name === "string"
-        ? score.rank.name
-        : score.passed === false
-          ? "F"
-          : "D";
-  const rankKey = String(gradeStr).replace(/[^A-Za-z0-9]+/g, "") || "D";
+  const rankKey = scoreGrade(score, { sanitize: true });
   const gradeDiv = item.querySelector(".score-rank");
   if (gradeDiv)
     gradeDiv.className = `score-rank score-rank--tiny score-rank--${rankKey}`;
@@ -137,7 +100,7 @@ export function applyApiScoreToTopItem(item, score, row) {
   if (achievedTime instanceof HTMLElement && iso) {
     achievedTime.setAttribute("datetime", iso);
     achievedTime.setAttribute("title", iso);
-    achievedTime.textContent = _scoreTopRelativeTime(iso);
+    achievedTime.textContent = formatRelativeShort(iso, { rounding: "round" });
   }
 
   const countryA = item.querySelector(".beatmap-score-top__flags a");
@@ -147,7 +110,7 @@ export function applyApiScoreToTopItem(item, score, row) {
     ".beatmap-score-top__flags span.flag-country",
   );
   if (flagSpan instanceof HTMLElement && cc) {
-    const uni = _scoreTopFlagFilename(cc);
+    const uni = flagFilename(cc);
     if (uni)
       flagSpan.style.backgroundImage = `url('/assets/images/flags/${uni}.svg')`;
     flagSpan.title = countryName;
@@ -155,11 +118,8 @@ export function applyApiScoreToTopItem(item, score, row) {
 
   const rawScore = leaderboardTableScoreNumber(score);
   const scoreStr = Number(rawScore).toLocaleString("en-US");
-  const accStr =
-    typeof score.accuracy === "number"
-      ? `${(score.accuracy * 100).toFixed(2)}%`
-      : "";
-  const comboStr = `${Number(score.max_combo ?? 0).toLocaleString("en-US")}x`;
+  const accStr = formatAccuracy(score.accuracy, ACCURACY_FORMAT.scoreboard);
+  const comboStr = formatCombo(score.max_combo);
   const ppNum =
     score.pp != null && Number.isFinite(Number(score.pp))
       ? Number(score.pp)
@@ -198,7 +158,7 @@ export function applyApiScoreToTopItem(item, score, row) {
         const t = document.createElement("time");
         t.className = "js-tooltip-time";
         t.setAttribute("data-orig-title", iso);
-        t.textContent = _scoreTopRelativeTime(iso);
+        t.textContent = formatRelativeShort(iso, { rounding: "round" });
         valueEl.replaceChildren(t);
       }
     } else if (labelLow === "mods") {
@@ -211,7 +171,9 @@ export function applyApiScoreToTopItem(item, score, row) {
         else modsValueEl.appendChild(clone);
       }
     } else {
-      valueEl.textContent = hitstatTextFromHeaderLabel(label, score);
+      valueEl.textContent = hitstatValue(label, score, {
+        ruleset: getBeatmapPageRuleset(),
+      });
     }
   }
 }
