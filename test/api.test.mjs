@@ -108,3 +108,34 @@ test("siteWrite sends CSRF and form body, and throws with the status", async () 
     return true;
   });
 });
+
+test("getUser and getUserByName encode names (B15)", async () => {
+  const { api, calls } = loadApi();
+  await api.getUser(124493);
+  await api.getUser(" 124493 ");
+  await api.getUser("chocomint", "osu");
+  await api.getUser("a b/c");
+  await api.getUserByName("1234");
+  await api.getUserByName("名前");
+  assert.deepEqual(
+    calls.map((c) => c.url),
+    [
+      "https://osu.ppy.sh/api/v2/users/124493",
+      "https://osu.ppy.sh/api/v2/users/124493",
+      "https://osu.ppy.sh/api/v2/users/@chocomint?mode=osu",
+      "https://osu.ppy.sh/api/v2/users/@a%20b%2Fc",
+      "https://osu.ppy.sh/api/v2/users/@1234",
+      `https://osu.ppy.sh/api/v2/users/@${encodeURIComponent("名前")}`,
+    ],
+  );
+});
+
+test("get() errors carry the HTTP status", async () => {
+  const { api } = loadApi({
+    respond: () => ({ ok: false, status: 404, json: async () => ({}) }),
+  });
+  await assert.rejects(
+    api.getUserByName("nobody"),
+    (err) => err.status === 404,
+  );
+});

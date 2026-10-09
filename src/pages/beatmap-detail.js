@@ -4576,7 +4576,15 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         statusEl.textContent = "Searching…";
 
         try {
-          const user = await OsuExpertPlus.api.getUser(username);
+          // Usernames first, so digits-only names work (B15); a digits-only
+          // input that is not a name falls back to a user id.
+          const user = await OsuExpertPlus.api
+            .getUserByName(username)
+            .catch((err) =>
+              err?.status === 404 && /^\d+$/.test(username)
+                ? OsuExpertPlus.api.getUser(username)
+                : Promise.reject(err),
+            );
           if (!user?.id) throw new Error("user not found");
 
           const ruleset = getBeatmapPageRuleset();

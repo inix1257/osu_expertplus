@@ -369,7 +369,11 @@ OsuExpertPlus.api = (() => {
     );
 
     if (!resp.ok) {
-      throw new Error(`[osu! Expert+] API ${resp.status}: ${fullUrl}`);
+      const err = /** @type {Error & { status?: number }} */ (
+        new Error(`[osu! Expert+] API ${resp.status}: ${fullUrl}`)
+      );
+      err.status = resp.status;
+      throw err;
     }
     return resp.json();
   }
@@ -410,9 +414,26 @@ OsuExpertPlus.api = (() => {
     return get(`${BASE}/beatmaps/${beatmapId}`, {}, options);
   }
 
-  /** Fetch user profile by id or username. */
+  /**
+   * Fetch a user profile. Digits-only values are user ids; anything else is
+   * looked up as a username (`@name`, URL-encoded).
+   * @param {string|number} idOrName
+   * @param {string} [mode]
+   */
   function getUser(idOrName, mode) {
-    return get(`${BASE}/users/${idOrName}`, mode ? { mode } : {});
+    const raw = String(idOrName).trim();
+    const key = /^\d+$/.test(raw) ? raw : `@${encodeURIComponent(raw)}`;
+    return get(`${BASE}/users/${key}`, mode ? { mode } : {});
+  }
+
+  /**
+   * Fetch a user profile by username, including digits-only names (B15).
+   * @param {string} name
+   * @param {string} [mode]
+   */
+  function getUserByName(name, mode) {
+    const key = `@${encodeURIComponent(String(name).trim())}`;
+    return get(`${BASE}/users/${key}`, mode ? { mode } : {});
   }
 
   /** Search beatmapsets. */
@@ -684,6 +705,7 @@ OsuExpertPlus.api = (() => {
     getBeatmapset,
     getBeatmap,
     getUser,
+    getUserByName,
     getUsers,
     searchBeatmapsets,
     getUserBestScores,
