@@ -84,10 +84,11 @@ export function buildScoreOptionsMenu(score) {
     menu.appendChild(replayLink);
   }
 
-  const isOwnProfile =
-    getProfileUserId() != null &&
-    getCurrentUserIdFromHeader() != null &&
-    String(getProfileUserId()) === String(getCurrentUserIdFromHeader());
+  // The score's own user, not the page's (B43): the profile DOM may still be
+  // the previous one right after an SPA move.
+  const ownerId = score?.user_id ?? score?.user?.id ?? getProfileUserId();
+  const me = getCurrentUserIdFromHeader();
+  const isOwnProfile = ownerId != null && me != null && String(ownerId) === me;
 
   if (isOwnProfile) {
     const pinBtn = el(

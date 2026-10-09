@@ -13,7 +13,6 @@ import { teardownSrObserver } from "../features/profile/modded-sr.js";
 import { mutationsIncludeSelector } from "../features/profile/mutations.js";
 import {
   getCurrentMode,
-  getCurrentUserIdFromHeader,
   getProfileUserId,
   parseProfileInitialData,
   resolveProfileTarget,
@@ -2253,15 +2252,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     cleanups.push(startBbcodeHelperManager());
     cleanups.push(startProfileMediaOpenPictureManager());
     cleanups.push(startUserpageExpandManager());
-    const profileUserId = getProfileUserId();
-    const currentUserId = getCurrentUserIdFromHeader();
-    if (
-      profileUserId != null &&
-      currentUserId != null &&
-      String(profileUserId) === String(currentUserId)
-    ) {
-      cleanups.push(startContentsReorderManager());
-    }
 
     // B07: this run owns the shared score styles and every cleanup registered by
     // the async score features, so a stale run can never undo the next page's
@@ -2276,7 +2266,10 @@ OsuExpertPlus.pages.userProfile = (() => {
     resolveProfileTarget()
       .then((target) => {
         if (disposed || !target) return;
-        const { userId, mode } = target;
+        const { userId, mode, isOwnProfile } = target;
+        // B43: decided from the resolved target, not from whatever profile
+        // the DOM still showed when init ran.
+        if (isOwnProfile) cleanups.push(startContentsReorderManager());
         recentFailsCleanup = startRecentScoresWithFailsObserver(userId, mode);
         return initScoreFeatures(userId, mode, scoreRun);
       })

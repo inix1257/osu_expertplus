@@ -28,10 +28,15 @@ export function parseProfileInitialData() {
   return null;
 }
 
+/**
+ * The profile's user id: from the URL, else from initial data that belongs
+ * to the URL (null while the DOM still shows the previous profile, B43).
+ * @returns {string|null}
+ */
 export function getProfileUserId() {
   const fromUrl = getUserIdFromUrl();
   if (fromUrl) return fromUrl;
-  const data = parseProfileInitialData();
+  const data = profileInitialDataForUrl();
   return data?.user?.id != null ? String(data.user.id) : null;
 }
 
@@ -59,6 +64,16 @@ function profileDataMatchesUrl(data) {
   return norm(data.user.username ?? "") === norm(seg);
 }
 
+/**
+ * The initial data, only when it belongs to the profile in the URL (B43):
+ * right after an SPA move the DOM can still hold the previous profile.
+ * @returns {Object|null}
+ */
+export function profileInitialDataForUrl() {
+  const data = parseProfileInitialData();
+  return data && profileDataMatchesUrl(data) ? data : null;
+}
+
 export function getCurrentMode() {
   const fromUrl = getModeFromUrl();
   if (fromUrl) return fromUrl;
@@ -71,24 +86,40 @@ export function getCurrentMode() {
 }
 
 /**
+ * @typedef {{ userId: string, mode: string, isOwnProfile: boolean }} ProfileTarget
+ */
+
+/**
+ * @param {string} userId
+ * @param {string} mode
+ * @returns {ProfileTarget}
+ */
+function profileTarget(userId, mode) {
+  const me = getCurrentUserIdFromHeader();
+  return { userId, mode, isOwnProfile: me != null && me === String(userId) };
+}
+
+/**
  * Resolve the profile user + ruleset for the page in the URL, waiting for the
- * new page's data when the DOM still holds the previous profile.
+ * new page's data when the DOM still holds the previous profile. Whether it
+ * is the signed-in user's own profile is decided here, once, from the same
+ * data (B43).
  * @param {number} [timeoutMs]
- * @returns {Promise<{ userId: string, mode: string } | null>}
+ * @returns {Promise<ProfileTarget | null>}
  */
 export async function resolveProfileTarget(timeoutMs = 8000) {
   const start = Date.now();
   const urlId = getUserIdFromUrl();
   const urlMode = getModeFromUrl();
-  if (urlId && urlMode) return { userId: urlId, mode: urlMode };
+  if (urlId && urlMode) return profileTarget(urlId, urlMode);
 
   for (;;) {
     const data = parseProfileInitialData();
     if (data && profileDataMatchesUrl(data)) {
-      return {
-        userId: String(data.user.id),
-        mode: urlMode ?? data.current_mode ?? "osu",
-      };
+      return profileTarget(
+        String(data.user.id),
+        urlMode ?? data.current_mode ?? "osu",
+      );
     }
     if (Date.now() - start >= timeoutMs) return null;
     await new Promise((r) => setTimeout(r, 100));

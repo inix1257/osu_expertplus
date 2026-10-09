@@ -3,7 +3,10 @@
  */
 
 import { el, manageStyle, waitForElement } from "../legacy.js";
-import { getProfileUserId, parseProfileInitialData } from "./profile-target.js";
+import {
+  getProfileUserId,
+  profileInitialDataForUrl,
+} from "./profile-target.js";
 const PROFILE_AVATAR_OPEN_ATTR = "data-oep-profile-avatar-open";
 const PROFILE_BANNER_OPEN_ATTR = "data-oep-profile-banner-open";
 const PROFILE_MEDIA_OPEN_BTN_CLASS = "oep-profile-media-open";
@@ -111,7 +114,7 @@ function releaseProfileMediaOpenHost(profileInfo) {
  * @returns {string}
  */
 function resolveProfileAvatarImageHref(avatarHost) {
-  const data = parseProfileInitialData();
+  const data = profileInitialDataForUrl();
   const fromData = data?.user?.avatar_url;
   if (typeof fromData === "string" && fromData.trim()) return fromData.trim();
   const img = avatarHost.querySelector("img[src]");
@@ -131,7 +134,7 @@ function resolveProfileAvatarImageHref(avatarHost) {
  * @returns {string}
  */
 function resolveProfileBannerImageHref(bgHost) {
-  const data = parseProfileInitialData();
+  const data = profileInitialDataForUrl();
   const cover = data?.user?.cover;
   if (cover && typeof cover === "object") {
     for (const k of ["custom_url", "url"]) {
