@@ -200,3 +200,34 @@ test("sort keys read numbers in the page locale (B19)", () => {
     );
   }
 });
+
+test("renumbering skips lookup rows, which show a global rank (B12)", async () => {
+  const { renumberBeatmapScoreboardVisibleRanks } =
+    await import("../../src/features/scoreboard/sort.js");
+  const base = {
+    score: "1",
+    acc: "1%",
+    combo: "1x",
+    pp: "1",
+    ppTitle: "1",
+    time: "x",
+  };
+  const doc = useDom(
+    "en",
+    row({ ...base, rank: "#523" }) +
+      row({ ...base, rank: "?" }) +
+      row({ ...base, rank: "#9" }),
+  );
+  const rows = [...doc.querySelectorAll("tbody tr")];
+  rows[0].setAttribute("data-oep-user-search-result", "1");
+  rows[1].setAttribute("data-oep-user-search-result", "1");
+  const colMap = buildBeatmapScoreboardColumnMap(
+    rows[2],
+    doc.querySelector("table"),
+  );
+  renumberBeatmapScoreboardVisibleRanks(rows, colMap);
+  assert.deepEqual(
+    rows.map((r) => r.cells[0].textContent.trim()),
+    ["#523", "?", "#3"],
+  );
+});

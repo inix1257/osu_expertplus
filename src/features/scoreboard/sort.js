@@ -8,6 +8,7 @@ import { observe } from "../../core/observe.js";
 import { parseLocaleNumber } from "../../osu/format.js";
 import { el } from "../legacy.js";
 import {
+  SCORE_USER_SEARCH_RESULT_ATTR,
   isScoreboardRowHidden,
   findBeatmapScoreboardRoot,
   isLazerModeEnabledForLeaderboard,
@@ -337,12 +338,13 @@ export function renumberBeatmapScoreboardVisibleRanks(visibleRows, colMap) {
   for (let i = 0; i < visibleRows.length; i++) {
     const row = visibleRows[i];
     if (!(row instanceof HTMLTableRowElement)) continue;
+    // Lookup rows show the player's global rank (or ?), not a position (B12).
+    if (row.hasAttribute(SCORE_USER_SEARCH_RESULT_ATTR)) continue;
     const td = row.cells[colMap.rank];
     if (!td) continue;
     const shell = td.querySelector(".beatmap-scoreboard-table__cell-content");
     const target = shell instanceof HTMLElement ? shell : td;
     const cur = String(target.textContent ?? "").trim();
-    if (cur === "?") continue;
     // osu-web prints the rank as `#N` (scoreboard table-row.tsx); keep that.
     const next = `#${i + 1}`;
     if (cur !== next) target.textContent = next;
