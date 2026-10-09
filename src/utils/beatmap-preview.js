@@ -448,8 +448,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
    * @returns {Promise<string>}
    */
   async function fetchOsuFileText(beatmapId) {
-    const url = `https://osu.ppy.sh/osu/${beatmapId}`;
-    const resp = await OsuExpertPlus.api.siteFetch(url);
+    const resp = await OsuExpertPlus.api.fetchBeatmapOsuFile(beatmapId);
     if (!resp.ok) {
       throw new Error(`Could not download .osu (${resp.status})`);
     }

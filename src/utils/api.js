@@ -231,6 +231,121 @@ OsuExpertPlus.api = (() => {
     return params;
   }
 
+  /** @returns {string} osu-web's CSRF token from the page `<meta>`, or "". */
+  function csrfToken() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    return m instanceof HTMLMetaElement ? String(m.content || "").trim() : "";
+  }
+
+  /**
+   * Write request to an osu-web site route with the session cookie, the page's
+   * CSRF token and `X-Requested-With`, through the limiter's high-priority
+   * queue. Only call this from an explicit user action (it changes the real
+   * account).
+   * @param {"POST"|"PUT"|"PATCH"|"DELETE"} method
+   * @param {string} path  e.g. `/score-pins/123`
+   * @param {URLSearchParams|string} [body]  form-encoded when URLSearchParams
+   * @returns {Promise<Response>}  the response when `ok`
+   * @throws {Error & { status?: number, response?: Response }} otherwise
+   */
+  async function siteWrite(method, path, body) {
+    /** @type {Record<string, string>} */
+    const headers = {
+      Accept: "application/json, text/javascript, */*; q=0.01",
+      "X-Requested-With": "XMLHttpRequest",
+    };
+    const csrf = csrfToken();
+    if (csrf) headers["X-CSRF-Token"] = csrf;
+    /** @type {RequestInit} */
+    const init = { method, headers };
+    if (body instanceof URLSearchParams) {
+      headers["Content-Type"] =
+        "application/x-www-form-urlencoded; charset=UTF-8";
+      init.body = body.toString();
+    } else if (body != null) {
+      init.body = body;
+    }
+    const resp = await siteFetch(path, init, { priority: "high" });
+    if (!resp.ok) {
+      const err =
+        /** @type {Error & { status?: number, response?: Response }} */ (
+          new Error(`[osu! Expert+] ${method} ${path} failed (${resp.status})`)
+        );
+      err.status = resp.status;
+      err.response = resp;
+      throw err;
+    }
+    return resp;
+  }
+
+  /*
+   * Site JSON routes (session cookie). These return the raw Response so callers
+   * keep their own status handling.
+   */
+
+  const SITE_JSON = { headers: { Accept: "application/json" } };
+
+  /**
+   * GET /users/{id}/scores/{type} (best, firsts, pinned, recent, …).
+   * @param {string|number} userId
+   * @param {string} type
+   * @param {{ mode: string, limit: number, offset: number }} query
+   * @param {{ priority?: "high"|"low" }} [options]
+   * @returns {Promise<Response>}
+   */
+  function fetchUserScoresPage(userId, type, query, options = {}) {
+    const url = withQuery(`/users/${userId}/scores/${type}`, {
+      mode: query.mode,
+      limit: query.limit,
+      offset: query.offset,
+      include: "beatmap",
+    });
+    return siteFetch(url, SITE_JSON, options);
+  }
+
+  /**
+   * GET /users/{id}/extra-pages/{page} (beatmaps, historical, …).
+   * @param {string|number} userId
+   * @param {string} page
+   * @param {{ mode: string }} query
+   * @returns {Promise<Response>}
+   */
+  function fetchUserExtraPage(userId, page, query) {
+    return siteFetch(
+      withQuery(`/users/${userId}/extra-pages/${page}`, { mode: query.mode }),
+      SITE_JSON,
+    );
+  }
+
+  /**
+   * GET /users/{id}/scores/recent on the site, with beatmap and beatmapset.
+   * @param {string|number} userId
+   * @param {{ mode: string, limit: number, offset?: number,
+   *   includeFails?: boolean }} query
+   * @returns {Promise<Response>}
+   */
+  function fetchUserRecentScoresWebsite(userId, query) {
+    const url = withQuery(`/users/${userId}/scores/recent`, {
+      mode: query.mode,
+      limit: query.limit,
+      offset: query.offset,
+      include_fails: query.includeFails ? "1" : undefined,
+      include: ["beatmap", "beatmapset"],
+    });
+    return siteFetch(url, SITE_JSON);
+  }
+
+  /**
+   * GET https://osu.ppy.sh/osu/{beatmapId} (the .osu file as text).
+   * @param {string|number} beatmapId
+   * @returns {Promise<Response>}
+   */
+  function fetchBeatmapOsuFile(beatmapId) {
+    return siteFetch(
+      `${SITE_ORIGIN}/osu/${encodeURIComponent(String(beatmapId))}`,
+    );
+  }
+
   /**
    * GET a JSON resource from the osu! API v2.
    * Automatically attaches the Bearer token when credentials are configured.
@@ -555,6 +670,11 @@ OsuExpertPlus.api = (() => {
 
   return {
     siteFetch,
+    siteWrite,
+    fetchUserScoresPage,
+    fetchUserExtraPage,
+    fetchUserRecentScoresWebsite,
+    fetchBeatmapOsuFile,
     buildQuery,
     buildHeaders,
     get,

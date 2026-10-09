@@ -949,12 +949,13 @@ OsuExpertPlus.beatmapCardExtra = (() => {
     const userId = m[1];
     const mode =
       m[2] || new URLSearchParams(location.search).get("mode") || "osu";
-    const url = `/users/${userId}/extra-pages/beatmaps?mode=${encodeURIComponent(mode)}`;
     void (async () => {
       try {
-        const r = await OsuExpertPlus.api.siteFetch(url, {
-          headers: { Accept: "application/json" },
-        });
+        const r = await OsuExpertPlus.api.fetchUserExtraPage(
+          userId,
+          "beatmaps",
+          { mode },
+        );
         if (!wantIngest()) return;
         if (!r.ok) {
           return;
