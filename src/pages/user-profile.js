@@ -7782,9 +7782,10 @@ OsuExpertPlus.pages.userProfile = (() => {
     html = html.replace(
       /\[color=(.*?)\]([\s\S]*?)\[\/color\]/gi,
       (_, color, body) => {
-        const safeColor = _escapePreviewHtml(
-          String(color || "").trim() || "inherit",
-        );
+        const safeColor = String(color || "").trim();
+        if (!OsuExpertPlus.htmlSanitize.isSafeColor(safeColor)) {
+          return `<span>${body}</span>`;
+        }
         return `<span style="color:${safeColor};">${body}</span>`;
       },
     );
