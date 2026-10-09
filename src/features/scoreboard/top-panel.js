@@ -25,6 +25,112 @@ import { leaderboardTableScoreNumber } from "./sort.js";
 /** Marks an OEP-managed `.beatmap-scoreboard-top__item` that overrides the native panel. */
 export const SCORE_TOP_OVERRIDE_ATTR = "data-oep-score-top-override";
 
+const HIT_KIND = "hit:";
+const TOP_STAT_KIND_ATTR = "data-oep-top-stat";
+const HEADER_HIT_PREFIX = "beatmap-score-top__stat-header--hit-";
+const TABLE_HEADER_HIT_RE = /\bbeatmap-scoreboard-table__header--hit-(\S+)/;
+/** English header text, only for markup without the structural classes. */
+const TOP_STAT_KIND_BY_TEXT = Object.freeze({
+  "total score": "score",
+  accuracy: "accuracy",
+  "max combo": "combo",
+  pp: "pp",
+  time: "time",
+  mods: "mods",
+});
+
+/**
+ * What a `.beatmap-score-top__stat` shows, read from the osu-web markup rather
+ * than its translated header text (B78): `score`, `accuracy`, `combo`, `pp`,
+ * `time`, `mods`, `hit:<name>` (the osu-web hit result name, e.g. `great`,
+ * `perfect`, `large_tick_hit`) or `""`. Cached on the element, because our
+ * own writes replace the markup it is read from.
+ * @param {Element} stat
+ * @param {Element} headerEl
+ * @param {Element} valueEl
+ * @param {number} widerIndex  how many `--wider` headers came before this one
+ * @returns {string}
+ */
+function topStatKind(stat, headerEl, valueEl, widerIndex) {
+  const cached = stat.getAttribute(TOP_STAT_KIND_ATTR);
+  if (cached != null) return cached;
+  let kind = "";
+  const hit = [...headerEl.classList].find((c) =>
+    c.startsWith(HEADER_HIT_PREFIX),
+  );
+  if (hit) kind = HIT_KIND + hit.slice(HEADER_HIT_PREFIX.length);
+  else if (valueEl.classList.contains("beatmap-score-top__stat-value--score"))
+    kind = "score";
+  else if (
+    valueEl.classList.contains("beatmap-score-top__stat-value--mods") ||
+    valueEl.querySelector(".mods")
+  )
+    kind = "mods";
+  else if (valueEl.querySelector(".pp-value")) kind = "pp";
+  else if (valueEl.querySelector("time")) kind = "time";
+  else if (headerEl.classList.contains("beatmap-score-top__stat-header--wider"))
+    // The first osu-web row: Total Score, Accuracy, Max Combo.
+    kind = ["score", "accuracy", "combo"][widerIndex] ?? "";
+  if (!kind) {
+    const text = (headerEl.textContent ?? "").trim().toLowerCase();
+    kind = TOP_STAT_KIND_BY_TEXT[text] ?? "";
+  }
+  stat.setAttribute(TOP_STAT_KIND_ATTR, kind);
+  return kind;
+}
+
+/**
+ * @param {Element} item  `.beatmap-score-top__item`
+ * @returns {{ stat: Element, valueEl: HTMLElement, kind: string }[]}
+ */
+function topItemStats(item) {
+  const out = [];
+  let wider = 0;
+  for (const stat of item.querySelectorAll(".beatmap-score-top__stat")) {
+    const headerEl = stat.querySelector(".beatmap-score-top__stat-header");
+    const valueEl = stat.querySelector(".beatmap-score-top__stat-value");
+    if (!headerEl || !(valueEl instanceof HTMLElement)) continue;
+    const kind = topStatKind(stat, headerEl, valueEl, wider);
+    if (headerEl.classList.contains("beatmap-score-top__stat-header--wider")) {
+      wider += 1;
+    }
+    out.push({ stat, valueEl, kind });
+  }
+  return out;
+}
+
+/**
+ * Hit-stat cell texts of a table row by osu-web hit result name, from the
+ * table's `__header--hit-<name>` columns.
+ * @param {HTMLTableRowElement} row
+ * @returns {Map<string, string>}
+ */
+function rowHitValuesByName(row) {
+  const out = new Map();
+  const table = row.closest("table");
+  if (!table) return out;
+  for (const th of table.querySelectorAll("thead th")) {
+    const m = TABLE_HEADER_HIT_RE.exec(th.className);
+    if (!m) continue;
+    const td = row.cells[/** @type {HTMLTableCellElement} */ (th).cellIndex];
+    const text = td?.textContent?.trim();
+    if (text) out.set(m[1], text);
+  }
+  return out;
+}
+
+/**
+ * An API score's count for an osu-web hit result name: the lazer statistic
+ * of that name, else the scoreboard label rules (legacy `count_*` fields).
+ * @param {string} name
+ * @param {object} score
+ */
+function apiHitValue(name, score) {
+  const v = score?.statistics?.[name];
+  if (v != null && v !== "" && Number.isFinite(Number(v))) return String(v);
+  return hitstatValue(name, score, { ruleset: getBeatmapPageRuleset() });
+}
+
 /**
  * Returns the first visible leaderboard row that is not the original native rank-#1 entry.
  * Returns null when no override is needed (the native panel already shows the correct score).
@@ -133,27 +239,21 @@ export function applyApiScoreToTopItem(item, score, row) {
 
   const rowMods = row?.querySelector(".mods") ?? null;
 
-  for (const stat of item.querySelectorAll(".beatmap-score-top__stat")) {
-    const headerEl = stat.querySelector(".beatmap-score-top__stat-header");
-    const valueEl = stat.querySelector(".beatmap-score-top__stat-value");
-    if (!headerEl || !valueEl) continue;
-    const label = headerEl.textContent?.trim() ?? "";
-    const labelLow = label.toLowerCase();
-
-    if (labelLow === "total score") {
+  for (const { stat, valueEl, kind } of topItemStats(item)) {
+    if (kind === "score") {
       valueEl.textContent = scoreStr;
-    } else if (labelLow === "accuracy") {
+    } else if (kind === "accuracy") {
       valueEl.textContent = accStr;
-    } else if (labelLow === "max combo") {
+    } else if (kind === "combo") {
       valueEl.textContent = comboStr;
-    } else if (labelLow === "pp") {
+    } else if (kind === "pp") {
       if (ppStr != null) {
         valueEl.textContent = ppStr;
       } else {
         valueEl.innerHTML =
           '<span title="pp is not awarded for this score">-</span>';
       }
-    } else if (labelLow === "time") {
+    } else if (kind === "time") {
       if (iso) {
         const t = document.createElement("time");
         t.className = "js-tooltip-time";
@@ -161,7 +261,7 @@ export function applyApiScoreToTopItem(item, score, row) {
         t.textContent = formatRelativeShort(iso, { rounding: "floor" });
         valueEl.replaceChildren(t);
       }
-    } else if (labelLow === "mods") {
+    } else if (kind === "mods") {
       if (rowMods) {
         const modsValueEl =
           stat.querySelector(".beatmap-score-top__stat-value--mods") ?? valueEl;
@@ -170,10 +270,8 @@ export function applyApiScoreToTopItem(item, score, row) {
         if (existing) existing.replaceWith(clone);
         else modsValueEl.appendChild(clone);
       }
-    } else {
-      valueEl.textContent = hitstatValue(label, score, {
-        ruleset: getBeatmapPageRuleset(),
-      });
+    } else if (kind.startsWith(HIT_KIND)) {
+      valueEl.textContent = apiHitValue(kind.slice(HIT_KIND.length), score);
     }
   }
 }
@@ -277,15 +375,7 @@ export function applyNativeRowToTopItem(item, row) {
     }
   }
 
-  const great =
-    row.querySelector(".oep-score-stats__val--300")?.textContent?.trim() ?? "-";
-  const ok =
-    row.querySelector(".oep-score-stats__val--100")?.textContent?.trim() ?? "-";
-  const meh =
-    row.querySelector(".oep-score-stats__val--50")?.textContent?.trim() ?? "-";
-  const miss =
-    row.querySelector(".oep-score-stats__val--miss")?.textContent?.trim() ??
-    "-";
+  const hitByName = rowHitValuesByName(row);
   const ppText =
     row
       .querySelector(".oep-beatmap-scoreboard-pp-value")
@@ -295,40 +385,30 @@ export function applyNativeRowToTopItem(item, row) {
   const timeText = timeEl?.textContent?.trim() ?? "";
   const rowMods = row.querySelector(".mods");
 
-  const hitMap = new Map([
-    ["great", great],
-    ["ok", ok],
-    ["meh", meh],
-    ["miss", miss],
-  ]);
-
-  for (const stat of item.querySelectorAll(".beatmap-score-top__stat")) {
-    const headerEl = stat.querySelector(".beatmap-score-top__stat-header");
-    const valueEl = stat.querySelector(".beatmap-score-top__stat-value");
-    if (!headerEl || !valueEl) continue;
-    const labelLow = (headerEl.textContent?.trim() ?? "").toLowerCase();
-
-    if (labelLow === "accuracy" && accuracy) {
+  for (const { stat, valueEl, kind } of topItemStats(item)) {
+    if (kind === "accuracy" && accuracy) {
       valueEl.textContent = accuracy;
-    } else if (labelLow === "max combo" && maxCombo) {
+    } else if (kind === "combo" && maxCombo) {
       valueEl.textContent = maxCombo;
-    } else if (labelLow === "pp" && ppText) {
+    } else if (kind === "pp" && ppText) {
       valueEl.textContent = ppText;
-    } else if (labelLow === "time" && timeIso) {
+    } else if (kind === "time" && timeIso) {
       const t = document.createElement("time");
       t.className = "js-tooltip-time";
       t.setAttribute("data-orig-title", timeIso);
       t.textContent = timeText;
       valueEl.replaceChildren(t);
-    } else if (labelLow === "mods" && rowMods) {
+    } else if (kind === "mods" && rowMods) {
       const modsValueEl =
         stat.querySelector(".beatmap-score-top__stat-value--mods") ?? valueEl;
       const existing = modsValueEl.querySelector(".mods");
       const clone = rowMods.cloneNode(true);
       if (existing) existing.replaceWith(clone);
       else modsValueEl.appendChild(clone);
-    } else if (hitMap.has(labelLow)) {
-      valueEl.textContent = hitMap.get(labelLow) ?? "-";
+    } else if (kind.startsWith(HIT_KIND)) {
+      // B17: every ruleset's columns (mania perfect/good, fruits ticks, ...),
+      // matched through the osu-web `--hit-<name>` classes.
+      valueEl.textContent = hitByName.get(kind.slice(HIT_KIND.length)) ?? "-";
     }
   }
 }
