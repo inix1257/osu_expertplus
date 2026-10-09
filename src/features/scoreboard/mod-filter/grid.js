@@ -20,7 +20,7 @@ import {
 } from "../../legacy.js";
 import { clearMergedLeaderboard } from "../merged-leaderboard.js";
 import { destroyOsuWebQtipOnElementSubtree } from "../../osu-web-qtip.js";
-import { runClicks } from "./click-runner.js";
+import { cancelClicks, queueClicks } from "./click-runner.js";
 import {
   applyMergedModTargetStep,
   isMergedMember,
@@ -68,7 +68,9 @@ const beatmapModGridLiveHandles = new WeakMap();
  * @param {HTMLElement} modsEl
  */
 export function resetBeatmapScoreboardModSelection(modsEl) {
+  cancelClicks();
   state.mergedStep.clear();
+  state.mergedTarget.clear();
   const hadWildcards = getWildcardMods().length > 0;
   if (hadWildcards) {
     clearWildcardState();
@@ -88,8 +90,8 @@ export function resetBeatmapScoreboardModSelection(modsEl) {
     if (clone instanceof HTMLElement) setGridCloneOn(clone, false);
   }
 
-  runClicks({
-    maxSteps: 40,
+  queueClicks({
+    key: "reset",
     next: () =>
       hiddenOriginals(modsEl).find((btn) => {
         const ac = modButtonAcronym(btn);
@@ -193,6 +195,8 @@ export function syncBeatmapModGridCloneHighlights(modsEl) {
  * @param {HTMLElement} modsEl
  */
 export function stopBeatmapScoreboardModGridLive(modsEl) {
+  cancelClicks();
+  state.mergedTarget.clear();
   const h = beatmapModGridLiveHandles.get(modsEl);
   if (h) {
     window.clearTimeout(h.debounceId);
@@ -311,10 +315,12 @@ function placeBeatmapModGridMergedPair(
   clone.addEventListener("click", (e) => {
     e.stopPropagation();
     e.preventDefault();
+    // Count from the step a running click plan is heading to, so a second
+    // click before it finishes is not lost (B80).
     const max = mergedModGridEffectiveStepCount(mergeId);
-    const cur = state.mergedStep.get(mergeId) ?? 0;
-    const next = (cur + 1) % max;
-    applyMergedModTargetStep(modsEl, mergeId, next);
+    const cur =
+      state.mergedTarget.get(mergeId) ?? state.mergedStep.get(mergeId) ?? 0;
+    applyMergedModTargetStep(modsEl, mergeId, (cur + 1) % max);
   });
   piles[pileKey]?.appendChild(clone);
   primaryOriginal.setAttribute(MOD_HIDDEN_ATTR, "1");
@@ -760,6 +766,8 @@ export async function setupBeatmapScoreboardModGrid() {
       );
     }
     clearWildcardState();
+    cancelClicks();
+    state.mergedTarget.clear();
     if (modsEl && document.body.contains(modsEl)) {
       stopBeatmapScoreboardModGridLive(modsEl);
     } else if (handles) {

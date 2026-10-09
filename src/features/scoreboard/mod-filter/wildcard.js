@@ -17,7 +17,7 @@ import {
 } from "../merged-leaderboard.js";
 import { EXTENDED_LB_LIMIT } from "../scores-limit.js";
 import { sortLeaderboardScoresLikeTable } from "../sort.js";
-import { runClicks } from "./click-runner.js";
+import { queueClicks } from "./click-runner.js";
 import {
   syncBeatmapModGridCloneHighlights,
   syncBeatmapScoreboardModResetButton,
@@ -391,8 +391,8 @@ export function syncActiveModsToOriginals(modsEl) {
   }
   if (!clickQueue.length) return;
 
-  runClicks({
-    maxSteps: 40,
+  queueClicks({
+    key: "sync-originals",
     next: () => clickQueue.shift() ?? null,
     done: () => {
       syncBeatmapModGridCloneHighlights(modsEl);

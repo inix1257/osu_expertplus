@@ -66,6 +66,7 @@ export const STABLE_MOD_ACRONYMS = new Set([
  *   wildcardAbortCtrl: AbortController|null,
  *   wildcardLoading: boolean,
  *   mergedStep: Map<string, number>,
+ *   mergedTarget: Map<string, number>,
  *   originalToClone: WeakMap<HTMLElement, HTMLElement>,
  * }}
  */
@@ -83,6 +84,8 @@ export function createModFilterState() {
     wildcardLoading: false,
     /** Merge id → step (DT_NC: 0–3, SD_PF: 0–4). */
     mergedStep: new Map(),
+    /** Merge id → step a running click plan is heading to (B80). */
+    mergedTarget: new Map(),
     /** Hidden React strip button → visible grid clone (clone does not receive React class updates). */
     originalToClone: new WeakMap(),
   };

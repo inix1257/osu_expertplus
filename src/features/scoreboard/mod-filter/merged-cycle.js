@@ -5,7 +5,7 @@
  */
 
 import { MERGED_MOD_ATTR } from "../context.js";
-import { runClicks } from "./click-runner.js";
+import { hasQueuedClicks, queueClicks } from "./click-runner.js";
 import {
   replaceBeatmapModGridCloneInnerHTML,
   syncBeatmapModGridCloneHighlights,
@@ -37,7 +37,7 @@ import {
  * @typedef {{ on?: string, wildcard?: string }} MergedStep
  *   `on`: the one original that is enabled; `wildcard`: the member in wildcard
  *   state. Step 0 has neither.
- * @typedef {{ a: string, b: string, steps: MergedStep[], maxFrames: number }} MergedPair
+ * @typedef {{ a: string, b: string, steps: MergedStep[] }} MergedPair
  */
 
 /** @type {Record<string, MergedPair>} */
@@ -46,7 +46,6 @@ export const MERGED_PAIRS = {
     a: "DT",
     b: "NC",
     steps: [{}, { on: "DT" }, { on: "NC" }, { wildcard: "DT" }],
-    maxFrames: 56,
   },
   [MERGED_MOD_SD_PF]: {
     a: "SD",
@@ -58,7 +57,6 @@ export const MERGED_PAIRS = {
       { wildcard: "SD" },
       { wildcard: "PF" },
     ],
-    maxFrames: 64,
   },
 };
 
@@ -168,7 +166,8 @@ function finishMergedModStepApply(modsEl, mergeId, step) {
 
 /**
  * Click osu-web's buttons until the pair matches `targetStep`, then enter
- * the step's wildcard (when available) and refetch.
+ * the step's wildcard (when available) and refetch. While a plan for the
+ * pair is queued or running, only its goal changes (B80).
  * @param {HTMLElement} modsEl
  * @param {string} mergeId
  * @param {number} targetStep
@@ -182,35 +181,43 @@ export function applyMergedModTargetStep(modsEl, mergeId, targetStep) {
   };
   if (!(buttons[pair.a] instanceof HTMLElement)) return;
   if (!(buttons[pair.b] instanceof HTMLElement)) return;
-  const goal = pair.steps[targetStep] ?? pair.steps[0];
+  state.mergedTarget.set(mergeId, targetStep);
+  if (hasQueuedClicks(mergeId)) return;
 
-  runClicks({
-    maxSteps: pair.maxFrames,
+  const goal = () =>
+    pair.steps[state.mergedTarget.get(mergeId) ?? 0] ?? pair.steps[0];
+
+  queueClicks({
+    key: mergeId,
     next: () => {
+      const { on, wildcard } = goal();
       for (const ac of [pair.a, pair.b]) {
-        if (ac !== goal.wildcard && isWildcard(ac)) disableWildcard(ac, modsEl);
+        if (ac !== wildcard && isWildcard(ac)) disableWildcard(ac, modsEl);
       }
       for (const ac of [pair.b, pair.a]) {
-        if (ac === goal.on) continue;
+        if (ac === on) continue;
         if (isBeatmapScoreboardModStripButtonOn(buttons[ac]))
           return buttons[ac];
       }
-      if (goal.on && !isBeatmapScoreboardModStripButtonOn(buttons[goal.on])) {
-        return buttons[goal.on];
+      if (on && !isBeatmapScoreboardModStripButtonOn(buttons[on])) {
+        return buttons[on];
       }
       return null;
     },
     done: (completed) => {
+      const step = state.mergedTarget.get(mergeId) ?? targetStep;
+      state.mergedTarget.delete(mergeId);
+      const { wildcard } = pair.steps[step] ?? pair.steps[0];
       if (
         completed &&
-        goal.wildcard &&
-        !isWildcard(goal.wildcard) &&
+        wildcard &&
+        !isWildcard(wildcard) &&
         isWildcardFeatureAvailable()
       ) {
-        enableWildcard(goal.wildcard, modsEl);
-        updateCloneWildcardVisual(goal.wildcard, modsEl, true);
+        enableWildcard(wildcard, modsEl);
+        updateCloneWildcardVisual(wildcard, modsEl, true);
       }
-      finishMergedModStepApply(modsEl, mergeId, targetStep);
+      finishMergedModStepApply(modsEl, mergeId, step);
     },
   });
 }
