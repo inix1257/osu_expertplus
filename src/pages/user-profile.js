@@ -2136,12 +2136,66 @@ OsuExpertPlus.pages.userProfile = (() => {
     return data?.user?.id != null ? String(data.user.id) : null;
   }
 
-  function getCurrentMode() {
-    const data = parseProfileInitialData();
-    if (data?.current_mode) return data.current_mode;
+  const PROFILE_MODES = ["osu", "taiko", "fruits", "mania"];
 
-    const m = location.search.match(/[?&]mode=([^&]+)/);
-    return m ? m[1] : "osu";
+  /** Ruleset named in the URL (`/users/1/taiko` or `?mode=taiko`), if any. */
+  function getModeFromUrl() {
+    const seg = location.pathname.match(/^\/users\/[^/]+\/([^/]+)\/?$/);
+    if (seg && PROFILE_MODES.includes(seg[1])) return seg[1];
+    const q = location.search.match(/[?&]mode=([^&]+)/);
+    return q && PROFILE_MODES.includes(q[1]) ? q[1] : null;
+  }
+
+  /**
+   * Whether the profile initial data in the DOM belongs to the profile in the URL.
+   * The router runs on pushState, i.e. before the new page is rendered, so the DOM
+   * can still hold the previous profile (and its default ruleset).
+   * @param {Object|null} data
+   */
+  function profileDataMatchesUrl(data) {
+    if (!data?.user) return false;
+    const m = location.pathname.match(/^\/users\/([^/]+)/);
+    if (!m) return true;
+    const seg = decodeURIComponent(m[1]);
+    if (/^\d+$/.test(seg)) return String(data.user.id) === seg;
+    const norm = (s) => String(s).toLowerCase().replace(/[\s_]+/g, "_");
+    return norm(data.user.username ?? "") === norm(seg);
+  }
+
+  function getCurrentMode() {
+    const fromUrl = getModeFromUrl();
+    if (fromUrl) return fromUrl;
+
+    const data = parseProfileInitialData();
+    if (data?.current_mode && profileDataMatchesUrl(data)) {
+      return data.current_mode;
+    }
+    return "osu";
+  }
+
+  /**
+   * Resolve the profile user + ruleset for the page in the URL, waiting for the
+   * new page's data when the DOM still holds the previous profile.
+   * @param {number} [timeoutMs]
+   * @returns {Promise<{ userId: string, mode: string } | null>}
+   */
+  async function resolveProfileTarget(timeoutMs = 8000) {
+    const start = Date.now();
+    const urlId = getUserIdFromUrl();
+    const urlMode = getModeFromUrl();
+    if (urlId && urlMode) return { userId: urlId, mode: urlMode };
+
+    for (;;) {
+      const data = parseProfileInitialData();
+      if (data && profileDataMatchesUrl(data)) {
+        return {
+          userId: String(data.user.id),
+          mode: urlMode ?? data.current_mode ?? "osu",
+        };
+      }
+      if (Date.now() - start >= timeoutMs) return null;
+      await new Promise((r) => setTimeout(r, 100));
+    }
   }
 
   function getCurrentUserIdFromHeader() {
@@ -9471,18 +9525,21 @@ OsuExpertPlus.pages.userProfile = (() => {
       cleanups.push(startContentsReorderManager());
     }
 
-    const needsScoreFeatures = true;
+    let disposed = false;
 
-    if (needsScoreFeatures) {
-      const userId = profileUserId;
-      const mode = getCurrentMode();
-      if (userId) {
-        initScoreFeatures(userId, mode).then((cleanup) => {
-          _scoreCleanup = cleanup;
-        });
+    // The router fires on pushState, before the new profile is rendered: wait for
+    // the page's own data so scores are never fetched for the previous ruleset.
+    resolveProfileTarget()
+      .then((target) => {
+        if (disposed || !target) return;
+        const { userId, mode } = target;
         _recentFailsCleanup = startRecentScoresWithFailsObserver(userId, mode);
-      }
-    }
+        return initScoreFeatures(userId, mode).then((cleanup) => {
+          if (disposed) cleanup?.();
+          else _scoreCleanup = cleanup;
+        });
+      })
+      .catch(() => {});
 
     return () => {
       cleanups.forEach((fn) => {
@@ -9503,3 +9560,4 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   return { name, init };
 })();
+      disposed = true;
