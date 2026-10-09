@@ -1,6 +1,10 @@
 /**
  * Beatmapset header buttons (WS-33): Beatconnect download, preview audio,
  * background and MP3.
+ *
+ * Each button carries a `data-oep-beatmapset-<name>` marker: a mount does
+ * nothing when its marker is already there, and its dispose removes only the
+ * nodes it added.
  */
 
 import { el, qsa } from "../legacy.js";
@@ -11,6 +15,26 @@ import {
   BEATCONNECT_STACK_ICON_CLASS,
   BEATCONNECT_STACK_LABEL_CLASS,
 } from "./constants.js";
+
+const BUTTONS_SEL = ".beatmapset-header__buttons";
+
+/**
+ * @param {string} name
+ * @returns {string}  the marker attribute of header button `name`
+ */
+const markerAttr = (name) => `data-oep-beatmapset-${name}`;
+
+/**
+ * The header's button bar, unless button `name` is already in it.
+ * @param {HTMLElement} header
+ * @param {string} name
+ * @returns {HTMLElement|null}
+ */
+function buttonBarWithout(header, name) {
+  const buttons = header.querySelector(BUTTONS_SEL);
+  if (!(buttons instanceof HTMLElement)) return null;
+  return buttons.querySelector(`[${markerAttr(name)}]`) ? null : buttons;
+}
 
 /**
  * osu!direct / supporter “direct” entry in `.beatmapset-header__buttons`.
@@ -28,31 +52,56 @@ export function findBeatmapsetOsuDirectButton(buttonsEl) {
 }
 
 /**
- * Primary `.osz` download in `.beatmapset-header__buttons` — first link to
- * `/beatmapsets/{id}/download` (excludes osu!direct / support links).
+ * A square icon link styled like osu-web's header squares.
+ * @param {{ name: string, href: string, title: string, icon: string }} spec
+ * @returns {HTMLAnchorElement}
+ */
+function squareLink({ name, href, title, icon }) {
+  return el(
+    "a",
+    {
+      class: "btn-osu-big btn-osu-big--beatmapset-header-square",
+      href,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      [markerAttr(name)]: "",
+      title,
+      "aria-label": title,
+    },
+    el(
+      "span",
+      { class: "btn-osu-big__content btn-osu-big__content--center" },
+      el(
+        "span",
+        { class: "btn-osu-big__icon" },
+        el(
+          "span",
+          { class: "fa fa-fw" },
+          el("span", { class: `fas ${icon}`, "aria-hidden": "true" }),
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * Beatconnect mirror next to the primary `.osz` download (the first link to
+ * `/beatmapsets/{id}/download`, not osu!direct or the supporter link).
  * @param {HTMLElement} header  `.beatmapset-header`
  * @param {string} beatmapsetId
- * @returns {() => void}
+ * @returns {(() => void)|undefined}
  */
 export function mountBeatconnectDownloadSplit(header, beatmapsetId) {
-  const buttons = header.querySelector(".beatmapset-header__buttons");
-  if (!buttons) return () => {};
-
-  if (buttons.querySelector(`.${BEATCONNECT_DL_BTN_CLASS}`)) {
-    return () => {};
-  }
-
+  const buttons = buttonBarWithout(header, "beatconnect");
   const id = Number(beatmapsetId);
-  if (!Number.isFinite(id)) return () => {};
+  if (!buttons || !Number.isFinite(id)) return undefined;
 
   const dlRe = new RegExp(String.raw`/beatmapsets/${id}/download`, "i");
   /** @type {HTMLAnchorElement | undefined} */
   const primaryDl = qsa("a.btn-osu-big", buttons).find((a) =>
     dlRe.test(a.getAttribute("href") || ""),
   );
-  if (!primaryDl) {
-    return () => {};
-  }
+  if (!primaryDl) return undefined;
 
   primaryDl.classList.add(BEATCONNECT_DL_PAIRED_CLASS);
 
@@ -63,6 +112,7 @@ export function mountBeatconnectDownloadSplit(header, beatmapsetId) {
       href: `https://beatconnect.io/b/${id}`,
       target: "_blank",
       rel: "noopener noreferrer",
+      [markerAttr("beatconnect")]: "",
     },
     el(
       "span",
@@ -89,74 +139,38 @@ export function mountBeatconnectDownloadSplit(header, beatmapsetId) {
 
   return () => {
     primaryDl.classList.remove(BEATCONNECT_DL_PAIRED_CLASS);
-    buttons.querySelector(`.${BEATCONNECT_DL_BTN_CLASS}`)?.remove();
+    beatconnectBtn.remove();
   };
 }
 
 /**
- * Square header control opening `https://b.ppy.sh/preview/{id}.mp3` (osu! preview stream).
+ * Square header control opening `https://b.ppy.sh/preview/{id}.mp3` (osu! preview stream),
+ * after the MP3 / background squares when they are there.
  * @param {HTMLElement} header  `.beatmapset-header`
  * @param {string} beatmapsetId
- * @returns {() => void}
+ * @returns {(() => void)|undefined}
  */
 export function mountBeatmapsetPreviewAudioButton(header, beatmapsetId) {
-  const buttons = header.querySelector(".beatmapset-header__buttons");
-  if (!buttons) return () => {};
-
-  if (buttons.querySelector("[data-oep-beatmapset-preview-audio]")) {
-    return () => {};
-  }
-
+  const buttons = buttonBarWithout(header, "preview-audio");
   const id = Number(beatmapsetId);
-  if (!Number.isFinite(id)) return () => {};
+  if (!buttons || !Number.isFinite(id)) return undefined;
 
-  const previewLink = el(
-    "a",
-    {
-      class: "btn-osu-big btn-osu-big--beatmapset-header-square",
-      href: `https://b.ppy.sh/preview/${id}.mp3`,
-      target: "_blank",
-      rel: "noopener noreferrer",
-      "data-oep-beatmapset-preview-audio": "",
-      title: "Open preview audio",
-      "aria-label": "Open preview audio",
-    },
-    el(
-      "span",
-      { class: "btn-osu-big__content btn-osu-big__content--center" },
-      el(
-        "span",
-        { class: "btn-osu-big__icon" },
-        el(
-          "span",
-          { class: "fa fa-fw" },
-          el("span", { class: "fas fa-volume-up", "aria-hidden": "true" }),
-        ),
-      ),
-    ),
-  );
+  const previewLink = squareLink({
+    name: "preview-audio",
+    href: `https://b.ppy.sh/preview/${id}.mp3`,
+    title: "Open preview audio",
+    icon: "fa-volume-up",
+  });
 
-  const mp3 = buttons.querySelector("[data-oep-beatmapset-mp3]");
-  const bg = buttons.querySelector("[data-oep-beatmapset-bg]");
-  if (mp3 instanceof HTMLElement) {
-    mp3.insertAdjacentElement("afterend", previewLink);
-  } else if (bg instanceof HTMLElement) {
-    bg.insertAdjacentElement("afterend", previewLink);
-  } else {
-    const directBtn = findBeatmapsetOsuDirectButton(buttons);
-    if (directBtn) {
-      directBtn.insertAdjacentElement("afterend", previewLink);
-    } else {
-      buttons.appendChild(previewLink);
-    }
-  }
+  const after =
+    buttons.querySelector(`[${markerAttr("mp3")}]`) ??
+    buttons.querySelector(`[${markerAttr("bg")}]`) ??
+    findBeatmapsetOsuDirectButton(buttons);
+  if (after) after.insertAdjacentElement("afterend", previewLink);
+  else buttons.appendChild(previewLink);
 
-  return () => {
-    previewLink.remove();
-  };
+  return () => previewLink.remove();
 }
-
-// Attribute set on .beatmapset-header elements we have already processed.
 
 /**
  * "Open background" and "Download MP3" squares after the osu!direct button.
@@ -166,76 +180,29 @@ export function mountBeatmapsetPreviewAudioButton(header, beatmapsetId) {
  * @returns {(() => void)|undefined}
  */
 export function mountBeatmapsetBackgroundButtons(header, beatmapsetId) {
-  const headerButtons = header.querySelector(".beatmapset-header__buttons");
-  if (
-    headerButtons instanceof HTMLElement &&
-    !headerButtons.querySelector("[data-oep-beatmapset-bg]")
-  ) {
-    const backgroundUrl = `https://assets.ppy.sh/beatmaps/${beatmapsetId}/covers/fullsize.jpg`;
-    const bgLink = el(
-      "a",
-      {
-        class: "btn-osu-big btn-osu-big--beatmapset-header-square",
-        href: backgroundUrl,
-        target: "_blank",
-        rel: "noopener noreferrer",
-        "data-oep-beatmapset-bg": "",
-        title: "Open background",
-        "aria-label": "Open background",
-      },
-      el(
-        "span",
-        {
-          class: "btn-osu-big__content btn-osu-big__content--center",
-        },
-        el(
-          "span",
-          { class: "btn-osu-big__icon" },
-          el(
-            "span",
-            { class: "fa fa-fw" },
-            el("span", { class: "fas fa-image", "aria-hidden": "true" }),
-          ),
-        ),
-      ),
-    );
-    const mp3DownloadUrl = `https://osu.ppyd.sh/beatmapsets/${encodeURIComponent(String(beatmapsetId))}/download`;
-    const mp3Link = el(
-      "a",
-      {
-        class: "btn-osu-big btn-osu-big--beatmapset-header-square",
-        href: mp3DownloadUrl,
-        target: "_blank",
-        rel: "noopener noreferrer",
-        "data-oep-beatmapset-mp3": "",
-        title: "Download MP3",
-        "aria-label": "Download MP3",
-      },
-      el(
-        "span",
-        { class: "btn-osu-big__content btn-osu-big__content--center" },
-        el(
-          "span",
-          { class: "btn-osu-big__icon" },
-          el(
-            "span",
-            { class: "fa fa-fw" },
-            el("span", { class: "fas fa-music", "aria-hidden": "true" }),
-          ),
-        ),
-      ),
-    );
-    const directBtn = findBeatmapsetOsuDirectButton(headerButtons);
-    if (directBtn) {
-      directBtn.insertAdjacentElement("afterend", bgLink);
-    } else {
-      headerButtons.appendChild(bgLink);
-    }
-    bgLink.insertAdjacentElement("afterend", mp3Link);
-    return () => {
-      mp3Link.remove();
-      bgLink.remove();
-    };
-  }
-  return undefined;
+  const buttons = buttonBarWithout(header, "bg");
+  if (!buttons) return undefined;
+
+  const bgLink = squareLink({
+    name: "bg",
+    href: `https://assets.ppy.sh/beatmaps/${beatmapsetId}/covers/fullsize.jpg`,
+    title: "Open background",
+    icon: "fa-image",
+  });
+  const mp3Link = squareLink({
+    name: "mp3",
+    href: `https://osu.ppyd.sh/beatmapsets/${encodeURIComponent(String(beatmapsetId))}/download`,
+    title: "Download MP3",
+    icon: "fa-music",
+  });
+
+  const directBtn = findBeatmapsetOsuDirectButton(buttons);
+  if (directBtn) directBtn.insertAdjacentElement("afterend", bgLink);
+  else buttons.appendChild(bgLink);
+  bgLink.insertAdjacentElement("afterend", mp3Link);
+
+  return () => {
+    mp3Link.remove();
+    bgLink.remove();
+  };
 }
