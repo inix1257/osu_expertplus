@@ -94,6 +94,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   let wildcardDebounceTimer = 0;
   /** Abort controller for in-flight wildcard fetches. */
   let wildcardAbortCtrl = /** @type {AbortController|null} */ (null);
+  /** True while a wildcard fetch owns the loading overlay (re-applied if React replaces the table). */
+  let wildcardLoading = false;
   /** Maps injected table row elements to their source score API objects for top-panel sync. */
   const _rowScoreMap = new WeakMap();
 
@@ -2366,9 +2368,26 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
   /** Drop the wildcard loading overlay everywhere (an aborted fetch never clears its own). */
   function clearWildcardLoadingOverlays() {
+    wildcardLoading = false;
     document
       .querySelectorAll(`.${WILDCARD_LOADING_CLASS}`)
       .forEach((n) => n.classList.remove(WILDCARD_LOADING_CLASS));
+  }
+
+  /**
+   * Put the overlay back on the current table while a fetch is pending; osu-web
+   * replaces the table element on difficulty switch. Writes only when missing.
+   * @param {HTMLElement} scoreboardRoot
+   */
+  function syncWildcardLoadingOverlay(scoreboardRoot) {
+    if (!wildcardLoading) return;
+    const wrap = scoreboardRoot.querySelector(".beatmap-scoreboard-table");
+    if (
+      wrap instanceof HTMLElement &&
+      !wrap.classList.contains(WILDCARD_LOADING_CLASS)
+    ) {
+      wrap.classList.add(WILDCARD_LOADING_CLASS);
+    }
   }
 
   /** Reset all wildcard state (used on teardown or beatmap change). */
@@ -2383,6 +2402,11 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       wildcardAbortCtrl = null;
     }
     clearWildcardLoadingOverlays();
+  }
+
+  /** @returns {string} Ruleset + beatmap id the wildcard leaderboard is fetched for. */
+  function getWildcardBeatmapKey() {
+    return `${getBeatmapPageRuleset()}/${getBeatmapPageBeatmapId() || ""}`;
   }
 
   /** @returns {string[]} Acronyms currently in wildcard state. */
@@ -2801,12 +2825,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
     if (wildcards.length === 0) {
       clearWildcardMergedLeaderboard(scoreboardRoot);
-      const tableWrap = scoreboardRoot.querySelector(
-        ".beatmap-scoreboard-table",
-      );
-      if (tableWrap instanceof HTMLElement) {
-        tableWrap.classList.remove(WILDCARD_LOADING_CLASS);
-      }
+      clearWildcardLoadingOverlays();
       syncActiveModsToOriginals(modsEl);
       return;
     }
@@ -2815,23 +2834,20 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     const beatmapId = getBeatmapPageBeatmapId();
     const mode = getBeatmapPageRuleset();
     if (!beatmapId) return;
+    const fetchKey = getWildcardBeatmapKey();
 
     const combos = generateModCombinations(enabledMods, wildcards);
 
-    const tableWrap = scoreboardRoot.querySelector(".beatmap-scoreboard-table");
-    if (tableWrap instanceof HTMLElement) {
-      tableWrap.classList.add(WILDCARD_LOADING_CLASS);
-    }
+    wildcardLoading = true;
+    syncWildcardLoadingOverlay(scoreboardRoot);
 
     wildcardAbortCtrl = new AbortController();
     const signal = wildcardAbortCtrl.signal;
 
     const removeLoadingOverlay = () => {
-      // A newer fetch has taken over this table's overlay; leave it alone.
+      // A newer fetch has taken over the overlay; leave it alone.
       if (wildcardAbortCtrl && wildcardAbortCtrl.signal !== signal) return;
-      if (tableWrap instanceof HTMLElement) {
-        tableWrap.classList.remove(WILDCARD_LOADING_CLASS);
-      }
+      clearWildcardLoadingOverlays();
     };
 
     wildcardDebounceTimer = window.setTimeout(() => {
@@ -2849,6 +2865,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         .then((merged) => {
           removeLoadingOverlay();
           if (signal.aborted) return;
+          // Difficulty/ruleset changed while fetching: these scores belong to another map.
+          if (getWildcardBeatmapKey() !== fetchKey) return;
           if (merged.length > 0) {
             renderWildcardMergedLeaderboard(scoreboardRoot, merged);
           }
@@ -3910,6 +3928,33 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       scoreboardRootForTabs.addEventListener("click", onScoreboardTabClick, true);
     }
 
+    // osu-web switches difficulty through the history API (no hashchange) and only
+    // re-renders the scoreboard table, so detect the beatmap change from there.
+    // Wildcard results are per beatmap: drop them and refetch for the new one.
+    // Only writes when the key actually changes, so our own writes can't loop.
+    let wildcardBeatmapKey = getWildcardBeatmapKey();
+    const onScoreboardMutation = () => {
+      if (scoreboardRootForTabs instanceof HTMLElement) {
+        syncWildcardLoadingOverlay(scoreboardRootForTabs);
+      }
+      const key = getWildcardBeatmapKey();
+      if (key === wildcardBeatmapKey) return;
+      wildcardBeatmapKey = key;
+      if (!modsEl || getWildcardMods().length === 0) return;
+      if (scoreboardRootForTabs instanceof HTMLElement) {
+        clearWildcardMergedLeaderboard(scoreboardRootForTabs);
+      }
+      scheduleWildcardFetch(modsEl);
+    };
+    const beatmapChangeMo =
+      scoreboardRootForTabs instanceof HTMLElement
+        ? new MutationObserver(onScoreboardMutation)
+        : null;
+    beatmapChangeMo?.observe(scoreboardRootForTabs, {
+      childList: true,
+      subtree: true,
+    });
+
     handles.mo = new MutationObserver(scheduleApply);
     handles.mo.observe(modsEl, { childList: true });
     applyBeatmapModGrid(modsEl, el);
@@ -3975,6 +4020,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         "oep-osu-api-credentials-changed",
         onCredsChange,
       );
+      beatmapChangeMo?.disconnect();
       if (scoreboardRootForTabs instanceof HTMLElement) {
         scoreboardRootForTabs.removeEventListener(
           "click",
@@ -4268,12 +4314,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       wildcardAbortCtrl.abort();
       wildcardAbortCtrl = null;
     }
-    const tableWrapClear = scoreboardRoot.querySelector(
-      ".beatmap-scoreboard-table",
-    );
-    if (tableWrapClear instanceof HTMLElement) {
-      tableWrapClear.classList.remove(WILDCARD_LOADING_CLASS);
-    }
+    clearWildcardLoadingOverlays();
 
     tbody
       .querySelectorAll(`tr[${EXTENDED_SCORE_ROW_ATTR}]`)
