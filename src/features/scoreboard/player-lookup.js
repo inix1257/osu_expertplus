@@ -69,6 +69,20 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
   const NO_API_STATUS =
     "Add osu! API OAuth credentials in Expert+ settings to search players.";
   let debounceTimer = 0;
+  /** Ruleset + beatmap the shown results were searched on (B72). */
+  let resultKey = null;
+  const beatmapKey = () =>
+    `${getBeatmapPageRuleset()}/${getBeatmapPageBeatmapId() || ""}`;
+
+  /** Empty the bar's status and hide Reset (the input keeps its text). */
+  const resetBarState = () => {
+    const wrap = document.querySelector(`[${MARKER_ATTR}]`);
+    if (!(wrap instanceof HTMLElement)) return;
+    const statusEl = wrap.querySelector(".oep-user-search__status");
+    const resetBtn = wrap.querySelector(".oep-user-search__btn--reset");
+    setTextIfChanged(statusEl, "");
+    if (resetBtn instanceof HTMLElement) setHiddenIfChanged(resetBtn, true);
+  };
 
   // clearLookupResults refreshes the whole table (DOM writes), so only
   // call it when there is something to clear; otherwise the document observer below
@@ -175,6 +189,7 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
 
     const doReset = () => {
       const boardRoot = findBeatmapScoreboardRoot();
+      resultKey = null;
       clearLookupResults(boardRoot);
       searchInput.value = "";
       statusEl.textContent = "";
@@ -196,6 +211,10 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
 
       const beatmapId = getBeatmapPageBeatmapId();
       if (!beatmapId) return;
+      const key = beatmapKey();
+      // The difficulty changed while searching: the scores are for the
+      // previous one, so drop them (B72).
+      const stale = () => beatmapKey() !== key;
 
       searchBtn.disabled = true;
       statusEl.textContent = "Searching…";
@@ -211,6 +230,10 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
               : Promise.reject(err),
           );
         if (!user?.id) throw new Error("user not found");
+        if (stale()) {
+          statusEl.textContent = "";
+          return;
+        }
 
         const ruleset = getBeatmapPageRuleset();
         const scoreboardRoot = findBeatmapScoreboardRoot();
@@ -219,6 +242,10 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
           user.id,
           { ruleset, legacy_only: 0 },
         );
+        if (stale()) {
+          statusEl.textContent = "";
+          return;
+        }
         const rawList = Array.isArray(data?.scores) ? data.scores : [];
         if (!rawList.length) throw new Error("no score");
 
@@ -241,6 +268,7 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
             beforeInsert: cancelWildcardFetch,
           });
         if (ok) {
+          resultKey = key;
           statusEl.textContent = "";
         } else {
           statusEl.textContent =
@@ -248,6 +276,10 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
         }
         resetBtn.hidden = false;
       } catch (_) {
+        if (stale()) {
+          statusEl.textContent = "";
+          return;
+        }
         statusEl.textContent = "No score found on this difficulty.";
         resetBtn.hidden = false;
       } finally {
@@ -301,9 +333,28 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
     },
     run,
   );
+  // osu-web switches difficulty without reloading and re-renders the table
+  // around our rows: drop results that belong to the previous one (B72).
+  const unsubscribeBeatmap = observe.subscribe(
+    {
+      selector:
+        ".beatmap-scoreboard-table, .beatmap-scoreboard-table__body-row, .beatmapset-scoreboard__notice",
+      schedule: 16,
+      label: "scoreboard/player-lookup-beatmap",
+    },
+    () => {
+      if (resultKey == null || beatmapKey() === resultKey) return;
+      resultKey = null;
+      const boardRoot = findBeatmapScoreboardRoot();
+      if (hasUserSearchResultRows(boardRoot))
+        clearLookupResults(boardRoot, false);
+      resetBarState();
+    },
+  );
   schedule();
 
   return () => {
+    unsubscribeBeatmap();
     unsubLookup();
     window.removeEventListener(OSU_API_CREDS_CHANGE, onOsuApiCredsChange);
     window.clearTimeout(debounceTimer);
