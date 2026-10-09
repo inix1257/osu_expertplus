@@ -445,7 +445,7 @@ function getRanksRowBeatmapsetId(rowEl) {
   const href = rowEl
     .querySelector("a.play-detail__title")
     ?.getAttribute("href");
-  return beatmapsetIdFromHref(href, { match: "anywhere" });
+  return beatmapsetIdFromHref(href);
 }
 
 /**
