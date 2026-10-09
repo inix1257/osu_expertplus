@@ -52,6 +52,30 @@ function clearLookupResults(scoreboardRoot, rescheduleWildcard = true) {
   }
 }
 
+/**
+ * Status text for a failed lookup (B14). `stage` is the request that failed:
+ * finding the player or reading their scores on this difficulty.
+ * @param {unknown} err  `Error & { status?: number }` from the API helpers
+ * @param {"user"|"scores"} stage
+ * @returns {string}
+ */
+export function lookupErrorStatus(err, stage) {
+  const status = /** @type {{ status?: number }} */ (err)?.status;
+  if (status === 401 || status === 403) {
+    return "osu! API authorization failed. Check the OAuth credentials in Expert+ settings.";
+  }
+  if (status === 429) return "Too many requests. Try again in a moment.";
+  if (status === 404) {
+    return stage === "user"
+      ? "Player not found."
+      : "No score found on this difficulty.";
+  }
+  // No status: the request itself failed (network, timeout).
+  return status == null
+    ? "Search failed. Try again later."
+    : `Search failed (HTTP ${status}). Try again later.`;
+}
+
 /** Username text from the signed-in account link in the site header, if any. */
 function getLoggedInUsernameFromNav() {
   const link = document.querySelector("a.u-current-user-cover");
@@ -197,7 +221,11 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
       searchInput.focus();
     };
 
+    let searching = false;
+
     const doSearch = async () => {
+      // Enter does not respect the disabled button (B14).
+      if (searching) return;
       const username =
         searchInput.value.trim() || getLoggedInUsernameFromNav() || "";
       if (!username) return;
@@ -216,8 +244,11 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
       // previous one, so drop them (B72).
       const stale = () => beatmapKey() !== key;
 
+      searching = true;
       searchBtn.disabled = true;
       statusEl.textContent = "Searching…";
+      /** @type {"user"|"scores"} */
+      let stage = "user";
 
       try {
         // Usernames first, so digits-only names work (B15); a digits-only
@@ -229,12 +260,14 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
               ? OsuExpertPlus.api.getUser(username)
               : Promise.reject(err),
           );
-        if (!user?.id) throw new Error("user not found");
+        if (!user?.id)
+          throw Object.assign(new Error("user not found"), { status: 404 });
         if (stale()) {
           statusEl.textContent = "";
           return;
         }
 
+        stage = "scores";
         const ruleset = getBeatmapPageRuleset();
         const scoreboardRoot = findBeatmapScoreboardRoot();
         const data = await OsuExpertPlus.api.getBeatmapUserScoresAll(
@@ -247,7 +280,8 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
           return;
         }
         const rawList = Array.isArray(data?.scores) ? data.scores : [];
-        if (!rawList.length) throw new Error("no score");
+        if (!rawList.length)
+          throw Object.assign(new Error("no score"), { status: 404 });
 
         const userCompact = {
           id: user.id,
@@ -275,15 +309,16 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
             "Scores found but leaderboard is not ready yet.";
         }
         resetBtn.hidden = false;
-      } catch (_) {
+      } catch (err) {
         if (stale()) {
           statusEl.textContent = "";
           return;
         }
-        statusEl.textContent = "No score found on this difficulty.";
+        statusEl.textContent = lookupErrorStatus(err, stage);
         resetBtn.hidden = false;
       } finally {
-        searchBtn.disabled = false;
+        searching = false;
+        searchBtn.disabled = !isAuthConfigured();
       }
     };
 
