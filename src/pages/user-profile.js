@@ -2628,6 +2628,24 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     let disposeMe = /** @type {null | (() => void)} */ (null);
 
+    // Spoilers toggle by class and images load late, so neither adds nodes; watch size instead.
+    /** @type {ResizeObserver | null} */
+    let resizeObs = null;
+    /** @type {Element | null} */
+    let observedInner = null;
+
+    /** @param {HTMLElement} outer */
+    const observeUserpageContent = (outer) => {
+      if (typeof ResizeObserver === "undefined") return;
+      const inner = outer.querySelector(USERPAGE_OVERFLOW_INNER_SEL);
+      if (!(inner instanceof HTMLElement) || inner === observedInner) return;
+      resizeObs?.disconnect();
+      observedInner = inner;
+      resizeObs = new ResizeObserver(() => scan());
+      resizeObs.observe(inner);
+      for (const child of inner.children) resizeObs.observe(child);
+    };
+
     const scan = () => {
       try {
         const ctx = findMeUserpageContext();
@@ -2650,7 +2668,21 @@ OsuExpertPlus.pages.userProfile = (() => {
           return;
         }
 
-        if (pageExtra.hasAttribute(USERPAGE_EXPAND_DONE_ATTR) && btn) return;
+        observeUserpageContent(outer);
+
+        if (pageExtra.hasAttribute(USERPAGE_EXPAND_DONE_ATTR) && btn) {
+          const inner = outer.querySelector(USERPAGE_OVERFLOW_INNER_SEL);
+          const stillNeeded =
+            pageExtra.classList.contains(USERPAGE_EXPAND_PAGE_CLASS) ||
+            !(inner instanceof HTMLElement) ||
+            userpageContentOverflows(outer, inner);
+          if (stillNeeded) return;
+          // Content shrank back under the cap (e.g. spoiler closed): drop the button.
+          disposeMe?.();
+          disposeMe = null;
+          btn.remove();
+          pageExtra.removeAttribute(USERPAGE_EXPAND_DONE_ATTR);
+        }
 
         disposeMe?.();
         disposeMe = bindUserpageExpand(pageExtra);
@@ -2689,6 +2721,9 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     return () => {
       obs.disconnect();
+      resizeObs?.disconnect();
+      resizeObs = null;
+      observedInner = null;
       disposeMe?.();
       disposeMe = null;
       teardownUserpageExpand();
