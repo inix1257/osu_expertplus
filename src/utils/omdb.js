@@ -14,12 +14,17 @@ OsuExpertPlus.omdb = (() => {
     return String(GM_getValue(KEY_API, "") || "").trim();
   }
 
+  /** Fired on window after the key is saved or cleared (B70). */
+  const KEY_CHANGED_EVENT = "oep-omdb-key-changed";
+
   function setApiKey(apiKey) {
     GM_setValue(KEY_API, String(apiKey || "").trim());
+    window.dispatchEvent(new Event(KEY_CHANGED_EVENT));
   }
 
   function clearApiKey() {
     GM_deleteValue(KEY_API);
+    window.dispatchEvent(new Event(KEY_CHANGED_EVENT));
   }
 
   function isConfigured() {
@@ -98,6 +103,7 @@ OsuExpertPlus.omdb = (() => {
   }
 
   return {
+    KEY_CHANGED_EVENT,
     getApiKey,
     setApiKey,
     clearApiKey,

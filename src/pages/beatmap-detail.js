@@ -22,7 +22,11 @@ import {
   BEATMAPSET_CSS,
   BEATMAPSET_STYLE_ID,
 } from "../features/beatmapset/styles.js";
-import { readBeatmapsetJson } from "../features/scoreboard/context.js";
+import { remountOnEvent } from "../features/remount.js";
+import {
+  CREDENTIALS_CHANGED_EVENT,
+  readBeatmapsetJson,
+} from "../features/scoreboard/context.js";
 import {
   prepareScoreboard,
   startScoreboard,
@@ -83,22 +87,29 @@ async function init(match, ctx = {}) {
   mountSettingFeature(bag, settings, IDS.BEATCONNECT_DOWNLOAD_BUTTON, () =>
     onPage() ? mountBeatconnectDownloadSplit(header, beatmapsetId) : undefined,
   );
+  // Saving or clearing the OMDB key switches between the ratings row and
+  // the link-only row (B70).
   mountSettingFeature(bag, settings, IDS.OMDB_BEATMAPSET_RATINGS, () =>
-    mountOmdbRow(header, beatmapsetId, pathRe),
+    remountOnEvent(window, OsuExpertPlus.omdb.KEY_CHANGED_EVENT, () =>
+      mountOmdbRow(header, beatmapsetId, pathRe),
+    ),
   );
-  if (OsuExpertPlus.auth.isConfigured()) {
-    safeStart(
-      bag,
-      () =>
-        setupBeatmapsetFavouriteHoverPopover(
-          header,
-          beatmapsetId,
-          pathRe,
-          readBeatmapsetJson()?.favourite_count,
-        ),
-      "favourites popover",
-    );
-  }
+  // The favourites popover needs OAuth credentials; follow them (B70).
+  safeStart(
+    bag,
+    () =>
+      remountOnEvent(window, CREDENTIALS_CHANGED_EVENT, () =>
+        OsuExpertPlus.auth.isConfigured()
+          ? setupBeatmapsetFavouriteHoverPopover(
+              header,
+              beatmapsetId,
+              pathRe,
+              readBeatmapsetJson()?.favourite_count,
+            )
+          : undefined,
+      ),
+    "favourites popover",
+  );
   mountSettingFeature(
     bag,
     settings,
