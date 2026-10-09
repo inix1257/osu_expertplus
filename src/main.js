@@ -4,13 +4,13 @@
  * (it replaces the old FILES list in build.js): a module must come after the
  * modules it reads at load time.
  *
- * New ES modules are bridged onto the namespace *before* the script imports,
- * e.g.:
- *   import * as osu from "./osu/index.js";
- *   window.OsuExpertPlus = window.OsuExpertPlus || {};
- *   window.OsuExpertPlus.osu = osu;
+ * New ES modules reach the scripts through `./core/bridge.js`, which must stay
+ * the first import (ES imports are hoisted, so assignments in this file's body
+ * would run after every script had loaded).
  */
 
+import "./core/bridge.js";
+import { Router } from "./core/router.js";
 import "./utils/dom.js";
 import "./utils/html-sanitize.js";
 import "./utils/difficulty-colours.js";
@@ -28,7 +28,6 @@ import "./pages/beatmapsets-listing.js";
 import "./pages/beatmap-detail.js";
 import "./pages/user-profile.js";
 import "./pages/account-edit.js";
-import "./router.js";
 import "./ui/settings-panel.js";
 
 const { OsuExpertPlus } = window;
@@ -38,5 +37,4 @@ OsuExpertPlus.modIconsAsAcronyms.install(OsuExpertPlus.settings);
 OsuExpertPlus.beatmapsetsListingMode.installLinkPatcher();
 OsuExpertPlus.navRecentNotification.install(OsuExpertPlus.settings);
 
-const router = new OsuExpertPlus.Router();
-router.init();
+new Router(OsuExpertPlus.pages).init();
