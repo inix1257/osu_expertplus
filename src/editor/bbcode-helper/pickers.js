@@ -3,8 +3,8 @@
  */
 
 import { el } from "../../features/legacy.js";
+import { toggleWrap } from "../textarea.js";
 import { BBHELP_BTN_CLASS, BBHELP_MODAL_CLASS } from "./constants.js";
-import { _toggleBbcodeWrap } from "./toolbar.js";
 
 export function _openColorPicker(textarea) {
   const overlay = el("div", { class: BBHELP_MODAL_CLASS });
@@ -61,7 +61,7 @@ export function _openColorPicker(textarea) {
   const apply = () => {
     const value = String(textInput.value || "").trim();
     if (!value) return;
-    _toggleBbcodeWrap(textarea, `[color=${value}]`, "[/color]");
+    toggleWrap(textarea, `[color=${value}]`, "[/color]");
     close();
   };
 
@@ -192,7 +192,7 @@ export function _openSizePicker(textarea) {
           ),
         );
     if (!sizeValue || sizeValue === "0") return;
-    _toggleBbcodeWrap(textarea, `[size=${sizeValue}]`, "[/size]");
+    toggleWrap(textarea, `[size=${sizeValue}]`, "[/size]");
     close();
   };
 

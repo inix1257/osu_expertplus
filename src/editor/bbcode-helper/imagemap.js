@@ -4,9 +4,9 @@
  */
 
 import { el } from "../../features/legacy.js";
+import { replaceRange } from "../textarea.js";
 import { BBHELP_BTN_CLASS, BBHELP_MODAL_CLASS } from "./constants.js";
 import { _sanitizeHttpPreviewUrl } from "./live-preview.js";
-import { _replaceTextareaRange } from "./toolbar.js";
 
 export function _openImagemapHelper(textarea) {
   // State
@@ -932,7 +932,7 @@ export function _openImagemapHelper(textarea) {
     if (!code) return;
     const start = textarea.selectionStart ?? 0;
     const end = textarea.selectionEnd ?? start;
-    _replaceTextareaRange(textarea, start, end, code);
+    replaceRange(textarea, start, end, code);
     close();
   });
 
