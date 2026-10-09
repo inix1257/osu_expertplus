@@ -80,80 +80,129 @@ function _readBeatmapAttrsGmStore() {
   }
 }
 
-export function _writeBeatmapAttrsGmStore(store) {
+function _writeBeatmapAttrsGmStore(store) {
   try {
     GM_setValue(BEATMAP_ATTRS_CACHE_GM_KEY, JSON.stringify(store));
   } catch (_) {}
 }
 
-function _pruneBeatmapAttrsGmStore(store, now) {
-  for (const k of Object.keys(store)) {
-    const ent = store[k];
-    const t = Number(ent?.t);
-    if (!Number.isFinite(t) || now - t > BEATMAP_ATTRS_CACHE_TTL_MS) {
-      delete store[k];
-    } else if (ent.maxCombo === 0) {
-      delete store[k];
-    }
-  }
-  const keys = Object.keys(store);
-  if (keys.length <= BEATMAP_ATTRS_CACHE_MAX_ENTRIES) return;
-  keys.sort((a, b) => (Number(store[a]?.t) || 0) - (Number(store[b]?.t) || 0));
-  for (let i = 0; i < keys.length - BEATMAP_ATTRS_CACHE_MAX_ENTRIES; i++) {
-    delete store[keys[i]];
-  }
-}
+/**
+ * @typedef {{ sr: number|null, maxCombo: number|null }} PackedAttrs
+ * @typedef {{ t: number, sr: number|null, maxCombo: number|null }} StoredAttrs
+ */
 
 /**
- * @param {string} key
- * @returns {{ sr: number|null, maxCombo: number|null }|undefined}
+ * The persistent attributes cache: the GM value is read once into a Map
+ * (its order is least recently used first), and written back once after a
+ * burst of changes instead of a full JSON read + write per lookup. Entries
+ * expire `ttlMs` after they were stored; past `maxEntries` the least
+ * recently used go first (WS-41; it used to be written-order FIFO).
+ * @param {{
+ *   read: () => Record<string, StoredAttrs>,
+ *   write: (store: Record<string, StoredAttrs>) => void,
+ *   now?: () => number,
+ *   ttlMs?: number,
+ *   maxEntries?: number,
+ *   writeDelayMs?: number,
+ *   setTimer?: (fn: () => void, ms: number) => unknown,
+ * }} deps
  */
-function _beatmapAttrsPersistentGet(key) {
-  const store = _readBeatmapAttrsGmStore();
-  const ent = store[key];
-  const t = Number(ent?.t);
-  if (
-    !ent ||
-    typeof ent !== "object" ||
-    !Number.isFinite(t) ||
-    Date.now() - t > BEATMAP_ATTRS_CACHE_TTL_MS
-  ) {
-    if (key in store) {
-      delete store[key];
-      _writeBeatmapAttrsGmStore(store);
+export function createAttrsStore({
+  read,
+  write,
+  now = Date.now,
+  ttlMs = BEATMAP_ATTRS_CACHE_TTL_MS,
+  maxEntries = BEATMAP_ATTRS_CACHE_MAX_ENTRIES,
+  writeDelayMs = 1000,
+  setTimer = (fn, ms) => setTimeout(fn, ms),
+}) {
+  /** @type {Map<string, StoredAttrs> | null} */
+  let entries = null;
+  let writePending = false;
+
+  const num = (v) =>
+    v != null && Number.isFinite(Number(v)) ? Number(v) : null;
+
+  function load() {
+    if (entries) return entries;
+    entries = new Map();
+    const raw = read();
+    const t = now();
+    for (const [key, ent] of Object.entries(raw)) {
+      const stored = Number(ent?.t);
+      if (!Number.isFinite(stored) || t - stored > ttlMs) continue;
+      if (num(ent.maxCombo) === 0) continue;
+      entries.set(key, {
+        t: stored,
+        sr: num(ent.sr),
+        maxCombo: num(ent.maxCombo),
+      });
     }
-    return undefined;
+    if (entries.size !== Object.keys(raw).length) scheduleWrite();
+    return entries;
   }
-  const maxCombo =
-    ent.maxCombo != null && Number.isFinite(Number(ent.maxCombo))
-      ? Number(ent.maxCombo)
-      : null;
-  if (maxCombo === 0) {
-    delete store[key];
-    _writeBeatmapAttrsGmStore(store);
-    return undefined;
+
+  function flush() {
+    writePending = false;
+    if (entries) write(Object.fromEntries(entries));
   }
+
+  function scheduleWrite() {
+    if (writePending) return;
+    writePending = true;
+    setTimer(flush, writeDelayMs);
+  }
+
   return {
-    sr:
-      ent.sr != null && Number.isFinite(Number(ent.sr)) ? Number(ent.sr) : null,
-    maxCombo,
+    /**
+     * @param {string} key
+     * @returns {PackedAttrs | undefined}
+     */
+    get(key) {
+      const map = load();
+      const ent = map.get(key);
+      if (!ent) return undefined;
+      map.delete(key);
+      if (now() - ent.t > ttlMs) {
+        scheduleWrite();
+        return undefined;
+      }
+      map.set(key, ent); // most recently used last
+      return { sr: ent.sr, maxCombo: ent.maxCombo };
+    },
+    /**
+     * @param {string} key
+     * @param {PackedAttrs} packed
+     */
+    set(key, packed) {
+      const map = load();
+      map.delete(key);
+      map.set(key, { t: now(), sr: packed.sr, maxCombo: packed.maxCombo });
+      for (const k of map.keys()) {
+        if (map.size <= maxEntries) break;
+        map.delete(k);
+      }
+      scheduleWrite();
+    },
+    clear() {
+      entries = new Map();
+      flush();
+    },
+    flush,
   };
 }
 
-/**
- * @param {string} key
- * @param {{ sr: number|null, maxCombo: number|null }} packed
- */
-function _beatmapAttrsPersistentSet(key, packed) {
-  const store = _readBeatmapAttrsGmStore();
-  const now = Date.now();
-  _pruneBeatmapAttrsGmStore(store, now);
-  store[key] = {
-    t: now,
-    sr: packed.sr,
-    maxCombo: packed.maxCombo,
-  };
-  _writeBeatmapAttrsGmStore(store);
+const attrsStore = createAttrsStore({
+  read: _readBeatmapAttrsGmStore,
+  write: _writeBeatmapAttrsGmStore,
+});
+// A pending write must not be lost when the tab goes away.
+window.addEventListener("pagehide", () => attrsStore.flush());
+
+/** "Clear SR cache": session and persistent caches. */
+export function clearBeatmapAttributesCache() {
+  _attrsSessionCache.clear();
+  attrsStore.clear();
 }
 
 function _getCachedAttrs(key) {
@@ -196,7 +245,7 @@ export async function _fetchBeatmapAttributesCached(
   const hit = _getCachedAttrs(key);
   if (hit !== undefined) return { key, ...hit };
 
-  const persisted = _beatmapAttrsPersistentGet(key);
+  const persisted = attrsStore.get(key);
   if (persisted !== undefined) {
     _attrsSessionCache.set(key, persisted);
     return { key, ...persisted };
@@ -227,7 +276,7 @@ export async function _fetchBeatmapAttributesCached(
         const packed = { sr, maxCombo };
         _attrsSessionCache.set(key, packed);
         if (_isCacheableRankedStatus(ranked)) {
-          _beatmapAttrsPersistentSet(key, packed);
+          attrsStore.set(key, packed);
         }
         return packed;
       })

@@ -11,8 +11,7 @@ import {
 } from "../../legacy.js";
 import {
   MODDED_SR_ID,
-  _attrsSessionCache,
-  _writeBeatmapAttrsGmStore,
+  clearBeatmapAttributesCache,
 } from "../beatmap-attributes.js";
 import {
   _observeRow,
@@ -217,8 +216,7 @@ async function tryMountRecentScoresWithFails(userId, mode, isCancelled) {
     "Clear SR cache",
   );
   clearCacheBtn.addEventListener("click", () => {
-    _attrsSessionCache.clear();
-    _writeBeatmapAttrsGmStore({});
+    clearBeatmapAttributesCache();
     clearCacheBtn.textContent = "Cleared!";
     setTimeout(() => {
       clearCacheBtn.textContent = "Clear SR cache";
