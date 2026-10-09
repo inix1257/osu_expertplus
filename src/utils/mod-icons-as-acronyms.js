@@ -275,22 +275,17 @@ OsuExpertPlus.modIconsAsAcronyms = (() => {
    * @returns {function} disconnect
    */
   function startModIconsAcronymObserver(settingsApi) {
-    const obs = new MutationObserver((mutations) => {
-      if (!settingsApi.isEnabled(MOD_ICONS_ACRONYM_ID)) return;
-      for (const m of mutations) {
-        for (const node of m.addedNodes) {
-          if (node.nodeType !== Node.ELEMENT_NODE) continue;
-          const elNode = /** @type {Element} */ (node);
-          if (elNode.matches?.(".mod__icon[data-acronym]")) {
-            applyModIconsAsAcronyms(elNode);
-          } else if (elNode.querySelectorAll) {
-            applyModIconsAsAcronyms(elNode);
-          }
-        }
-      }
-    });
-    obs.observe(document.documentElement, { childList: true, subtree: true });
-    return () => obs.disconnect();
+    return OsuExpertPlus.core.observe.subscribe(
+      {
+        selector: ".mod__icon[data-acronym]",
+        schedule: "sync",
+        label: "mod-icons/acronyms",
+      },
+      ({ added }) => {
+        if (!settingsApi.isEnabled(MOD_ICONS_ACRONYM_ID)) return;
+        for (const node of added) applyModIconsAsAcronyms(node);
+      },
+    );
   }
 
   /**

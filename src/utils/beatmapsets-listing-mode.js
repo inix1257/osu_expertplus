@@ -94,30 +94,17 @@ OsuExpertPlus.beatmapsetsListingMode = (() => {
     }
   }
 
-  let linkMo = null;
-  let linkDebounce = 0;
-
   /**
    * Keeps “Beatmap listing” (and similar) links aligned with the saved `m` param.
+   * Re-patches 200ms after the last DOM change.
    * @returns {() => void}
    */
   function installLinkPatcher() {
-    const schedule = () => {
-      window.clearTimeout(linkDebounce);
-      linkDebounce = window.setTimeout(patchListingAnchors, 200);
-    };
     patchListingAnchors();
-    linkMo = new MutationObserver(schedule);
-    linkMo.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-    });
-    return () => {
-      linkMo?.disconnect();
-      linkMo = null;
-      window.clearTimeout(linkDebounce);
-      linkDebounce = 0;
-    };
+    return OsuExpertPlus.core.observe.subscribe(
+      { schedule: 200, label: "listing-mode/link-patcher" },
+      () => patchListingAnchors(),
+    );
   }
 
   /**
