@@ -9,15 +9,22 @@ function getUserIdFromUrl() {
   return m ? m[1] : null;
 }
 
-/** @returns {Object|null} */
+/**
+ * The first React initial-data blob on the page that has a user. A node with
+ * invalid JSON is skipped, not the end of the search (B69).
+ * @returns {Object|null}
+ */
 export function parseProfileInitialData() {
-  try {
-    const nodes = document.querySelectorAll(".js-react[data-initial-data]");
-    for (const node of nodes) {
-      const data = JSON.parse(node.dataset.initialData);
-      if (data?.user?.id != null) return data;
+  const nodes = document.querySelectorAll(".js-react[data-initial-data]");
+  for (const node of nodes) {
+    let data;
+    try {
+      data = JSON.parse(node.dataset.initialData);
+    } catch (_) {
+      continue;
     }
-  } catch (_) {}
+    if (data?.user?.id != null) return data;
+  }
   return null;
 }
 
