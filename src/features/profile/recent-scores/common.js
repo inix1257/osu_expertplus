@@ -2,14 +2,11 @@
  * Expert+ Recent (including fails): shared helpers and section lookup (WS-41).
  */
 
-import {
-  _diffMods,
-  _fetchBeatmapAttributesCached,
-} from "../beatmap-attributes.js";
-import {
-  _applyApiMaxComboToComboInline,
-  _beatmapMaxComboFromScore,
-} from "../score-stats.js";
+import { difficultyMods, modAcronyms } from "../../../osu/mods.js";
+import { rulesetFromId } from "../../../osu/ruleset.js";
+import { beatmapMaxComboFromScore } from "../../../osu/score.js";
+import { _fetchBeatmapAttributesCached } from "../beatmap-attributes.js";
+import { _applyApiMaxComboToComboInline } from "../score-stats.js";
 export const RECENT_FAILS_WRAP_CLASS = "oep-recent-scores-with-fails";
 export const RECENT_FAILS_HEADER_CLASS = "oep-recent-fails-header";
 export const RECENT_FAILS_EMPTY_MSG = "No scores found.";
@@ -74,46 +71,14 @@ export function removeOfficialRecentPlaysSection(listRoot) {
   listRoot.remove();
 }
 
-function rulesetIdToMode(rulesetId) {
-  const map = { 0: "osu", 1: "taiko", 2: "fruits", 3: "mania" };
-  return map[rulesetId] ?? "osu";
-}
-
-export function scoreRankForApiScore(score) {
-  const r = score?.rank;
-  if (typeof r === "string") return r;
-  if (r && typeof r === "object" && typeof r.name === "string") return r.name;
-  return score?.passed === false ? "F" : "D";
-}
-
 export function beatmapHrefFromScore(score) {
   const bm = score?.beatmap;
   if (!bm?.id) return "#";
   const setId = score.beatmapset?.id;
-  const mode = rulesetIdToMode(score.ruleset_id);
+  const mode = rulesetFromId(score.ruleset_id);
   if (setId != null)
     return `https://osu.ppy.sh/beatmapsets/${setId}#${mode}/${bm.id}`;
   return `https://osu.ppy.sh/beatmaps/${bm.id}`;
-}
-
-export function formatAccuracyPercent(score) {
-  let n = score?.accuracy != null ? Number(score.accuracy) : NaN;
-  if (!Number.isFinite(n)) return "—";
-  if (n <= 1) n *= 100;
-  return `${n.toFixed(2)}%`;
-}
-
-/**
- * @param {unknown[]} modsList  API mod objects or strings
- * @returns {string[]}
- */
-function modsAcronymsFromApiMods(modsList) {
-  const out = [];
-  for (const m of modsList || []) {
-    const ac = typeof m === "string" ? m : m?.acronym;
-    if (ac) out.push(String(ac));
-  }
-  return out;
 }
 
 /**
@@ -146,8 +111,8 @@ export function enrichPlayDetailRowsMaxComboFromAttributes(
         if (!score) continue;
         _fetchBeatmapAttributesCached(
           score.beatmap.id,
-          _diffMods(modsAcronymsFromApiMods(score.mods)),
-          rulesetIdToMode(score.ruleset_id),
+          difficultyMods(modAcronyms(score.mods)),
+          rulesetFromId(score.ruleset_id),
           { ranked: score.beatmap.ranked },
         ).then(({ maxCombo }) => {
           if (maxCombo != null && rowEl.isConnected) {
@@ -162,7 +127,8 @@ export function enrichPlayDetailRowsMaxComboFromAttributes(
 
   for (let i = 0; i < rows.length; i++) {
     const score = scores[i];
-    if (_beatmapMaxComboFromScore(score) != null) continue;
+    if (beatmapMaxComboFromScore(score, { legacyManiaGreatOnly: true }) != null)
+      continue;
     if (score?.beatmap?.id == null) continue;
     scoreByRow.set(rows[i], score);
     io.observe(rows[i]);

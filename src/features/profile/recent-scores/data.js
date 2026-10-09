@@ -3,6 +3,7 @@
  * passed ones (WS-41).
  */
 
+import { scoreMergeKey } from "../../../osu/score.js";
 import { scoreTimestampIso } from "./options-menu.js";
 import { _profileScoresCacheTtl, _sharedPromise } from "../score-list-data.js";
 const RECENT_SCORES_MERGED_MAX = 200;
@@ -110,34 +111,6 @@ async function fetchRecentScoresPaginatedHtmlWithFails(userId, mode) {
   return scores.slice(0, maxTotal);
 }
 
-/**
- * Cross-list identity for recent scores. API v2 often returns legacy `score_osu`
- * rows with `id: 0` on fails (must not use `id` as Map key) and `id` equal to
- * the website row's `legacy_score_id` (lazer rows use a different `id`).
- * @param {object} s
- * @returns {string|null}
- */
-function _recentScoreMergeKey(s) {
-  if (!s || typeof s !== "object") return null;
-  const leg = Number(s.legacy_score_id);
-  if (Number.isFinite(leg) && leg > 0) return `s:${leg}`;
-  const id = Number(s.id);
-  if (Number.isFinite(id) && id > 0) return `s:${id}`;
-  const bm = s.beatmap?.id ?? s.beatmap_id;
-  const t = String(s.ended_at || s.created_at || "");
-  const tot = Number(s.total_score ?? s.score);
-  const pf = s.passed === false ? 0 : 1;
-  if (
-    bm != null &&
-    Number.isFinite(Number(bm)) &&
-    t.length > 0 &&
-    Number.isFinite(tot)
-  ) {
-    return `f:${Number(bm)}:${t}:${tot}:${pf}`;
-  }
-  return null;
-}
-
 function _recentScoreDisplayRank(s) {
   if (!s || typeof s !== "object") return 0;
   let r = 0;
@@ -178,14 +151,14 @@ function mergeRecentScoresWithExtendedPassed(primary, extraPassed) {
 
   primary.forEach((s, i) => {
     if (!s || typeof s !== "object") return;
-    let k = _recentScoreMergeKey(s);
+    let k = scoreMergeKey(s);
     if (k == null) k = `z:primary:${i}`;
     if (!map.has(k)) map.set(k, s);
   });
 
   extraPassed.forEach((s, i) => {
     if (!s || typeof s !== "object") return;
-    let k = _recentScoreMergeKey(s);
+    let k = scoreMergeKey(s);
     if (k == null) k = `z:extra:${i}`;
     if (!map.has(k)) {
       map.set(k, s);

@@ -3,17 +3,18 @@
  */
 
 import {
+  ACCURACY_FORMAT,
+  formatAccuracy,
+  scoreGrade,
+} from "../../../osu/score.js";
+import {
   applyModIconsAsAcronyms,
   el,
   formatDecimalPp,
   settingIds,
   settings,
 } from "../../legacy.js";
-import {
-  beatmapHrefFromScore,
-  formatAccuracyPercent,
-  scoreRankForApiScore,
-} from "./common.js";
+import { beatmapHrefFromScore } from "./common.js";
 import { buildApiScoreModsInner } from "./mods.js";
 import { scoreTimestampIso } from "./options-menu.js";
 import { SCORE_PP_DECIMALS_ID } from "../score-rows.js";
@@ -26,7 +27,7 @@ export function buildPlayDetailRowFromApiScore(score, modTemplateEl = null) {
   const bn = "play-detail";
   const bms = score.beatmapset || {};
   const bm = score.beatmap || {};
-  const rank = scoreRankForApiScore(score);
+  const rank = scoreGrade(score);
   const rankClass = `score-rank score-rank--full score-rank--${rank}`;
 
   const titleText = bms.title || "Unknown beatmap";
@@ -123,7 +124,7 @@ export function buildPlayDetailRowFromApiScore(score, modTemplateEl = null) {
             el(
               "span",
               { class: `${bn}__accuracy` },
-              formatAccuracyPercent(score),
+              formatAccuracy(score?.accuracy, ACCURACY_FORMAT.profile),
             ),
           ),
         ),

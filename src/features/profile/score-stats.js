@@ -3,6 +3,12 @@
  * (WS-41).
  */
 
+import {
+  STATS_DISPLAY,
+  beatmapMaxComboFromScore,
+  isFullCombo,
+  statsCells,
+} from "../../osu/score.js";
 import { el } from "../legacy.js";
 import {
   MW_PP_CLASS,
@@ -10,58 +16,6 @@ import {
   _applyByBeatmapId,
   _buildScoresByBeatmapId,
 } from "./score-rows.js";
-/**
- * @param {Object} score
- * @returns {number|null}
- */
-export function _beatmapMaxComboFromScore(score) {
-  const bc = score?.beatmap?.max_combo;
-  if (bc != null && Number.isFinite(Number(bc))) return Number(bc);
-
-  const ms = score?.maximum_statistics;
-  if (!ms || typeof ms !== "object") return null;
-
-  const rulesetId = Number(score?.ruleset_id);
-  const num = (k) => {
-    const n = Number(ms[k]);
-    return ms[k] != null && Number.isFinite(n) ? n : 0;
-  };
-
-  if (rulesetId === 0) {
-    // osu! standard: circles + slider ticks/tails count toward combo
-    const great = num("great");
-    if (!great) return null;
-    if (ms.legacy_combo_increase != null) {
-      return great + num("legacy_combo_increase");
-    }
-    return (
-      great +
-      num("large_tick_hit") +
-      num("small_tick_hit") +
-      num("slider_tail_hit")
-    );
-  }
-
-  if (rulesetId === 1) {
-    // osu!taiko: only regular note hits contribute to combo (drum rolls don't)
-    return num("great") || null;
-  }
-
-  if (rulesetId === 2) {
-    // osu!catch: large fruits + juice drops contribute to combo; tiny droplets do not
-    const fruits = num("great");
-    const drops = num("large_tick_hit");
-    return fruits + drops || null;
-  }
-
-  // osu!mania (3) and fallback: all notes contribute to combo
-  if (ms.great != null && Number.isFinite(Number(ms.great))) {
-    return num("great") + num("legacy_combo_increase") || null;
-  }
-
-  return null;
-}
-
 /**
  * After attributes API resolves max combo, update the injected "achieved/maxx" span.
  * @param {HTMLElement} rowEl
@@ -86,8 +40,9 @@ export function _applyApiMaxComboToComboInline(rowEl, maxCombo) {
   }
 
   const base = "oep-combo-inline__num";
-  const fullCombo =
-    Number.isFinite(maxN) && maxN > 0 && Number.isFinite(achN) && achN === maxN;
+  const fullCombo = isFullCombo({ max_combo: achN }, maxN, {
+    apiFlags: false,
+  });
   achEl.className = fullCombo ? `${base} ${base}--full` : base;
   maxEl.className = `${base} ${base}--full`;
 }
@@ -102,19 +57,15 @@ function injectComboAfterAccuracy(rowEl, score) {
   if (!midCol || !acc || acc.closest(".oep-mid-cols")) return;
 
   const achieved = score?.max_combo ?? 0;
-  const maxCombo = _beatmapMaxComboFromScore(score);
+  const maxCombo = beatmapMaxComboFromScore(score, {
+    legacyManiaGreatOnly: true,
+  });
   const maxStr =
     maxCombo != null && Number.isFinite(Number(maxCombo))
       ? String(maxCombo)
       : "0";
 
-  const achN = Number(achieved);
-  const maxN =
-    maxCombo != null && Number.isFinite(Number(maxCombo))
-      ? Number(maxCombo)
-      : NaN;
-  const fullCombo =
-    Number.isFinite(maxN) && maxN > 0 && Number.isFinite(achN) && achN === maxN;
+  const fullCombo = isFullCombo(score, maxCombo, { apiFlags: false });
 
   const achNumClass = (base) => (fullCombo ? `${base} ${base}--full` : base);
   const maxNumClass = (base) =>
@@ -146,39 +97,6 @@ function injectComboAfterAccuracy(rowEl, score) {
 }
 
 /**
- * Normalize legacy (count_300/100/50/miss/geki/katu) statistics into the
- * lazer field names used by buildStatsRow for osu! standard.
- * @param {Object|null|undefined} statistics
- * @returns {{ great: number, ok: number, meh: number, miss: number }}
- */
-function _normalizeOsuStatistics(statistics) {
-  if (!statistics || typeof statistics !== "object") {
-    return { great: 0, ok: 0, meh: 0, miss: 0 };
-  }
-  const hasLazer =
-    statistics.great != null ||
-    statistics.perfect != null ||
-    statistics.ok != null ||
-    statistics.meh != null ||
-    statistics.miss != null;
-  if (hasLazer) {
-    return {
-      great: Number(statistics.great ?? 0) + Number(statistics.perfect ?? 0),
-      ok: Number(statistics.ok ?? 0),
-      meh: Number(statistics.meh ?? 0),
-      miss: Number(statistics.miss ?? 0),
-    };
-  }
-  return {
-    great:
-      Number(statistics.count_300 ?? 0) + Number(statistics.count_geki ?? 0),
-    ok: Number(statistics.count_100 ?? 0),
-    meh: Number(statistics.count_50 ?? 0),
-    miss: Number(statistics.count_miss ?? 0),
-  };
-}
-
-/**
  * Build a mode-aware stats row element from a full score object.
  *
  * osu! standard  — 300 / 100 / 50 / miss
@@ -189,73 +107,13 @@ function _normalizeOsuStatistics(statistics) {
  * @param {Object} score  full score object from the API
  */
 function buildStatsRow(score) {
-  const st = score?.statistics ?? {};
-  const rulesetId = Number(score?.ruleset_id ?? 0);
   const sep = () => el("span", { class: "oep-score-stats__sep" }, "/");
-  const v = (cls, val) =>
-    el("span", { class: `oep-score-stats__val--${cls}` }, String(val ?? 0));
-
-  if (rulesetId === 1) {
-    // osu!taiko: GREAT (300) / OK (150) / miss
-    return el(
-      "div",
-      { class: "oep-score-stats" },
-      v("300", st.great),
-      sep(),
-      v("100", st.ok),
-      sep(),
-      v("miss", st.miss),
-    );
+  const parts = [];
+  for (const cell of statsCells(score, STATS_DISPLAY.profile)) {
+    if (parts.length) parts.push(sep());
+    parts.push(el("span", { class: cell.className }, String(cell.value)));
   }
-
-  if (rulesetId === 2) {
-    // osu!catch: fruits / drops (juice drops) / droplets (tiny) / miss
-    // great = large fruits, large_tick_hit = juice drops, small_tick_hit = tiny droplets
-    return el(
-      "div",
-      { class: "oep-score-stats" },
-      v("300", st.great),
-      sep(),
-      v("100", st.large_tick_hit),
-      sep(),
-      v("50", st.small_tick_hit),
-      sep(),
-      v("miss", st.miss),
-    );
-  }
-
-  if (rulesetId === 3) {
-    // osu!mania: MAX (rainbow 300) / 300 / 200 / 100 / 50 / miss
-    return el(
-      "div",
-      { class: "oep-score-stats" },
-      v("perfect", st.perfect),
-      sep(),
-      v("300", st.great),
-      sep(),
-      v("good", st.good),
-      sep(),
-      v("100", st.ok),
-      sep(),
-      v("50", st.meh),
-      sep(),
-      v("miss", st.miss),
-    );
-  }
-
-  // osu! standard (default): 300 / 100 / 50 / miss
-  const n = _normalizeOsuStatistics(st);
-  return el(
-    "div",
-    { class: "oep-score-stats" },
-    v("300", n.great),
-    sep(),
-    v("100", n.ok),
-    sep(),
-    v("50", n.meh),
-    sep(),
-    v("miss", n.miss),
-  );
+  return el("div", { class: "oep-score-stats" }, ...parts);
 }
 
 /**

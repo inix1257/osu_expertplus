@@ -8,22 +8,6 @@ import { settingIds } from "../legacy.js";
 export const MODDED_SR_ID = settingIds().MODDED_STAR_RATING;
 export const MODDED_SR_ATTR = "data-oep-sr"; // '' pending, 1 done
 
-const DIFFICULTY_MODS = new Set([
-  "DT",
-  "NC",
-  "HT",
-  "DC",
-  "HR",
-  "EZ",
-  "FL",
-  "DA",
-  "AC",
-  "WU",
-  "WD",
-  "DF",
-  "TC",
-]);
-
 /** @type {Map<string, { sr: number|null, maxCombo: number|null }>} */
 export const _attrsSessionCache = new Map();
 
@@ -174,13 +158,6 @@ function _beatmapAttrsPersistentSet(key, packed) {
 
 function _getCachedAttrs(key) {
   return _attrsSessionCache.get(key);
-}
-
-export function _diffMods(acronyms) {
-  return acronyms
-    .map((a) => a.toUpperCase())
-    .filter((a) => DIFFICULTY_MODS.has(a))
-    .sort();
 }
 
 function _srCacheKey(beatmapId, diffMods, ruleset) {

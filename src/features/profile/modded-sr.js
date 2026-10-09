@@ -3,10 +3,11 @@
  * (WS-41).
  */
 
+import { STAR_FORMAT, formatStars } from "../../osu/format.js";
+import { difficultyMods } from "../../osu/mods.js";
 import { el } from "../legacy.js";
 import {
   MODDED_SR_ATTR,
-  _diffMods,
   _extractRowData,
   _fetchBeatmapAttributesCached,
 } from "./beatmap-attributes.js";
@@ -22,7 +23,7 @@ async function _fetchAndApplySr(rowEl) {
   const { beatmapId, ruleset, mods } = _extractRowData(rowEl);
   if (!beatmapId) return;
 
-  const diffMods = _diffMods(mods);
+  const diffMods = difficultyMods(mods);
   const { sr, maxCombo } = await _fetchBeatmapAttributesCached(
     beatmapId,
     diffMods,
@@ -52,7 +53,11 @@ async function _fetchAndApplySr(rowEl) {
         class: "fas fa-star oep-sr-badge__icon",
         "aria-hidden": "true",
       }),
-      el("span", { class: "oep-sr-badge__val" }, sr.toFixed(2)),
+      el(
+        "span",
+        { class: "oep-sr-badge__val" },
+        formatStars(sr, STAR_FORMAT.profileBadge),
+      ),
     ),
   );
   badge.style.backgroundColor =

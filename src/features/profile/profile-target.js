@@ -1,6 +1,9 @@
 /**
  * Which profile and ruleset the page shows, and who is signed in (WS-41).
  */
+
+import { rulesetFromProfileUrl } from "../../osu/ruleset.js";
+
 function getUserIdFromUrl() {
   const m = location.pathname.match(/^\/users\/(\d+)/);
   return m ? m[1] : null;
@@ -25,14 +28,9 @@ export function getProfileUserId() {
   return data?.user?.id != null ? String(data.user.id) : null;
 }
 
-const PROFILE_MODES = ["osu", "taiko", "fruits", "mania"];
-
 /** Ruleset named in the URL (`/users/1/taiko` or `?mode=taiko`), if any. */
 function getModeFromUrl() {
-  const seg = location.pathname.match(/^\/users\/[^/]+\/([^/]+)\/?$/);
-  if (seg && PROFILE_MODES.includes(seg[1])) return seg[1];
-  const q = location.search.match(/[?&]mode=([^&]+)/);
-  return q && PROFILE_MODES.includes(q[1]) ? q[1] : null;
+  return rulesetFromProfileUrl(location.pathname, location.search);
 }
 
 /**

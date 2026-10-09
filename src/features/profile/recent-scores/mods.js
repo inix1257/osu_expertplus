@@ -3,6 +3,12 @@
  */
 
 import {
+  RATE_DISPLAY,
+  formatSpeedChange,
+  modAcronym,
+  modIconSuffix,
+} from "../../../osu/mods.js";
+import {
   el,
   modTypeClassForAcronym,
   stripOepModAcronymFromClonedMod,
@@ -86,14 +92,14 @@ function patchClonedModForAcronym(modRoot, acronym) {
 export function buildApiScoreModsInner(modsList, templateModEl) {
   const modsInner = el("div", { class: "mods" });
   for (const mod of modsList || []) {
-    const ac = typeof mod === "string" ? mod : mod?.acronym;
+    const ac = modAcronym(mod);
     if (!ac) continue;
     let chip;
     if (templateModEl instanceof HTMLElement) {
       chip = /** @type {HTMLElement} */ (templateModEl.cloneNode(true));
       patchClonedModForAcronym(chip, ac);
     } else {
-      const safe = String(ac).replace(/[^A-Za-z0-9]/g, "") || "X";
+      const safe = modIconSuffix(ac);
       chip = el(
         "div",
         { class: `mod ${modTypeClassForAcronym(ac)}` },
@@ -122,7 +128,7 @@ function applyModCustomisation(chip, mod) {
 
   const rate = Number(settings.speed_change);
   if (Number.isFinite(rate) && rate > 0) {
-    const label = `${rate.toFixed(2)}×`;
+    const label = formatSpeedChange(rate, RATE_DISPLAY.profile);
     chip.querySelector(".mod__extender")?.remove();
     chip.appendChild(
       el("div", { class: "mod__extender" }, el("span", {}, label)),

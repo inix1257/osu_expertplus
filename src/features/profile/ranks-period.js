@@ -3,6 +3,7 @@
  * (WS-41).
  */
 
+import { beatmapsetIdFromHref } from "../../osu/beatmapset-data.js";
 import { el, manageStyle, settingIds, settings } from "../legacy.js";
 import { mutationsIncludeSelector } from "./mutations.js";
 import {
@@ -438,15 +439,13 @@ function queryPlayDetailScoreRows(root) {
 
 /**
  * @param {Element} rowEl
- * @returns {string|null}
+ * @returns {number|null}
  */
 function getRanksRowBeatmapsetId(rowEl) {
   const href = rowEl
     .querySelector("a.play-detail__title")
     ?.getAttribute("href");
-  if (!href) return null;
-  const beatmapsetMatch = href.match(/\/beatmapsets\/(\d+)/);
-  return beatmapsetMatch?.[1] ?? null;
+  return beatmapsetIdFromHref(href, { match: "anywhere" });
 }
 
 /**
