@@ -3,7 +3,11 @@
  * API score (wildcard merges, player lookup, extended leaderboard).
  */
 
-import { flagFilename, formatRelativeShort } from "../../osu/format.js";
+import {
+  flagFilename,
+  formatRelativeShort,
+  pageLocale,
+} from "../../osu/format.js";
 import {
   ACCURACY_FORMAT,
   formatAccuracy,
@@ -142,6 +146,18 @@ export function applyScoreboardAccuracyCell(td, refTd, score) {
 }
 
 /**
+ * @param {number} pp
+ * @returns {string}
+ */
+function formatPpTitle(pp) {
+  try {
+    return pp.toLocaleString(pageLocale(), { maximumFractionDigits: 3 });
+  } catch (_) {
+    return String(pp);
+  }
+}
+
+/**
  * Display pp on score rows (keep decimal precision from API value).
  * Mirrors native tooltip metadata by writing full pp into `title` /
  * `data-orig-title` on the span.
@@ -173,7 +189,10 @@ export function applyScoreboardPpCell(td, refTd, score) {
     return;
   }
   const ppNumber = Number(pp);
-  const titleStr = String(pp).replace(/,/g, "").trim();
+  // Same as the osu-web pp tooltip (formatNumber: page locale, up to 3
+  // decimals), so the pp decimals and sort code read every row the same
+  // way (B19: a raw "123.456" read as 123456 in comma-decimal locales).
+  const titleStr = formatPpTitle(ppNumber);
   const displayStr = String(Math.round(ppNumber));
   if (refSpan) {
     const s = /** @type {HTMLSpanElement} */ (refSpan.cloneNode(false));

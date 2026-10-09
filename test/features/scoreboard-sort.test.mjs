@@ -1,0 +1,202 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { JSDOM } from "jsdom";
+
+/** osu-web scoreboard table markup (header classes as on osu.ppy.sh, 2026-10). */
+const HEAD = [
+  "rank",
+  "grade",
+  "score",
+  "accuracy",
+  "flag",
+  "player",
+  "maxcombo",
+  "hitstat hit-great",
+  "hitstat hit-ok",
+  "hitstat hit-meh",
+  "hitstat hit-miss",
+  "pp",
+  "time",
+  "mods",
+]
+  .map(
+    (mods) =>
+      `<th class="${mods
+        .split(" ")
+        .map(
+          (m) =>
+            `beatmap-scoreboard-table__header beatmap-scoreboard-table__header--${m}`,
+        )
+        .join(
+          " ",
+        )}">${mods.includes("hit-") ? mods.split("hit-")[1] : mods}</th>`,
+  )
+  .join("");
+
+/** @param {{ rank: string, score: string, acc: string, combo: string, pp: string, ppTitle: string, time: string }} r */
+const row = (r) => `
+  <tr class="beatmap-scoreboard-table__body-row">
+    <td><a class="beatmap-scoreboard-table__cell-content">${r.rank}</a></td>
+    <td></td>
+    <td><a class="beatmap-scoreboard-table__cell-content">${r.score}</a></td>
+    <td><a class="beatmap-scoreboard-table__cell-content">${r.acc}</a></td>
+    <td></td>
+    <td><a class="beatmap-scoreboard-table__user-link" href="/users/1">u</a></td>
+    <td><a class="beatmap-scoreboard-table__cell-content">${r.combo}</a></td>
+    <td>1</td><td>0</td><td>0</td><td>0</td>
+    <td><a class="beatmap-scoreboard-table__cell-content"><span title="${r.ppTitle}">${r.pp}</span></a></td>
+    <td><a class="beatmap-scoreboard-table__cell-content"><time class="js-tooltip-time" title="${r.time}">x</time></a></td>
+    <td><div class="beatmap-scoreboard-table__mods"></div></td>
+  </tr>`;
+
+function useDom(lang, rows) {
+  const { window } = new JSDOM(
+    `<!doctype html><html lang="${lang}"><body><table class="beatmap-scoreboard-table__table"><thead><tr>${HEAD}</tr></thead><tbody class="beatmap-scoreboard-table__body">${rows}</tbody></table></body></html>`,
+    { url: "https://osu.ppy.sh/beatmapsets/1#osu/2" },
+  );
+  for (const key of [
+    "window",
+    "document",
+    "location",
+    "HTMLElement",
+    "HTMLTableCellElement",
+    "HTMLTableRowElement",
+    "HTMLTimeElement",
+  ]) {
+    Object.defineProperty(globalThis, key, {
+      value: key === "window" ? window : window[key],
+      configurable: true,
+      writable: true,
+    });
+  }
+  return window.document;
+}
+
+const { buildBeatmapScoreboardColumnMap } =
+  await import("../../src/features/scoreboard/row-builder.js");
+const { beatmapScoreboardRowSortPrimary } =
+  await import("../../src/features/scoreboard/sort.js");
+
+test("column map from the osu-web header classes", () => {
+  const doc = useDom(
+    "en",
+    row({
+      rank: "#1",
+      score: "1",
+      acc: "1%",
+      combo: "1x",
+      pp: "1",
+      ppTitle: "1",
+      time: "2020-01-01T00:00:00Z",
+    }),
+  );
+  const table = doc.querySelector("table");
+  const map = buildBeatmapScoreboardColumnMap(
+    table.querySelector("tbody tr"),
+    table,
+  );
+  assert.deepEqual(
+    {
+      rank: map.rank,
+      grade: map.grade,
+      score: map.score,
+      accuracy: map.accuracy,
+      flag: map.flag,
+      user: map.user,
+      combo: map.combo,
+      pp: map.pp,
+      time: map.time,
+      mods: map.mods,
+    },
+    {
+      rank: 0,
+      grade: 1,
+      score: 2,
+      accuracy: 3,
+      flag: 4,
+      user: 5,
+      combo: 6,
+      pp: 11,
+      time: 12,
+      mods: 13,
+    },
+  );
+  assert.deepEqual(map.hitstatIndices, [7, 8, 9, 10]);
+  assert.deepEqual(Object.values(map.hitstatLabelsByIndex), [
+    "great",
+    "ok",
+    "meh",
+    "miss",
+  ]);
+});
+
+test("sort keys read numbers in the page locale (B19)", () => {
+  const cases = [
+    // lang, cells as osu-web prints them, expected keys
+    [
+      "en",
+      {
+        score: "142,974,980",
+        acc: "99.96%",
+        combo: "2,385x",
+        pp: "903",
+        ppTitle: "902.982",
+      },
+      { score: 142974980, accuracy: 99.96, combo: 2385, pp: 902.982 },
+    ],
+    [
+      "de",
+      {
+        score: "142.974.980",
+        acc: "99,96%",
+        combo: "2.385x",
+        pp: "903",
+        ppTitle: "902,982",
+      },
+      { score: 142974980, accuracy: 99.96, combo: 2385, pp: 902.982 },
+    ],
+    [
+      "de",
+      {
+        score: "1.234",
+        acc: "100,00%",
+        combo: "1.234x",
+        pp: "1.235",
+        ppTitle: "1.234,5",
+      },
+      { score: 1234, accuracy: 100, combo: 1234, pp: 1234.5 },
+    ],
+    // pp title is not a number ("non_best" text): fall back to the cell text
+    [
+      "en",
+      {
+        score: "1",
+        acc: "1%",
+        combo: "1x",
+        pp: "250",
+        ppTitle: "Not your best",
+      },
+      { pp: 250 },
+    ],
+  ];
+  for (const [lang, cells, expected] of cases) {
+    const doc = useDom(
+      lang,
+      row({ rank: "#1", time: "2020-01-01T00:00:00Z", ...cells }),
+    );
+    const table = doc.querySelector("table");
+    const tr = table.querySelector("tbody tr");
+    const map = buildBeatmapScoreboardColumnMap(tr, table);
+    for (const [key, value] of Object.entries(expected)) {
+      assert.equal(
+        beatmapScoreboardRowSortPrimary(tr, map, key),
+        value,
+        `${lang} ${key}`,
+      );
+    }
+    assert.equal(
+      beatmapScoreboardRowSortPrimary(tr, map, "date"),
+      Date.parse("2020-01-01T00:00:00Z"),
+    );
+  }
+});

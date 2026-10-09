@@ -252,20 +252,23 @@ export function beatmapScoreboardTdNumberForSort(td) {
   const span = td.querySelector(
     "a.beatmap-scoreboard-table__cell-content span[title], span.beatmap-scoreboard-table__cell-content span[title], span[title]",
   );
-  let raw = (
-    span?.getAttribute("title") ||
-    span?.textContent ||
-    td.textContent ||
-    ""
-  ).trim();
-  raw = raw.replace(/\u00a0/g, " ");
-  raw = raw
-    .replace(/[x×%]/gi, "")
-    .replace(/\bpp\b/gi, "")
-    .replace(/,/g, "")
-    .trim();
-  const n = parseLocaleNumber(raw);
-  return Number.isFinite(n) ? n : -Infinity;
+  // Titles (pp) and cell texts are both in the page locale. Group
+  // separators are left to parseLocaleNumber: stripping commas first read
+  // "99,96" (de) as 9996 (B19).
+  const clean = (raw) =>
+    String(raw || "")
+      .replace(/[x×%]/gi, "")
+      .replace(/\bpp\b/gi, "")
+      .trim();
+  for (const raw of [
+    span?.getAttribute("title"),
+    span?.textContent,
+    td.textContent,
+  ]) {
+    const n = parseLocaleNumber(clean(raw));
+    if (Number.isFinite(n)) return n;
+  }
+  return -Infinity;
 }
 
 /**
