@@ -2183,7 +2183,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    */
   function destroyOsuWebQtipIfBound(el) {
     try {
-      const $ = typeof window !== "undefined" && window.$;
+      // osu-web's jQuery lives on the page window, not the userscript sandbox.
+      const $ = OsuExpertPlus.core.pageWindow.pageWindow().$ || window.$;
       if (!$ || !el || !$.fn?.qtip) return;
       const $el = $(el);
       if ($el.data("qtip")) $el.qtip("destroy");
