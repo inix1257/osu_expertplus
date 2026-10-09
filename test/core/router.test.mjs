@@ -98,3 +98,19 @@ test("a throwing init or cleanup is logged and navigation continues", () => {
   );
   assert.equal(router._cleanupFn, null);
 });
+
+test("listing page does not start on /beatmapsets/discussions or /events (B25)", () => {
+  const seen = [];
+  const router = createRouter({
+    beatmapsetsListing: { init: (m, ctx) => void seen.push(ctx.path) },
+  });
+  for (const p of [
+    "/beatmapsets",
+    "/beatmapsets/discussions",
+    "/beatmapsets/events",
+    "/beatmapsets/",
+  ]) {
+    router._navigate(p);
+  }
+  assert.deepEqual(seen, ["/beatmapsets", "/beatmapsets/"]);
+});

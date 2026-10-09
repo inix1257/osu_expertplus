@@ -1,7 +1,12 @@
 /** URL → page module; re-inits on SPA navigation. */
 
 import { createLogger } from "./log.js";
-import { ACCOUNT_EDIT_RE, BEATMAPSET_RE, USER_PROFILE_RE } from "./routes.js";
+import {
+  ACCOUNT_EDIT_RE,
+  BEATMAPSET_RE,
+  BEATMAPSETS_LISTING_RE,
+  USER_PROFILE_RE,
+} from "./routes.js";
 
 const log = createLogger("router");
 
@@ -31,10 +36,7 @@ export class Router {
     this._routes = [
       { pattern: ACCOUNT_EDIT_RE, module: pages.accountEdit },
       { pattern: BEATMAPSET_RE, module: pages.beatmapDetail },
-      {
-        pattern: /^\/beatmapsets(?:\/?)(?!\d)/,
-        module: pages.beatmapsetsListing,
-      },
+      { pattern: BEATMAPSETS_LISTING_RE, module: pages.beatmapsetsListing },
       { pattern: USER_PROFILE_RE, module: pages.userProfile },
     ];
 
