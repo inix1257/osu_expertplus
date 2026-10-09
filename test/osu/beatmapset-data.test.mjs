@@ -12,7 +12,7 @@ import {
   readBeatmapsetJson,
 } from "../../src/osu/beatmapset-data.js";
 import {
-  BEATMAP_DETAIL,
+  LEGACY_BEATMAPSET,
   CARD_EXTRA,
   USER_PROFILE,
   legacyFn,
@@ -182,7 +182,7 @@ test("parsePickerHref: known rulesets with /beatmaps/ fallback", () => {
 });
 
 test("parsePickerHref any-end matches parseBeatmapIdFromPickerLink", () => {
-  const old = legacyFn(BEATMAP_DETAIL, "parseBeatmapIdFromPickerLink");
+  const old = legacyFn(LEGACY_BEATMAPSET, "parseBeatmapIdFromPickerLink");
   const anchor = (href) => ({ getAttribute: () => href });
   const base = "https://osu.ppy.sh/beatmapsets/100";
   const cases = [

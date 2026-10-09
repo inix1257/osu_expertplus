@@ -38,3 +38,13 @@ export function setTextIfChanged(...args) {
 export function setHiddenIfChanged(...args) {
   return OsuExpertPlus.dom.setHiddenIfChanged(...args);
 }
+
+/** `OsuExpertPlus.dom.qsa` */
+export function qsa(...args) {
+  return OsuExpertPlus.dom.qsa(...args);
+}
+
+/** @returns {any} `OsuExpertPlus.omdb` */
+export function omdb() {
+  return OsuExpertPlus.omdb;
+}

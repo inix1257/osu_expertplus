@@ -56,12 +56,14 @@ export function legacyFn(file, name, deps = {}) {
   return new Function(...names, body)(...names.map((n) => deps[n]));
 }
 
-export const BEATMAP_DETAIL = "src/pages/beatmap-detail.js";
 export const USER_PROFILE = "src/pages/user-profile.js";
 /** Discussion helpers removed from beatmap-detail by WS-30 (frozen copy). */
 /** Scoreboard helpers moved out of beatmap-detail by WS-31 (frozen copy). */
 export const LEGACY_SCOREBOARD =
   "test/fixtures/legacy/beatmap-detail-scoreboard.js";
+/** Beatmapset page helpers moved out of beatmap-detail by WS-33 (frozen copy). */
+export const LEGACY_BEATMAPSET =
+  "test/fixtures/legacy/beatmap-detail-beatmapset.js";
 export const LEGACY_DISCUSSION =
   "test/fixtures/legacy/beatmap-detail-discussion.js";
 export const CARD_EXTRA = "src/utils/beatmap-card-extra.js";

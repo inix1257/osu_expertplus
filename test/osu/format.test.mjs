@@ -14,7 +14,7 @@ import {
 } from "../../src/osu/format.js";
 import { loadScripts } from "../helpers/load-script.mjs";
 import {
-  BEATMAP_DETAIL,
+  LEGACY_BEATMAPSET,
   BEATMAP_PREVIEW,
   CARD_EXTRA,
   legacyFn,
@@ -24,7 +24,7 @@ import {
 test("formatStars: boundaries per call site (D10)", () => {
   const oldCard = legacyFn(CARD_EXTRA, "formatStarShort");
   const oldHeader = legacyFn(
-    BEATMAP_DETAIL,
+    LEGACY_BEATMAPSET,
     "formatBeatmapsetHeaderStarRatingText",
   );
   const oldBadge = (sr) => sr.toFixed(2);
