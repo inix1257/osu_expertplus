@@ -11,7 +11,8 @@ import {
   findBeatmapScoreboardRoot,
   RATE_EDIT_FILTER_BAR_ATTR,
   RATE_EDIT_ROW_ATTR,
-  RATE_EDIT_ROW_HIDDEN_ATTR,
+  isScoreboardRowHidden,
+  setRowHidden,
   SCORE_USER_SEARCH_RESULT_ATTR,
   SCOREBOARD_HTML_TABLE_SEL,
   SCOREBOARD_MODS_SEL,
@@ -192,7 +193,7 @@ export function applyRateEditMarkingToScoreboardRows(scoreboardRoot) {
   if (!tbody) return;
   for (const row of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
     if (!(row instanceof HTMLElement)) continue;
-    if (row.style.display === "none") continue;
+    if (isScoreboardRowHidden(row)) continue;
     const needs = beatmapScoreboardRowNeedsRateEditMarkFromDom(row);
     const has = row.hasAttribute(RATE_EDIT_ROW_ATTR);
     if (needs) {
@@ -204,29 +205,9 @@ export function applyRateEditMarkingToScoreboardRows(scoreboardRoot) {
 }
 
 /**
- * Wildcard / player-lookup merge keeps osu’s native rows in the tbody with
- * `display: none`. Clearing the rate filter must not reveal them.
- * @param {HTMLElement} row
- * @param {HTMLElement} tbody
- * @returns {boolean}
- */
-function beatmapScoreboardNativeRowSuppressedByMergedLeaderboard(row, tbody) {
-  if (
-    row.hasAttribute(WILDCARD_MERGED_ROW_ATTR) ||
-    row.hasAttribute(SCORE_USER_SEARCH_RESULT_ATTR)
-  ) {
-    return false;
-  }
-  return Boolean(
-    tbody.querySelector(
-      `tr[${WILDCARD_MERGED_ROW_ATTR}], tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`,
-    ),
-  );
-}
-
-/**
  * When the setting is on, hides rows marked as custom-rate (`RATE_EDIT_ROW_ATTR`)
- * using inline `display` so sort/rank logic treats them like other hidden rows.
+ * with the `rate` hide reason; other reasons (a merged leaderboard) are left
+ * alone, so turning the filter off cannot reveal rows they hide (B09).
  * @param {HTMLElement|null|undefined} scoreboardRoot
  */
 export function syncBeatmapScoreboardRateEditRowVisibility(scoreboardRoot) {
@@ -239,22 +220,7 @@ export function syncBeatmapScoreboardRateEditRowVisibility(scoreboardRoot) {
   const tbody = realTable.querySelector(SCOREBOARD_TBODY_SEL);
   if (!tbody) return;
   for (const row of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
-    if (!(row instanceof HTMLElement)) continue;
-    const filtered = row.hasAttribute(RATE_EDIT_ROW_HIDDEN_ATTR);
-    const isRate = row.hasAttribute(RATE_EDIT_ROW_ATTR);
-    if (hide && isRate) {
-      if (!filtered) {
-        row.setAttribute(RATE_EDIT_ROW_HIDDEN_ATTR, "1");
-        row.style.display = "none";
-      }
-    } else if (filtered) {
-      row.removeAttribute(RATE_EDIT_ROW_HIDDEN_ATTR);
-      if (beatmapScoreboardNativeRowSuppressedByMergedLeaderboard(row, tbody)) {
-        row.style.display = "none";
-      } else {
-        row.style.display = "";
-      }
-    }
+    setRowHidden(row, "rate", hide && row.hasAttribute(RATE_EDIT_ROW_ATTR));
   }
 }
 

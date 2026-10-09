@@ -8,6 +8,7 @@ import { observe } from "../../core/observe.js";
 import { parseLocaleNumber } from "../../osu/format.js";
 import { el } from "../legacy.js";
 import {
+  isScoreboardRowHidden,
   findBeatmapScoreboardRoot,
   isLazerModeEnabledForLeaderboard,
   SCOREBOARD_HTML_TABLE_SEL,
@@ -365,10 +366,10 @@ export function applyBeatmapScoreboardLeaderboardSort(scoreboardRoot) {
   if (allRows.length < 1) return;
 
   const visible = allRows.filter(
-    (r) => r instanceof HTMLElement && r.style.display !== "none",
+    (r) => r instanceof HTMLElement && !isScoreboardRowHidden(r),
   );
   const hidden = allRows.filter(
-    (r) => r instanceof HTMLElement && r.style.display === "none",
+    (r) => r instanceof HTMLElement && isScoreboardRowHidden(r),
   );
 
   if (visible.length < 1) return;

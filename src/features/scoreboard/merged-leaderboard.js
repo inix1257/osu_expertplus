@@ -10,6 +10,7 @@ import {
   getBeatmapFullComboFromBeatmapsetJson,
   getBeatmapPageBeatmapId,
   RATE_EDIT_ROW_ATTR,
+  setRowHidden,
   SCORE_USER_SEARCH_RESULT_ATTR,
   SCOREBOARD_HTML_TABLE_SEL,
   SCOREBOARD_ROW_SEL,
@@ -167,7 +168,7 @@ export function renderMergedLeaderboard(
     .forEach((r) => r.remove());
 
   const nativeRows = [...tbody.querySelectorAll(SCOREBOARD_ROW_SEL)];
-  for (const nr of nativeRows) nr.style.display = "none";
+  for (const nr of nativeRows) setRowHidden(nr, "merged", true);
 
   // Insert before the hidden native rows so nth-child alternation starts at
   // 1 and matches the visual first row.
@@ -265,8 +266,17 @@ export function clearMergedLeaderboard(scoreboardRoot, kind) {
       .querySelectorAll(`tr[${MERGED_ROW_ATTRS[k]}]`)
       .forEach((r) => r.remove());
   }
-  for (const nr of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
-    /** @type {HTMLElement} */ (nr).style.display = "";
+  // Clearing lookup rows can leave a wildcard merge (rendered before the
+  // lookup was) in place; its native rows stay hidden then.
+  const mergedLeft = tbody.querySelector(
+    Object.values(MERGED_ROW_ATTRS)
+      .map((attr) => `tr[${attr}]`)
+      .join(", "),
+  );
+  if (!mergedLeft) {
+    for (const nr of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
+      setRowHidden(nr, "merged", false);
+    }
   }
   refreshBeatmapScoreboardTableEnhancements(scoreboardRoot);
 }

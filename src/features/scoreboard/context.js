@@ -39,8 +39,15 @@ export const CREDENTIALS_CHANGED_EVENT = "oep-osu-api-credentials-changed";
 export const WILDCARD_DUPE_ROW_ATTR = "data-oep-wildcard-dupe";
 /** Row whose effective speed is not 1.00× or 1.50× (a custom-rate score). */
 export const RATE_EDIT_ROW_ATTR = "data-oep-rate-edit";
-/** Row hidden because “hide custom rate scores” is on (restored when filter off). */
-export const RATE_EDIT_ROW_HIDDEN_ATTR = "data-oep-rate-edit-filtered";
+/**
+ * Why a score row is hidden: a space-separated list of reasons, each added
+ * and removed only by its own feature, so one feature showing its rows
+ * again cannot reveal rows another one hid (B09). The stylesheet hides any
+ * row that has the attribute.
+ *   - `merged`: an osu-web row while a wildcard or lookup leaderboard is shown
+ *   - `rate`: a custom-rate score while “Hide custom rate scores” is on
+ */
+export const ROW_HIDE_ATTR = "data-oep-hide";
 /** In-page “hide custom rate scores” control. */
 export const RATE_EDIT_FILTER_BAR_ATTR = "data-oep-rate-edit-filter-bar";
 /** Player lookup bar wrapper; sits inside the tools row with the rate filter. */
@@ -54,6 +61,42 @@ export const SCOREBOARD_MODS_SEL = ".beatmapset-scoreboard__mods";
 /** osu-web uses `.beatmap-scoreboard-table` on the wrapper `div`; the real `<table>` is `__table`. */
 export const SCOREBOARD_HTML_TABLE_SEL =
   "table.beatmap-scoreboard-table__table";
+
+/**
+ * @param {Element} row
+ * @returns {string[]}
+ */
+function rowHideReasons(row) {
+  return (row.getAttribute(ROW_HIDE_ATTR) || "").split(/\s+/).filter(Boolean);
+}
+
+/**
+ * @param {Element} row
+ * @param {string} reason
+ * @param {boolean} hidden
+ */
+export function setRowHidden(row, reason, hidden) {
+  const reasons = rowHideReasons(row);
+  if (reasons.includes(reason) === hidden) return;
+  const next = hidden
+    ? [...reasons, reason]
+    : reasons.filter((r) => r !== reason);
+  if (next.length) row.setAttribute(ROW_HIDE_ATTR, next.join(" "));
+  else row.removeAttribute(ROW_HIDE_ATTR);
+}
+
+/**
+ * @param {Element} row
+ * @param {string} [reason]  any reason when omitted
+ * @returns {boolean}
+ */
+export function isScoreboardRowHidden(row, reason) {
+  if (reason) return rowHideReasons(row).includes(reason);
+  return (
+    row.hasAttribute(ROW_HIDE_ATTR) ||
+    (row instanceof HTMLElement && row.style.display === "none")
+  );
+}
 
 /** Injected table rows → the API score they show (read by the top panel). */
 const rowScores = new WeakMap();

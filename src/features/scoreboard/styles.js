@@ -7,6 +7,7 @@ import {
   MOD_GRID_CLASS,
   MOD_HIDDEN_ATTR,
   RATE_EDIT_ROW_ATTR,
+  ROW_HIDE_ATTR,
   SCORE_USER_SEARCH_RESULT_ATTR,
   WILDCARD_DUPE_ROW_ATTR,
   WILDCARD_LOADING_CLASS,
@@ -286,6 +287,10 @@ export const SCOREBOARD_CSS = `
   }
   /* Cloned row includes osu-web’s hover-only ⋯ menu column; hide for lookup result */
   tr[${SCORE_USER_SEARCH_RESULT_ATTR}] > td.beatmap-scoreboard-table__popup-menu {
+    display: none !important;
+  }
+  /* Rows hidden by the rate filter or a merged leaderboard (see ROW_HIDE_ATTR). */
+  tr[${ROW_HIDE_ATTR}] {
     display: none !important;
   }
   /* Custom-rate (non 1.00×/1.50×) scores — slightly dimmed. */

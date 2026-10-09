@@ -4,7 +4,11 @@
  */
 
 import { el, settingIds, settings } from "../legacy.js";
-import { getBeatmapPageRuleset, SCOREBOARD_ROW_SEL } from "./context.js";
+import {
+  getBeatmapPageRuleset,
+  isScoreboardRowHidden,
+  SCOREBOARD_ROW_SEL,
+} from "./context.js";
 
 export const SCOREBOARD_GLOBAL_RANK_BADGE_CLASS = "oep-scoreboard-rank-badge";
 
@@ -232,7 +236,7 @@ export function syncBeatmapScoreboardGlobalRanks(scoreboardRoot) {
   const io = scoreboardGlobalRankIo();
 
   for (const row of rows) {
-    if (!(row instanceof HTMLElement) || row.style.display === "none") {
+    if (!(row instanceof HTMLElement) || isScoreboardRowHidden(row)) {
       continue;
     }
     const userLink = row.querySelector("a.js-usercard");

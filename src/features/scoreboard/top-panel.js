@@ -13,6 +13,7 @@ import {
   scoreGrade,
 } from "../../osu/score.js";
 import {
+  isScoreboardRowHidden,
   EXTENDED_SCORE_ROW_ATTR,
   getBeatmapPageRuleset,
   getRowScore,
@@ -145,7 +146,7 @@ export function getEffectiveBoardTopRow(scoreboardRoot) {
   const tbody = table.querySelector(SCOREBOARD_TBODY_SEL);
   if (!tbody) return null;
   for (const row of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
-    if (!(row instanceof HTMLElement) || row.style.display === "none") continue;
+    if (!(row instanceof HTMLElement) || isScoreboardRowHidden(row)) continue;
     // The native rank-#1 row carries `--first` and no OEP-injected attributes.
     // When it is the first visible row the native panel is already correct.
     const isNativeFirst =
