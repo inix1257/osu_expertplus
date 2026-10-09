@@ -5,7 +5,7 @@
 
 import { beatmapsetIdFromHref } from "../../osu/beatmapset-data.js";
 import { el, manageStyle, settingIds, settings } from "../legacy.js";
-import { mutationsIncludeSelector } from "./mutations.js";
+import { observe } from "../../core/observe.js";
 import {
   RECENT_FAILS_WRAP_CLASS,
   findMostWatchedReplaysListRoot,
@@ -807,21 +807,17 @@ export function startRanksDateHighlightManager() {
     debounceTimer = setTimeout(run, 64);
   };
 
-  const obs = new MutationObserver((mutations) => {
-    if (
-      mutationsIncludeSelector(
-        mutations,
-        `${RANKS_PAGE_SELECTOR}, h3.title.title--page-extra-small`,
-      )
-    ) {
-      schedule();
-      return;
-    }
-  });
-  obs.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
+  // The per-list observers above watch single lists and stay local.
+  const ac = new AbortController();
+  observe.subscribe(
+    {
+      selector: `${RANKS_PAGE_SELECTOR}, h3.title.title--page-extra-small`,
+      schedule: "sync", // schedule() debounces
+      signal: ac.signal,
+      label: "profile/ranks-period",
+    },
+    schedule,
+  );
   schedule();
 
   const unsubBg = settings().onChange(RANKS_CARD_BG_FEATURE_ID, (enabled) => {
@@ -852,7 +848,7 @@ export function startRanksDateHighlightManager() {
     unsubBg();
     clearTimeout(debounceTimer);
     disconnectRankPlayListObservers();
-    obs.disconnect();
+    ac.abort();
     ranksPeriodHighlightStyle.remove();
     ranksCardBgLayoutStyle.remove();
     document

@@ -2,6 +2,7 @@
  * Expand a long me! userpage instead of scrolling inside it (WS-41).
  */
 
+import { observe } from "../../core/observe.js";
 import { el, manageStyle } from "../legacy.js";
 import { mutationsIncludeSelector } from "./mutations.js";
 const USERPAGE_EXPAND_STYLE_ID = "osu-expertplus-userpage-expand";
@@ -230,35 +231,25 @@ export function startUserpageExpandManager() {
     }
   };
 
-  /** @type {Element} */
-  let observeRoot = document.documentElement;
-  /** @type {MutationObserver} */
-  let obs;
-
-  const syncObserveRoot = () => {
-    const next = findMeUserpageContext()?.section ?? document.documentElement;
-    if (next === observeRoot) return;
-    obs.disconnect();
-    observeRoot = next;
-    obs.observe(observeRoot, { childList: true, subtree: true });
-  };
-
-  obs = new MutationObserver((mutations) => {
-    if (
-      observeRoot !== document.documentElement ||
-      mutationsAffectMeUserpage(mutations)
-    ) {
-      scan();
-      syncObserveRoot();
-    }
-  });
-
+  const ac = new AbortController();
   scan();
-  syncObserveRoot();
-  obs.observe(observeRoot, { childList: true, subtree: true });
+  // Any change inside the me! section, or the section itself appearing
+  // (it used to be a second observer re-targeted at the section).
+  observe.subscribe(
+    { schedule: "sync", signal: ac.signal, label: "profile/userpage-expand" },
+    ({ records }) => {
+      const section = findMeUserpageContext()?.section;
+      if (
+        (section && records.some((r) => section.contains(r.target))) ||
+        mutationsAffectMeUserpage(records)
+      ) {
+        scan();
+      }
+    },
+  );
 
   return () => {
-    obs.disconnect();
+    ac.abort();
     resizeObs?.disconnect();
     resizeObs = null;
     observedInner = null;

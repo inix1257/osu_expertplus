@@ -2,6 +2,7 @@
  * Open the profile avatar and banner images (WS-41).
  */
 
+import { observe } from "../../core/observe.js";
 import { el, manageStyle, waitForElement } from "../legacy.js";
 import {
   getProfileUserId,
@@ -291,12 +292,19 @@ export function startProfileMediaOpenPictureManager() {
     if (!ac.signal.aborted) scanProfileMediaOpen();
   });
 
-  const obs = new MutationObserver(scanProfileMediaOpen);
-  obs.observe(document.documentElement, { childList: true, subtree: true });
+  // Was a document-wide observer that rescanned on every mutation.
+  observe.subscribe(
+    {
+      selector: ".profile-info__avatar, .profile-info__bg",
+      schedule: "sync",
+      signal: ac.signal,
+      label: "profile/media-buttons",
+    },
+    scanProfileMediaOpen,
+  );
 
   return () => {
     ac.abort();
-    obs.disconnect();
     disposeAvatar?.();
     disposeBanner?.();
     document

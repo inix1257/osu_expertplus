@@ -2,6 +2,7 @@
  * Applies the score row features to every profile score list (WS-41).
  */
 
+import { observe } from "../../core/observe.js";
 import {
   formatDecimalPp,
   parseLocaleNumber,
@@ -419,21 +420,28 @@ export async function initScoreFeatures(userId, mode, run) {
     }
   }
 
-  const lateSectionObs = new MutationObserver(() => {
-    document
-      .querySelectorAll(
-        `.play-detail-list:not([${PLAY_DETAIL_LIST_PROCESSED_ATTR}])`,
-      )
-      .forEach((listEl) => {
-        if (!(listEl instanceof HTMLElement)) return;
-        adoptLateSection(listEl);
-      });
-  });
-  lateSectionObs.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
-  cleanupFns.push(() => lateSectionObs.disconnect());
+  // Lists that render after init (lazy sections). The per-list observers
+  // above watch single lists and stay local.
+  const lateSectionAc = new AbortController();
+  observe.subscribe(
+    {
+      selector: ".play-detail-list",
+      schedule: "sync",
+      signal: lateSectionAc.signal,
+      label: "profile/score-lists",
+    },
+    () => {
+      document
+        .querySelectorAll(
+          `.play-detail-list:not([${PLAY_DETAIL_LIST_PROCESSED_ATTR}])`,
+        )
+        .forEach((listEl) => {
+          if (!(listEl instanceof HTMLElement)) return;
+          adoptLateSection(listEl);
+        });
+    },
+  );
+  cleanupFns.push(() => lateSectionAc.abort());
 
   cleanupFns.push(
     settings().onChange(SCORE_PP_DECIMALS_ID, (enabled) => {

@@ -5,6 +5,7 @@
 
 import { STAR_FORMAT, formatStars } from "../../osu/format.js";
 import { difficultyMods } from "../../osu/mods.js";
+import { observe } from "../../core/observe.js";
 import { el } from "../legacy.js";
 import {
   MODDED_SR_ATTR,
@@ -80,7 +81,8 @@ async function _fetchAndApplySr(rowEl) {
 }
 
 export let _srObserver = null;
-let _srDomObserver = null;
+/** @type {AbortController | null} the hub subscription for new rows */
+let _srRowsAc = null;
 
 export function _observeRow(rowEl) {
   if (!_srObserver || rowEl.hasAttribute(MODDED_SR_ATTR)) return;
@@ -102,27 +104,28 @@ export function initSrObserver() {
 
   document.querySelectorAll(".play-detail").forEach(_observeRow);
 
-  _srDomObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (!(node instanceof Element)) continue;
-        if (node.matches(".play-detail")) {
-          _observeRow(node);
-        } else {
-          if (!node.querySelector(".play-detail")) continue;
-          node.querySelectorAll(".play-detail").forEach(_observeRow);
-        }
+  _srRowsAc = new AbortController();
+  observe.subscribe(
+    {
+      selector: ".play-detail",
+      schedule: "sync",
+      signal: _srRowsAc.signal,
+      label: "profile/modded-sr",
+    },
+    ({ added }) => {
+      for (const node of added) {
+        if (node.matches(".play-detail")) _observeRow(node);
+        else node.querySelectorAll(".play-detail").forEach(_observeRow);
       }
-    }
-  });
-  _srDomObserver.observe(document.body, { childList: true, subtree: true });
+    },
+  );
 }
 
 export function teardownSrObserver() {
   _srObserver?.disconnect();
   _srObserver = null;
-  _srDomObserver?.disconnect();
-  _srDomObserver = null;
+  _srRowsAc?.abort();
+  _srRowsAc = null;
 }
 
 export function revertModdedStarRatings() {

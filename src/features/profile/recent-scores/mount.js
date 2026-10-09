@@ -20,7 +20,7 @@ import {
   initSrObserver,
   processElements,
 } from "../modded-sr.js";
-import { mutationsIncludeSelector } from "../mutations.js";
+import { observe } from "../../../core/observe.js";
 import {
   RANKS_CARD_BG_FEATURE_ID,
   applyRanksCardBackgrounds,
@@ -336,17 +336,17 @@ export function startRecentScoresWithFailsObserver(userId, mode) {
     }, 200);
   };
 
-  const obs = new MutationObserver((mutations) => {
-    if (
-      mutationsIncludeSelector(
-        mutations,
+  const ac = new AbortController();
+  observe.subscribe(
+    {
+      selector:
         'div.js-sortable--page[data-page-id="historical"], h3.title.title--page-extra-small, .play-detail-list',
-      )
-    ) {
-      run();
-    }
-  });
-  obs.observe(document.documentElement, { childList: true, subtree: true });
+      schedule: "sync", // run() debounces
+      signal: ac.signal,
+      label: "profile/recent-scores",
+    },
+    run,
+  );
   run();
 
   return () => {
@@ -356,7 +356,7 @@ export function startRecentScoresWithFailsObserver(userId, mode) {
     unsubRecentPpDecimals();
     unsubRecentHitStatistics();
     unsubRecentPlaceNumbers();
-    obs.disconnect();
+    ac.abort();
     document
       .querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`)
       .forEach((n) => n.remove());
