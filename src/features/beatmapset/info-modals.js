@@ -2,6 +2,9 @@
  * Beatmapset metadata and description modals (WS-33).
  */
 
+import { readBeatmapsetJson } from "../../osu/beatmapset-data.js";
+import { el, waitForElement } from "../legacy.js";
+import { getBeatmapPageBeatmapId } from "../scoreboard/context.js";
 import { bindBbcodeSpoilers } from "./bbcode-spoilers.js";
 import { ROOT_CLASS } from "./constants.js";
 
@@ -529,4 +532,122 @@ export function teardownBeatmapDescriptionHeadingLayout(descRow) {
     if (h) descRow.insertBefore(h, headWrap);
     headWrap.remove();
   }
+}
+
+/**
+ * "Show metadata" under the artist and "Full description" beside the
+ * description heading. The description row appears with `.beatmapset-info`,
+ * which may render after the header, so mounting is retried once it exists.
+ * @param {HTMLElement} header  `.beatmapset-header`
+ * @param {RegExp} pathRe
+ * @returns {() => void}
+ */
+export function startBeatmapsetInfoModals(header, pathRe) {
+  /** @type {{ dispose: () => void } | null} */
+  let metadataInfoModal = null;
+  /** @type {{ dispose: () => void } | null} */
+  let descriptionInfoModal = null;
+  /** @type {HTMLElement|null} */
+  let descriptionHeadingDescRow = null;
+
+  function disposeBeatmapInfoModalButtons() {
+    try {
+      metadataInfoModal?.dispose();
+    } catch (_) {}
+    metadataInfoModal = null;
+    try {
+      descriptionInfoModal?.dispose();
+    } catch (_) {}
+    descriptionInfoModal = null;
+    if (descriptionHeadingDescRow instanceof HTMLElement) {
+      teardownBeatmapDescriptionHeadingLayout(descriptionHeadingDescRow);
+      descriptionHeadingDescRow = null;
+    }
+  }
+
+  function refreshBeatmapInfoModalButtons() {
+    if (!(header instanceof HTMLElement) || !document.body.contains(header))
+      return;
+    if (!pathRe.test(location.pathname)) return;
+
+    const data = readBeatmapsetJson();
+
+    const artistEl = header.querySelector(
+      ".beatmapset-header__details-text--artist",
+    );
+    if (
+      !metadataInfoModal &&
+      artistEl instanceof HTMLElement &&
+      !header.querySelector("[data-oep-beatmapset-metadata]")
+    ) {
+      metadataInfoModal = attachBeatmapsetInfoModal(el, ROOT_CLASS, {
+        title: "Beatmap metadata",
+        titleId: `${ROOT_CLASS}-metadata-title`,
+        buttonText: "Show metadata",
+        buttonIconClass: "fas fa-clipboard-list",
+        buttonExtraClass: `${ROOT_CLASS}__action-btn--under-artist`,
+        mountButton: (btn) => {
+          btn.setAttribute("data-oep-beatmapset-metadata", "");
+          artistEl.insertAdjacentElement("afterend", btn);
+        },
+        buildModalTitleExtra: (elFn) =>
+          buildBeatmapMetadataOsuOpenButton(elFn, getBeatmapPageBeatmapId),
+        buildBody: () => buildModalBody(data, el),
+      });
+    }
+
+    const infoCol = document.querySelector(".beatmapset-info");
+    const firstBox = infoCol?.querySelector(":scope > .beatmapset-info__box");
+    const scrollEl = firstBox?.querySelector(
+      ":scope > .beatmapset-info__scrollable",
+    );
+    const descRow =
+      scrollEl?.querySelector(
+        ":scope > .beatmapset-info__row:has(.beatmapset-info__description)",
+      ) ??
+      scrollEl?.querySelector(
+        ":scope > .beatmapset-info__row:first-child:has(> h3.beatmapset-info__header)",
+      );
+    const descHeading = descRow?.querySelector(
+      ":scope > h3.beatmapset-info__header",
+    );
+    if (
+      !descriptionInfoModal &&
+      descRow instanceof HTMLElement &&
+      descHeading instanceof HTMLElement &&
+      !descRow.querySelector("[data-oep-beatmapset-desc]")
+    ) {
+      descRow.classList.add(`${ROOT_CLASS}__description-heading-row`);
+      descriptionHeadingDescRow = descRow;
+      descriptionInfoModal = attachBeatmapsetInfoModal(el, ROOT_CLASS, {
+        title: "Beatmap description",
+        titleId: `${ROOT_CLASS}-description-title`,
+        buttonText: "Full description",
+        buttonIconClass: "fas fa-align-left",
+        buttonExtraClass: `${ROOT_CLASS}__action-btn--description-heading`,
+        modalExtraClass: `${ROOT_CLASS}__modal--description`,
+        mountButton: (btn) => {
+          btn.setAttribute("data-oep-beatmapset-desc", "");
+          const headWrap = el("div", {
+            class: `${ROOT_CLASS}__description-sticky-head`,
+          });
+          descRow.insertBefore(headWrap, descHeading);
+          headWrap.appendChild(descHeading);
+          headWrap.appendChild(btn);
+        },
+        buildBody: () => buildDescriptionModalBody(data, el),
+      });
+    }
+  }
+
+  refreshBeatmapInfoModalButtons();
+  const ac = new AbortController();
+  waitForElement(".beatmapset-info", { timeout: 12000, signal: ac.signal })
+    .then(refreshBeatmapInfoModalButtons)
+    .catch(() => {});
+
+  return () => {
+    ac.abort();
+    disposeBeatmapInfoModalButtons();
+  };
 }

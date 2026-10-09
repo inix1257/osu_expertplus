@@ -902,3 +902,17 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
     wrap.remove();
   };
 }
+
+/**
+ * The OMDB row: ratings and voting with an OMDB API key, otherwise a link to
+ * the beatmapset on OMDB.
+ * @param {HTMLElement} header  `.beatmapset-header`
+ * @param {string} beatmapsetId
+ * @param {RegExp} pathRe
+ * @returns {() => void}
+ */
+export function mountOmdbRow(header, beatmapsetId, pathRe) {
+  return omdb().isConfigured()
+    ? mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe)
+    : mountOmdbBeatmapsetLinkOnlyRow(header, beatmapsetId);
+}

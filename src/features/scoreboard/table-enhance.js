@@ -213,8 +213,14 @@ export function startBeatmapScoreboardTableEnhancementsLive(pathRe) {
     run,
   );
   const first = window.setTimeout(run, 32);
+  // Settings the pass reads: apply them without waiting for a table change.
+  const unsubSettings = [
+    settingIds().SCORE_PP_DECIMALS,
+    settingIds().SCOREBOARD_GLOBAL_RANK,
+  ].map((id) => settings().onChange(id, run));
   return () => {
     window.clearTimeout(first);
     unsubscribe();
+    unsubSettings.forEach((off) => off());
   };
 }

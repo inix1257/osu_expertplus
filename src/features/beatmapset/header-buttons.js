@@ -1,5 +1,6 @@
 /**
- * Beatmapset header buttons (WS-33): Beatconnect download, preview audio.
+ * Beatmapset header buttons (WS-33): Beatconnect download, preview audio,
+ * background and MP3.
  */
 
 import { el, qsa } from "../legacy.js";
@@ -156,3 +157,85 @@ export function mountBeatmapsetPreviewAudioButton(header, beatmapsetId) {
 }
 
 // Attribute set on .beatmapset-header elements we have already processed.
+
+/**
+ * "Open background" and "Download MP3" squares after the osu!direct button.
+ * The MP3 link goes to the third-party osu.ppyd.sh (D6, B66).
+ * @param {HTMLElement} header  `.beatmapset-header`
+ * @param {string} beatmapsetId
+ * @returns {(() => void)|undefined}
+ */
+export function mountBeatmapsetBackgroundButtons(header, beatmapsetId) {
+  const headerButtons = header.querySelector(".beatmapset-header__buttons");
+  if (
+    headerButtons instanceof HTMLElement &&
+    !headerButtons.querySelector("[data-oep-beatmapset-bg]")
+  ) {
+    const backgroundUrl = `https://assets.ppy.sh/beatmaps/${beatmapsetId}/covers/fullsize.jpg`;
+    const bgLink = el(
+      "a",
+      {
+        class: "btn-osu-big btn-osu-big--beatmapset-header-square",
+        href: backgroundUrl,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        "data-oep-beatmapset-bg": "",
+        title: "Open background",
+        "aria-label": "Open background",
+      },
+      el(
+        "span",
+        {
+          class: "btn-osu-big__content btn-osu-big__content--center",
+        },
+        el(
+          "span",
+          { class: "btn-osu-big__icon" },
+          el(
+            "span",
+            { class: "fa fa-fw" },
+            el("span", { class: "fas fa-image", "aria-hidden": "true" }),
+          ),
+        ),
+      ),
+    );
+    const mp3DownloadUrl = `https://osu.ppyd.sh/beatmapsets/${encodeURIComponent(String(beatmapsetId))}/download`;
+    const mp3Link = el(
+      "a",
+      {
+        class: "btn-osu-big btn-osu-big--beatmapset-header-square",
+        href: mp3DownloadUrl,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        "data-oep-beatmapset-mp3": "",
+        title: "Download MP3",
+        "aria-label": "Download MP3",
+      },
+      el(
+        "span",
+        { class: "btn-osu-big__content btn-osu-big__content--center" },
+        el(
+          "span",
+          { class: "btn-osu-big__icon" },
+          el(
+            "span",
+            { class: "fa fa-fw" },
+            el("span", { class: "fas fa-music", "aria-hidden": "true" }),
+          ),
+        ),
+      ),
+    );
+    const directBtn = findBeatmapsetOsuDirectButton(headerButtons);
+    if (directBtn) {
+      directBtn.insertAdjacentElement("afterend", bgLink);
+    } else {
+      headerButtons.appendChild(bgLink);
+    }
+    bgLink.insertAdjacentElement("afterend", mp3Link);
+    return () => {
+      mp3Link.remove();
+      bgLink.remove();
+    };
+  }
+  return undefined;
+}

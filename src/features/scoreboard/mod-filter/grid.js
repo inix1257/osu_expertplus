@@ -733,3 +733,34 @@ export async function setupBeatmapScoreboardModGrid() {
     resetModFilterState();
   };
 }
+
+/**
+ * Mounts the grid for a page and drops a setup that resolves after the
+ * page was left or the grid was turned off (the generation guard that used
+ * to live in beatmap-detail init).
+ * @param {RegExp} pathRe
+ * @returns {() => void}
+ */
+export function mountScoreboardModGrid(pathRe) {
+  let disposed = false;
+  /** @type {(() => void)|null} */
+  let dispose = null;
+  setupBeatmapScoreboardModGrid().then((d) => {
+    if (disposed || !pathRe.test(location.pathname)) {
+      try {
+        d();
+      } catch (_) {}
+      return;
+    }
+    dispose = d;
+  });
+  return () => {
+    disposed = true;
+    try {
+      dispose?.();
+    } catch (_) {}
+    dispose = null;
+    const strip = document.querySelector(SCOREBOARD_MODS_SEL);
+    if (strip instanceof HTMLElement) stopBeatmapScoreboardModGridLive(strip);
+  };
+}
