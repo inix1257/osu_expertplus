@@ -106,7 +106,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   let mergedModCycleStep = new Map();
 
   const SCOREBOARD_PP_ORIGINAL_ATTR = "data-oep-scoreboard-pp-original";
-  /** Injected always-visible header nomod star rating (osu-web shows native line only on picker hover). */
   /** Marks injected name / guest credit / SR block inside the active `.beatmapset-beatmap-picker__beatmap--active`. */
   const PICKER_DIFF_NAMES_META_ATTR = "data-oep-picker-diff-names-meta";
   /** OMDB (omdb.nyahh.net) block above `.beatmapset-header__diff-name`. */
@@ -200,16 +199,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       background: rgba(0, 0, 0, 0.52);
       border-color: hsl(var(--hsl-c2, 333 60% 70%) / 0.45);
       color: #fff;
-    }
-    .${ROOT_CLASS}__action-btn--primary {
-      color: hsl(var(--hsl-l1, 0 0% 100%));
-      background: hsl(var(--hsl-c1, 333 89% 68%));
-      border-color: hsl(var(--hsl-c1, 333 89% 58%));
-      text-shadow: none;
-    }
-    .${ROOT_CLASS}__action-btn--primary:hover {
-      background: hsl(var(--hsl-c1, 333 89% 62%));
-      border-color: hsl(var(--hsl-c1, 333 89% 52%));
     }
     .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row {
       flex-direction: column;
@@ -1722,24 +1711,15 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     }
     .oep-user-search__status {
       margin-top: 0.4rem;
+      margin-bottom: 0.6rem;
       max-width: 34rem;
       font-size: 0.8125rem;
       color: rgba(255, 255, 255, 0.5);
       min-height: 1em;
     }
-    .oep-user-search__result {
-      margin-top: 0.6rem;
-      overflow: visible;
-      width: 100%;
-      max-width: 100%;
-    }
     .oep-user-search--no-api .oep-user-search__input:disabled {
       opacity: 0.72;
       cursor: not-allowed;
-    }
-    /* Same wrapper osu-web uses around the real table: sets --perfect-color, overflow-x, etc. */
-    .oep-user-search__result .beatmap-scoreboard-table {
-      max-width: 100%;
     }
     /* Searched-user result row — works both in the mini-table and in the real table */
     table.beatmap-scoreboard-table__table tr[data-oep-user-search-result] > td.beatmap-scoreboard-table__cell,
@@ -1750,9 +1730,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       box-shadow: inset 3px 0 0 rgba(167, 139, 250, 0.55);
     }
     /* Cloned row includes osu-web’s hover-only ⋯ menu column; hide for lookup result */
-    .oep-user-search__result thead th.beatmap-scoreboard-table__header--popup-menu {
-      display: none !important;
-    }
     tr[data-oep-user-search-result] > td.beatmap-scoreboard-table__popup-menu {
       display: none !important;
     }
@@ -2108,15 +2085,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     const icon = btn.querySelector(".mod__icon[data-acronym]");
     const a = icon?.getAttribute("data-acronym")?.trim().toUpperCase();
     return a || "";
-  }
-
-  /**
-   * @param {HTMLElement} btn
-   */
-  function modStableColumn(btn) {
-    const ac = modButtonAcronym(btn);
-    if (ac && STABLE_MOD_ACRONYMS.has(ac)) return true;
-    return false;
   }
 
   /**
@@ -3048,7 +3016,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     if (isWildcardFeatureAvailable()) {
       return mergeId === MERGED_MOD_DT_NC ? 4 : 5;
     }
-    return mergeId === MERGED_MOD_DT_NC ? 3 : 3;
+    return 3;
   }
 
   function finishMergedModStepApply(modsEl, mergeId, step) {
@@ -4172,10 +4140,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           [SCOREBOARD_TOOLS_ROW_ATTR]: "1",
         })
       );
-      placeBeatmapScoreboardToolsRow(scoreboardRoot, row);
-    } else {
-      placeBeatmapScoreboardToolsRow(scoreboardRoot, row);
     }
+    placeBeatmapScoreboardToolsRow(scoreboardRoot, row);
     return row;
   }
 
@@ -4222,11 +4188,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    */
   function insertBeatmapRateEditFilterBar(scoreboardRoot, wrap) {
     const toolsRow = ensureBeatmapScoreboardToolsRow(scoreboardRoot);
-    if (wrap.parentElement !== toolsRow) {
-      toolsRow.appendChild(wrap);
-    } else {
-      toolsRow.appendChild(wrap);
-    }
+    toolsRow.appendChild(wrap);
   }
 
   /**
@@ -4500,7 +4462,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       const goBtn = wrap.querySelector(".oep-user-search__btn--go");
       const resetBtn = wrap.querySelector(".oep-user-search__btn--reset");
       const statusEl = wrap.querySelector(".oep-user-search__status");
-      const resultEl = wrap.querySelector(".oep-user-search__result");
       const configured = auth.isConfigured();
       wrap.classList.toggle("oep-user-search--no-api", !configured);
       if (input instanceof HTMLInputElement && input.disabled !== !configured) {
@@ -4514,7 +4475,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       }
       if (!configured) {
         if (resetBtn instanceof HTMLElement) setHiddenIfChanged(resetBtn, true);
-        if (resultEl && resultEl.firstChild) resultEl.replaceChildren();
         if (input instanceof HTMLInputElement && input.value) input.value = "";
         setTextIfChanged(statusEl, NO_API_STATUS);
         const boardRoot = findBeatmapScoreboardRoot();
@@ -4573,8 +4533,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         "aria-live": "polite",
       });
 
-      const resultEl = el("div", { class: "oep-user-search__result" });
-
       const wrap = el(
         "div",
         { class: "oep-user-search", [MARKER_ATTR]: "1" },
@@ -4586,14 +4544,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           resetBtn,
         ),
         statusEl,
-        resultEl,
       );
 
       const doReset = () => {
         const boardRoot = findBeatmapScoreboardRoot();
         const mods = boardRoot?.querySelector(".beatmapset-scoreboard__mods");
         clearUserSearchMergedLeaderboard(boardRoot, mods);
-        resultEl.replaceChildren();
         searchInput.value = "";
         statusEl.textContent = "";
         resetBtn.hidden = true;
@@ -4616,7 +4572,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         if (!beatmapId) return;
 
         searchBtn.disabled = true;
-        resultEl.replaceChildren();
         statusEl.textContent = "Searching…";
 
         try {
@@ -4645,7 +4600,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
               : s,
           );
 
-          resultEl.replaceChildren();
           const ok =
             scoreboardRoot instanceof HTMLElement &&
             renderUserSearchMergedLeaderboard(
@@ -5062,12 +5016,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         )
           return;
         anchor.insertAdjacentElement("beforebegin", child);
-      };
-      const moveAppend = (parent, child) => {
-        if (!(parent instanceof HTMLElement) || !(child instanceof HTMLElement))
-          return;
-        if (child.parentElement === parent) return;
-        parent.appendChild(child);
       };
 
       const replyButton = Array.from(
@@ -5617,6 +5565,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    * @param {string} beatmapsetId
    * @returns {() => void}
    */
+  // eslint-disable-next-line no-unused-vars -- B54: never wired up; WS-30 connects it.
   function startBeatmapDiscussionLandingRedirectManager(pathRe, beatmapsetId) {
     const targetPath = `/beatmapsets/${beatmapsetId}/discussion/-/generalAll/total`;
     const bareDiscussionRe = new RegExp(
@@ -5776,8 +5725,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         if (!id) continue;
         const img = link.querySelector("img");
         const avatar = img instanceof HTMLImageElement ? img.src : "";
-        const name =
-          extractNameFromNode(link, id) || extractNameFromNode(img, id);
+        const name = extractNameFromNode(link, id);
         pushUser(id, avatar, name);
       }
 
@@ -5791,8 +5739,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         if (!id) continue;
         const img = node.querySelector("img");
         const avatar = img instanceof HTMLImageElement ? img.src : "";
-        const name =
-          extractNameFromNode(node, id) || extractNameFromNode(img, id);
+        const name = extractNameFromNode(node, id);
         pushUser(id, avatar, name);
       }
 
@@ -6271,22 +6218,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       }
     }
     return "osu";
-  }
-
-  /**
-   * osu-web wraps values in `td > a.beatmap-scoreboard-table__cell-content`; setting
-   * `td.textContent` strips that link and breaks layout/CSS. Writes go on the `<a>`.
-   * @param {HTMLTableCellElement|null|undefined} td
-   * @param {string} text
-   */
-  function setScoreboardTdPlainText(td, text) {
-    if (!td) return;
-    const a = td.querySelector("a.beatmap-scoreboard-table__cell-content");
-    if (a) {
-      a.replaceChildren(document.createTextNode(text));
-      return;
-    }
-    td.textContent = text;
   }
 
   /**
@@ -7243,11 +7174,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
-   * PP decimals, hit-stat header/cell colors, PP column tint, and rate-edit dimming
-   * for the main HTML table (native osu-web rows and our API-rendered rows).
-   * @param {HTMLElement|null|undefined} scoreboardRoot
-   */
-  /**
    * Returns the first visible leaderboard row that is not the original native rank-#1 entry.
    * Returns null when no override is needed (the native panel already shows the correct score).
    * @param {HTMLElement} scoreboardRoot
@@ -7896,6 +7822,11 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     }
   }
 
+  /**
+   * PP decimals, hit-stat header/cell colors, PP column tint, and rate-edit dimming
+   * for the main HTML table (native osu-web rows and our API-rendered rows).
+   * @param {HTMLElement|null|undefined} scoreboardRoot
+   */
   function refreshBeatmapScoreboardTableEnhancements(scoreboardRoot) {
     syncBeatmapScoreboardPpDecimals(scoreboardRoot);
     syncBeatmapScoreboardHitstatColors(scoreboardRoot);
@@ -7917,27 +7848,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    */
   function startBeatmapScoreboardTableEnhancementsLive(pathRe) {
     let debounceTimer = 0;
-    let refreshRunning = false;
-    let pendingRefresh = false;
     const run = () => {
       debounceTimer = 0;
       if (!pathRe.test(location.pathname)) return;
-      if (refreshRunning) {
-        pendingRefresh = true;
-        return;
-      }
-      refreshRunning = true;
-      try {
-        const root = findBeatmapScoreboardRoot();
-        if (root instanceof HTMLElement) {
-          refreshBeatmapScoreboardTableEnhancements(root);
-        }
-      } finally {
-        refreshRunning = false;
-        if (pendingRefresh) {
-          pendingRefresh = false;
-          schedule();
-        }
+      const root = findBeatmapScoreboardRoot();
+      if (root instanceof HTMLElement) {
+        refreshBeatmapScoreboardTableEnhancements(root);
       }
     };
     const schedule = () => {
@@ -8513,7 +8429,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     const hitstatIndices = [];
     /** @type {Record<number, string>} */
     const hitstatLabelsByIndex = {};
-    ths.forEach((th, i) => {
+    ths.forEach((th) => {
       // osu-web uses `hitstat`-related header classes but the exact class
       // token isn't consistent across themes/skins, so match by substring.
       const isHitstat =
@@ -8723,8 +8639,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     const rawScore = leaderboardTableScoreNumber(score);
     const scoreStr = Number(rawScore).toLocaleString("en-US");
 
-    const ths = [...table.querySelectorAll("thead th")];
-
     if (colMap.rank != null) {
       applyScoreboardTextCellLikeRef(
         tds[colMap.rank],
@@ -8840,12 +8754,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     }
   }
 
-  function removeExtendedApiScoreRows() {
-    document
-      .querySelectorAll(`tr[${EXTENDED_SCORE_ROW_ATTR}]`)
-      .forEach((r) => r.remove());
-  }
-
   /**
    * Read currently enabled mod filters from the scoreboard filter strip.
    * Returns normalized acronyms (e.g. ["HR", "HD"]). "NM" is omitted.
@@ -8945,14 +8853,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         BEATMAPSET_FAV_BTN_FAVOURITED_CLASS,
       );
     };
-  }
-
-  /**
-   * Destroy osu-web qtip on the favourite stat (only used when Expert+ replaces it with the API popover).
-   * @param {HTMLElement|null} el
-   */
-  function destroyFavouriteStatQtip(el) {
-    destroyOsuWebQtipIfBound(el);
   }
 
   /**
@@ -9100,7 +9000,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       clearTimers();
       if (!pathRe.test(location.pathname) || !document.body.contains(header))
         return;
-      destroyFavouriteStatQtip(anchor);
+      destroyOsuWebQtipIfBound(anchor);
       visible = true;
       popover.setAttribute("aria-hidden", "false");
       scrollEl.replaceChildren(
@@ -9166,7 +9066,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
     /** @param {HTMLElement} anchor */
     function onSpanEnter(anchor) {
-      destroyFavouriteStatQtip(anchor);
+      destroyOsuWebQtipIfBound(anchor);
       clearTimers();
       showTimer = window.setTimeout(() => {
         showTimer = 0;
@@ -9187,10 +9087,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       e.stopPropagation();
     }
 
-    /** @param {HTMLElement} span */
     /** @type {AbortController|null} */
     let spanAbort = null;
 
+    /** @param {HTMLElement} span */
     function bindSpan(span) {
       if (span === boundSpan) return;
       unbindSpan();
@@ -9206,7 +9106,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     function unbindSpan() {
       spanAbort?.abort();
       spanAbort = null;
-      if (boundSpan) destroyFavouriteStatQtip(boundSpan);
+      if (boundSpan) destroyOsuWebQtipIfBound(boundSpan);
       boundSpan = null;
     }
 
@@ -9240,7 +9140,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     window.addEventListener("resize", onWinResize, { passive: true });
 
     scheduleTryBind();
-    window.queueMicrotask(scheduleTryBind);
 
     return () => {
       if (moDebounce) window.clearTimeout(moDebounce);
@@ -9774,7 +9673,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
    * @param {string} cfg.buttonText
    * @param {(btn: HTMLButtonElement) => void} cfg.mountButton
    * @param {string} [cfg.buttonIconClass] Font Awesome classes for leading icon (e.g. `fas fa-tags`)
-   * @param {boolean} [cfg.primary]
    * @param {string} [cfg.modalExtraClass]
    * @param {string} [cfg.buttonExtraClass] Extra classes on the open button (e.g. compact placement)
    * @param {(elFn: typeof el) => Node|null|undefined} [cfg.buildModalTitleExtra] Shown after the modal title (left header group)
@@ -9786,7 +9684,6 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       titleId,
       buttonText,
       buttonIconClass = "",
-      primary = false,
       modalExtraClass = "",
       buildBody,
       buildModalTitleExtra,
@@ -9795,8 +9692,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     } = cfg;
 
     const btnClass = `${rootClass}__action-btn${
-      primary ? ` ${rootClass}__action-btn--primary` : ""
-    }${buttonExtraClass ? ` ${buttonExtraClass}` : ""}`;
+      buttonExtraClass ? ` ${buttonExtraClass}` : ""
+    }`;
     const openBtn = buttonIconClass
       ? elFn(
           "button",
