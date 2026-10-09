@@ -5,6 +5,7 @@
  */
 
 import { safeStart } from "../core/lifecycle.js";
+import { startDiscussionLandingRedirect } from "../features/discussion/landing-redirect.js";
 import { startDiscussionPreview } from "../features/discussion/preview.js";
 import {
   DISCUSSION_CSS,
@@ -21,6 +22,11 @@ function init(match) {
   const beatmapsetId = Number(match[1]);
   const bag = createCleanupBag();
 
+  safeStart(
+    bag,
+    () => startDiscussionLandingRedirect(beatmapsetId, OsuExpertPlus.settings),
+    "discussion/landing-redirect",
+  );
   bag.add(manageStyle(DISCUSSION_STYLE_ID, DISCUSSION_CSS).acquire());
   safeStart(
     bag,
