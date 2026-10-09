@@ -4,6 +4,7 @@
  * rows.
  */
 
+import { observe } from "../../core/observe.js";
 import { formatDecimal, parseLocaleNumber } from "../../osu/format.js";
 import { hitstatClassFromLabel } from "../../osu/score.js";
 import { settingIds, settings } from "../legacy.js";
@@ -193,41 +194,26 @@ export function syncBeatmapScoreboardPpValueColor(scoreboardRoot) {
  * @returns {() => void}
  */
 export function startBeatmapScoreboardTableEnhancementsLive(pathRe) {
-  let debounceTimer = 0;
   const run = () => {
-    debounceTimer = 0;
     if (!pathRe.test(location.pathname)) return;
     const root = findBeatmapScoreboardRoot();
     if (root instanceof HTMLElement) {
       refreshBeatmapScoreboardTableEnhancements(root);
     }
   };
-  const schedule = () => {
-    window.clearTimeout(debounceTimer);
-    debounceTimer = window.setTimeout(run, 32);
-  };
-
-  const containsScoreRow = (node) => {
-    if (!(node instanceof HTMLElement)) return false;
-    if (node.classList.contains("beatmap-scoreboard-table__body-row"))
-      return true;
-    return node.querySelector(".beatmap-scoreboard-table__body-row") !== null;
-  };
-
-  const obs = new MutationObserver((records) => {
-    for (const r of records) {
-      for (const node of r.addedNodes) {
-        if (containsScoreRow(node)) {
-          schedule();
-          return;
-        }
-      }
-    }
-  });
-  obs.observe(document.documentElement, { childList: true, subtree: true });
-  schedule();
+  // Not inside observe.mutate: the pass clones mod icons (top panel) that
+  // other subscribers (mod acronyms) still need to see.
+  const unsubscribe = observe.subscribe(
+    {
+      selector: ".beatmap-scoreboard-table__body-row",
+      schedule: 32,
+      label: "scoreboard/table-enhance",
+    },
+    run,
+  );
+  const first = window.setTimeout(run, 32);
   return () => {
-    window.clearTimeout(debounceTimer);
-    obs.disconnect();
+    window.clearTimeout(first);
+    unsubscribe();
   };
 }

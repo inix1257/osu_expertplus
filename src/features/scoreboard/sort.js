@@ -4,6 +4,7 @@
  */
 
 import { leaderboardScoreId } from "../../osu/score.js";
+import { observe } from "../../core/observe.js";
 import { parseLocaleNumber } from "../../osu/format.js";
 import { el } from "../legacy.js";
 import {
@@ -432,18 +433,17 @@ export function startBeatmapScoreboardSortControls(pathRe) {
     syncBeatmapScoreboardHeaderSortUi(root);
   };
 
-  const schedule = () => {
-    window.clearTimeout(debounceTimer);
-    debounceTimer = window.setTimeout(run, 16);
-  };
-
-  const obs = new MutationObserver(schedule);
-  obs.observe(document.documentElement, { childList: true, subtree: true });
-  schedule();
+  // Any childList change: React may re-render a header cell and drop our
+  // button without adding an element. Our own inserts are dropped by mutate.
+  const unsubscribe = observe.subscribe(
+    { schedule: 16, label: "scoreboard/sort-controls" },
+    () => observe.mutate(run),
+  );
+  debounceTimer = window.setTimeout(() => observe.mutate(run), 16);
 
   return () => {
     window.clearTimeout(debounceTimer);
-    obs.disconnect();
+    unsubscribe();
     cleanup();
   };
 }
