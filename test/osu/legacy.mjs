@@ -1,0 +1,62 @@
+/**
+ * Pulls a single function declaration out of a legacy page script (by name)
+ * and evaluates it, so the new `src/osu` helpers can be compared with the code
+ * they replace. Relies on Prettier formatting: the declaration ends at the
+ * first line that is a `}` at the declaration's own indentation.
+ */
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
+
+/** @type {Map<string, string[]>} */
+const fileCache = new Map();
+
+/** @param {string} file  repo-relative path */
+function lines(file) {
+  let l = fileCache.get(file);
+  if (!l) {
+    l = readFileSync(path.join(ROOT, file), "utf8").split(/\r?\n/);
+    fileCache.set(file, l);
+  }
+  return l;
+}
+
+/**
+ * Source text of `function <name>(…) { … }` in `file`.
+ * @param {string} file
+ * @param {string} name
+ * @returns {string}
+ */
+export function legacySource(file, name) {
+  const all = lines(file);
+  const re = new RegExp(`^(\\s*)function ${name}\\(`);
+  const start = all.findIndex((line) => re.test(line));
+  if (start < 0) throw new Error(`${name} not found in ${file}`);
+  const indent = re.exec(all[start])[1];
+  const end = all.findIndex((line, i) => i > start && line === `${indent}}`);
+  if (end < 0) throw new Error(`end of ${name} not found in ${file}`);
+  return all.slice(start, end + 1).join("\n");
+}
+
+/**
+ * Evaluates a legacy function with its free variables supplied by `deps`.
+ * @param {string} file
+ * @param {string} name
+ * @param {Record<string, unknown>} [deps]
+ * @returns {Function}
+ */
+export function legacyFn(file, name, deps = {}) {
+  const names = Object.keys(deps);
+  const body = `"use strict";\n${legacySource(file, name)}\nreturn ${name};`;
+  return new Function(...names, body)(...names.map((n) => deps[n]));
+}
+
+export const BEATMAP_DETAIL = "src/pages/beatmap-detail.js";
+export const USER_PROFILE = "src/pages/user-profile.js";
+export const CARD_EXTRA = "src/utils/beatmap-card-extra.js";
+export const BEATMAP_PREVIEW = "src/utils/beatmap-preview.js";
