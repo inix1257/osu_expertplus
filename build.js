@@ -26,6 +26,7 @@ const FILES = [
   "src/utils/beatmap-card-stats.js",
   "src/utils/mod-icons-as-acronyms.js",
   "src/utils/beatmapsets-listing-mode.js",
+  "src/utils/nav-recent-notification.js",
   "src/pages/beatmapsets-listing.js",
   "src/pages/beatmap-detail.js",
   "src/pages/user-profile.js",
@@ -85,6 +86,7 @@ function build() {
   OsuExpertPlus.settingsPanel.init();
   OsuExpertPlus.modIconsAsAcronyms.install(OsuExpertPlus.settings);
   OsuExpertPlus.beatmapsetsListingMode.installLinkPatcher();
+  OsuExpertPlus.navRecentNotification.install(OsuExpertPlus.settings);
 
   const router = new OsuExpertPlus.Router();
   router.init();

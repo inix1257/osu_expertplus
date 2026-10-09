@@ -5,6 +5,14 @@ window.OsuExpertPlus = window.OsuExpertPlus || {};
 OsuExpertPlus.settings = (() => {
   const FEATURES = [
     {
+      id: "header.navRecentNotification",
+      label: "Latest chat / notification under header badges",
+      description:
+        "Shows the newest unread chat message or notification as a one-line pill under the chat/notification counter in the top-right header (click it to open the matching popup). Read from the page’s own notification data — no extra requests, and nothing is marked as read.",
+      group: "Header",
+      default: true,
+    },
+    {
       id: "userProfile.alwaysShowStats",
       label: "Play count & favourites on beatmap cards",
       description:
@@ -352,6 +360,7 @@ OsuExpertPlus.settings = (() => {
     SCOREBOARD_PLAYER_LOOKUP: "beatmapDetail.scoreboardPlayerLookup",
     PICKER_DIFF_NAMES: "beatmapDetail.pickerDiffNames",
     SCOREBOARD_GLOBAL_RANK: "beatmapDetail.scoreboardGlobalRank",
+    NAV_RECENT_NOTIFICATION: "header.navRecentNotification",
   });
 
   return {
