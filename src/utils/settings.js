@@ -152,7 +152,7 @@ OsuExpertPlus.settings = (() => {
       id: "beatmapDetail.beatmapPreview",
       label: "Gameplay preview on beatmap info",
       description:
-        "On beatmapset info pages, adds an expandable osu!standard gameplay preview (osu-beatmap-renderer + PixiJS loaded from esm.sh when you open it). Uses the site preview MP3.",
+        "On beatmapset info pages, adds an expandable osu!standard gameplay preview (osu-beatmap-renderer + PixiJS loaded from jsDelivr when you open it). Uses the site preview MP3.",
       group: "Beatmap Detail",
       default: true,
     },

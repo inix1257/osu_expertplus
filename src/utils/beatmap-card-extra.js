@@ -660,11 +660,8 @@ OsuExpertPlus.beatmapCardExtra = (() => {
         if (!mode) return;
         const ratings = byMode.get(mode);
         if (!ratings?.length) return;
-        const nums = ratings.filter((n) => Number.isFinite(n));
-        if (!nums.length) return;
-        const hi = Math.max(...nums);
-        const hiStr = formatStarShort(hi);
-        if (!hiStr) return;
+        // ratingsByRulesetFromSet keeps finite ratings only.
+        const hi = Math.max(...ratings);
 
         const wrap = el("span", { class: STAR_RANGE_CLASS });
         const chip = buildStarChip(dc, hi);
@@ -906,15 +903,12 @@ OsuExpertPlus.beatmapCardExtra = (() => {
   }
 
   /**
+   * Removes injected extras from every panel (both card features are off).
    * @param {ParentNode} root
-   * @param {typeof OsuExpertPlus.settings} settings
    */
-  function clearAll(root, settings) {
-    const on =
-      settings.isEnabled(settings.IDS.BEATMAP_CARD_EXTRA_INFO) ||
-      settings.isEnabled(settings.IDS.BEATMAP_CARD_DIFFICULTY_RANGE);
+  function stripAllPanels(root) {
     root.querySelectorAll(".beatmapset-panel").forEach((panel) => {
-      if (!on) stripInjections(panel);
+      stripInjections(panel);
     });
   }
 
@@ -988,10 +982,8 @@ OsuExpertPlus.beatmapCardExtra = (() => {
 
   /**
    * osu-web often uses XMLHttpRequest for JSON; complements the `fetch` hook.
-   * @returns {() => void}
-   */
-  /**
    * @param {() => boolean} wantIngest
+   * @returns {() => void}
    */
   function installXhrHook(wantIngest) {
     const w = pageWin();
@@ -1224,7 +1216,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       const on = wantIngest();
       if (on) style.inject();
       else style.remove();
-      clearAll(document, settings);
+      if (!on) stripAllPanels(document);
       if (on) {
         ingestFromJsonBeatmapsScript();
         profileExtraPrefetchWantIngest = wantIngest;

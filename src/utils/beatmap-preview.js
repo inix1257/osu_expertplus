@@ -319,7 +319,8 @@ OsuExpertPlus.beatmapPreview = (() => {
   }
 
   /**
-   * Hard teardown (e.g. future "reset renderer" / tests). Not used on normal SPA navigation.
+   * Destroys the shared engine and its root. Used when the preview is collapsed
+   * and when switching to a non-osu! ruleset; SPA navigation only parks it.
    */
   function destroySharedEngineHard() {
     try {
@@ -1503,7 +1504,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       }
 
       if (isPlayKey) {
-        if (t instanceof HTMLButtonElement && t !== canvasHost) return;
+        if (t instanceof HTMLButtonElement) return;
         if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) {
           return;
         }
@@ -1907,8 +1908,6 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
   }
 
   return {
-    loadBeatmapEngineClass,
-    fetchOsuFileText,
     mountBeatmapsetInfoPreview,
   };
 })();

@@ -200,9 +200,7 @@ OsuExpertPlus.beatmapsetsListingMode = (() => {
   }
 
   return {
-    getPreferredMode,
     installLinkPatcher,
     startPageBehavior,
-    patchListingAnchors,
   };
 })();
