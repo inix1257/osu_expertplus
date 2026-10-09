@@ -660,6 +660,13 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
     if (b?.id != null) beatmapIdsInSet.add(Number(b.id));
   }
   let omdbSetFetchSucceeded = false;
+  /**
+   * The set's ratings request: picker hovers and other re-syncs must not
+   * replace "Loading…" or an error with "No ratings" (B57).
+   * @type {"loading"|"ready"|"error"}
+   */
+  let loadState = "loading";
+  let loadError = "";
 
   /** @type {Map<number, object>} */
   let byBeatmapId = new Map();
@@ -721,6 +728,15 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
 
   function syncDisplay() {
     if (disposed || !pathRe.test(location.pathname)) return;
+    if (loadState !== "ready") {
+      bodyEl.textContent = loadState === "error" ? loadError : "Loading OMDB…";
+      bodyEl.classList.toggle(
+        `${OEP_OMDB_ROW_CLASS}__body--error`,
+        loadState === "error",
+      );
+      bodyEl.classList.remove(`${OEP_OMDB_ROW_CLASS}__body--muted`);
+      return;
+    }
     const id = currentDisplayedBeatmapId();
     if (id == null) {
       bodyEl.textContent = "";
@@ -822,12 +838,22 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
     setVoteBusy(true);
     try {
       await omdb().rateBeatmap(id, score);
-      await reloadSetRatings();
     } catch (err) {
       voteStatus.textContent = err?.message
         ? String(err.message)
         : "Could not submit rating.";
       voteStatus.classList.add(`${OEP_OMDB_VOTE_CLASS}__status--error`);
+      setVoteBusy(false);
+      return;
+    }
+    // The vote went through; a failed refresh is reported as such (B58).
+    try {
+      await reloadSetRatings();
+    } catch (_) {
+      if (!disposed) {
+        voteStatus.textContent =
+          "Rating saved, but OMDB ratings could not be refreshed.";
+      }
     } finally {
       setVoteBusy(false);
     }
@@ -861,17 +887,19 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
         if (bid != null) byBeatmapId.set(Number(bid), item);
       }
       omdbSetFetchSucceeded = true;
+      loadState = "ready";
       bodyEl.classList.remove(`${OEP_OMDB_ROW_CLASS}__body--error`);
       voteRow.style.display = "";
       syncDisplay();
     })
     .catch((err) => {
       if (disposed) return;
-      bodyEl.textContent = err?.message
+      loadState = "error";
+      loadError = err?.message
         ? String(err.message)
         : "Could not load OMDB ratings.";
-      bodyEl.classList.add(`${OEP_OMDB_ROW_CLASS}__body--error`);
       voteRow.style.display = "none";
+      syncDisplay();
     });
 
   picker.addEventListener("mouseover", onPickerMouseOver);
