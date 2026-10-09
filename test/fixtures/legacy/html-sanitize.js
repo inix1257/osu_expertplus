@@ -1,4 +1,9 @@
-/** Allowlist HTML sanitizer for locally rendered previews (BBCode, markdown). */
+/*
+ * Frozen copy of src/utils/html-sanitize.js (WS-02), which the pages used
+ * until WS-30/WS-40 switched to src/editor/sanitize.js (snapshot of e2c81bf).
+ * Loaded by test/editor/helpers.mjs for the old-pipeline golden tests. Not
+ * loaded by the userscript; do not edit.
+ */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 

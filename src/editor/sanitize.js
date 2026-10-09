@@ -1,7 +1,8 @@
 /**
  * Allowlist HTML sanitizer for the locally rendered previews: an ES module
- * port of `src/utils/html-sanitize.js` (WS-02), which the pages keep using
- * until WS-30/WS-40 switch them over.
+ * port of the WS-02 `src/utils/html-sanitize.js`, which the pages used until
+ * WS-30/WS-40 (now a frozen copy in test/fixtures/legacy/ for the golden
+ * tests).
  *
  * The WS-25 renderers (`bbcode-render.js`, `markdown-render.js`) build DOM
  * nodes directly and never parse HTML, so for them this is a second line of

@@ -12,7 +12,6 @@
 import "./core/bridge.js";
 import { Router } from "./core/router.js";
 import "./utils/dom.js";
-import "./utils/html-sanitize.js";
 import "./utils/difficulty-colours.js";
 import "./utils/auth.js";
 import "./utils/api.js";

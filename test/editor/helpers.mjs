@@ -12,7 +12,9 @@ import {
 
 /** @returns {{ window: any, document: Document, OsuExpertPlus: any }} */
 export function setupWindow() {
-  const { window, OsuExpertPlus } = loadScripts(["src/utils/html-sanitize.js"]);
+  const { window, OsuExpertPlus } = loadScripts([
+    "test/fixtures/legacy/html-sanitize.js",
+  ]);
   return { window, document: window.document, OsuExpertPlus };
 }
 
