@@ -11,19 +11,14 @@ import {
   pickerLinkBeatmapId,
   subscribePickerChanges,
 } from "./picker.js";
+import { formatStars, STAR_FORMAT } from "../../osu/format.js";
 
 /**
  * @param {number} n
  * @returns {string}
  */
 export function formatBeatmapsetHeaderStarRatingText(n) {
-  const v = Number(n);
-  if (!Number.isFinite(v)) return "";
-  const floored = Math.floor(v * 100) / 100;
-  return floored.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatStars(n, STAR_FORMAT.header);
 }
 
 /**
