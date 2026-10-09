@@ -48,6 +48,7 @@ export default [
     files: [
       "src/main.js",
       "src/core/**/*.js",
+      "src/api/**/*.js",
       "src/osu/**/*.js",
       "src/editor/**/*.js",
       "src/features/**/*.js",

@@ -609,51 +609,28 @@ OsuExpertPlus.api = (() => {
     );
   }
 
-  const KIRINO_INSPECTOR_PROFILE =
-    "https://api.kirino.sh/inspector/extension/profile";
-
-  const KIRINO_MODE_INDEX = {
-    osu: 0,
-    taiko: 1,
-    fruits: 2,
-    mania: 3,
-  };
+  /*
+   * Kirino lives in src/api/kirino.js (OsuExpertPlus.kirino); these keep the
+   * old names for existing callers.
+   */
 
   /**
-   * Kirino score-inspector profile payload (country rank, ranked-score rank, etc.).
-   * POST body matches the osu! web extension: `{ user_id, mode, username }`.
-   * @param {string} userId
-   * @param {number} modeIndex  0 osu, 1 taiko, 2 fruits, 3 mania
+   * @param {string|number} userId
+   * @param {number} modeIndex
    * @param {string} [username]
    * @returns {Promise<any>}
    */
   function fetchKirinoInspectorProfile(userId, modeIndex, username = "") {
-    const body = {
-      user_id: String(userId),
-      mode: modeIndex,
-      username: String(username || ""),
-    };
-    return fetch(KIRINO_INSPECTOR_PROFILE, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    }).then((resp) => {
-      if (!resp.ok) {
-        throw new Error(
-          `[osu! Expert+] Kirino inspector ${resp.status}: ${KIRINO_INSPECTOR_PROFILE}`,
-        );
-      }
-      return resp.json();
-    });
+    return OsuExpertPlus.kirino.fetchInspectorProfile(
+      userId,
+      modeIndex,
+      username,
+    );
   }
 
-  /** @param {string} ruleset  osu | taiko | fruits | mania */
+  /** @param {string} ruleset */
   function kirinoModeIndexForRuleset(ruleset) {
-    const n = KIRINO_MODE_INDEX[ruleset];
-    return typeof n === "number" ? n : 0;
+    return OsuExpertPlus.kirino.modeIndexForRuleset(ruleset);
   }
 
   /**
