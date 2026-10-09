@@ -18,7 +18,7 @@ import {
   settings,
   waitForElement,
 } from "../../legacy.js";
-import { clearWildcardMergedLeaderboard } from "../merged-leaderboard.js";
+import { clearMergedLeaderboard } from "../merged-leaderboard.js";
 import { destroyOsuWebQtipOnElementSubtree } from "../../osu-web-qtip.js";
 import { runClicks } from "./click-runner.js";
 import {
@@ -79,7 +79,7 @@ export function resetBeatmapScoreboardModSelection(modsEl) {
     }
     const scoreboardRoot = modsEl.closest(".beatmapset-scoreboard");
     if (scoreboardRoot instanceof HTMLElement) {
-      clearWildcardMergedLeaderboard(scoreboardRoot);
+      clearMergedLeaderboard(scoreboardRoot, "wildcard");
     }
   }
 
@@ -211,7 +211,7 @@ export function teardownBeatmapModGrid(modsEl) {
   clearWildcardState();
   const scoreboardRoot = modsEl.closest(".beatmapset-scoreboard");
   if (scoreboardRoot instanceof HTMLElement) {
-    clearWildcardMergedLeaderboard(scoreboardRoot);
+    clearMergedLeaderboard(scoreboardRoot, "wildcard");
   }
 
   modsEl.removeAttribute(MOD_GRID_ATTR);
@@ -678,7 +678,7 @@ export async function setupBeatmapScoreboardModGrid() {
     wildcardBeatmapKey = key;
     if (!modsEl || getWildcardMods().length === 0) return;
     if (scoreboardRootForTabs instanceof HTMLElement) {
-      clearWildcardMergedLeaderboard(scoreboardRootForTabs);
+      clearMergedLeaderboard(scoreboardRootForTabs, "wildcard");
     }
     scheduleWildcardFetch(modsEl);
   };
@@ -741,7 +741,7 @@ export async function setupBeatmapScoreboardModGrid() {
       clearWildcardState();
       const scoreboardRoot = modsEl.closest(".beatmapset-scoreboard");
       if (scoreboardRoot instanceof HTMLElement) {
-        clearWildcardMergedLeaderboard(scoreboardRoot);
+        clearMergedLeaderboard(scoreboardRoot, "wildcard");
       }
       syncBeatmapModGridCloneHighlights(modsEl);
       syncBeatmapScoreboardModResetButton(modsEl);

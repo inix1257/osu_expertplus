@@ -21,14 +21,34 @@ import {
   SCOREBOARD_USER_SEARCH_ATTR,
 } from "./context.js";
 import {
-  clearUserSearchMergedLeaderboard,
-  renderUserSearchMergedLeaderboard,
+  clearMergedLeaderboard,
+  renderMergedLeaderboard,
 } from "./merged-leaderboard.js";
+import { getWildcardMods } from "./mod-filter/state.js";
+import {
+  cancelWildcardFetch,
+  scheduleWildcardFetch,
+} from "./mod-filter/wildcard.js";
 import {
   insertBeatmapScoreUserSearchBar,
   isPlayerLookupSearchBarPlacedCorrectly,
   removeEmptyBeatmapScoreboardToolsRows,
 } from "./tools-row.js";
+
+/**
+ * Remove lookup rows and show osu-web's rows again.
+ * @param {HTMLElement|null|undefined} scoreboardRoot
+ * @param {boolean} [rescheduleWildcard=true] When true and wildcard mods are active, re-runs the merged fetch (e.g. user clicked Reset).
+ */
+function clearLookupResults(scoreboardRoot, rescheduleWildcard = true) {
+  if (!(scoreboardRoot instanceof HTMLElement)) return;
+  clearMergedLeaderboard(scoreboardRoot, "lookup");
+  if (!rescheduleWildcard) return;
+  const mods = scoreboardRoot.querySelector(SCOREBOARD_MODS_SEL);
+  if (mods instanceof HTMLElement && getWildcardMods().length > 0) {
+    scheduleWildcardFetch(mods);
+  }
+}
 
 /** Username text from the signed-in account link in the site header, if any. */
 function getLoggedInUsernameFromNav() {
@@ -48,7 +68,7 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
     "Add osu! API OAuth credentials in Expert+ settings to search players.";
   let debounceTimer = 0;
 
-  // clearUserSearchMergedLeaderboard refreshes the whole table (DOM writes), so only
+  // clearLookupResults refreshes the whole table (DOM writes), so only
   // call it when there is something to clear; otherwise the document observer below
   // re-runs us forever.
   const hasUserSearchResultRows = (scoreboardRoot) =>
@@ -58,11 +78,7 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
   const cleanup = () => {
     document.querySelectorAll(".beatmapset-scoreboard").forEach((el) => {
       if (hasUserSearchResultRows(el)) {
-        clearUserSearchMergedLeaderboard(
-          el,
-          el.querySelector(SCOREBOARD_MODS_SEL),
-          false,
-        );
+        clearLookupResults(el, false);
       }
     });
     document.querySelectorAll(`[${MARKER_ATTR}]`).forEach((n) => n.remove());
@@ -89,8 +105,7 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
       setTextIfChanged(statusEl, NO_API_STATUS);
       const boardRoot = findBeatmapScoreboardRoot();
       if (hasUserSearchResultRows(boardRoot)) {
-        const mods = boardRoot.querySelector(SCOREBOARD_MODS_SEL);
-        clearUserSearchMergedLeaderboard(boardRoot, mods, false);
+        clearLookupResults(boardRoot, false);
       }
     } else if (statusEl && statusEl.textContent === NO_API_STATUS) {
       statusEl.textContent = "";
@@ -158,8 +173,7 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
 
     const doReset = () => {
       const boardRoot = findBeatmapScoreboardRoot();
-      const mods = boardRoot?.querySelector(SCOREBOARD_MODS_SEL);
-      clearUserSearchMergedLeaderboard(boardRoot, mods);
+      clearLookupResults(boardRoot);
       searchInput.value = "";
       statusEl.textContent = "";
       resetBtn.hidden = true;
@@ -220,7 +234,10 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
 
         const ok =
           scoreboardRoot instanceof HTMLElement &&
-          renderUserSearchMergedLeaderboard(scoreboardRoot, scores, user.team);
+          renderMergedLeaderboard(scoreboardRoot, "lookup", scores, {
+            team: user.team,
+            beforeInsert: cancelWildcardFetch,
+          });
         if (ok) {
           statusEl.textContent = "";
         } else {

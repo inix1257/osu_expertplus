@@ -12,8 +12,8 @@ import {
   WILDCARD_LOADING_CLASS,
 } from "../context.js";
 import {
-  clearWildcardMergedLeaderboard,
-  renderWildcardMergedLeaderboard,
+  clearMergedLeaderboard,
+  renderMergedLeaderboard,
 } from "../merged-leaderboard.js";
 import { EXTENDED_LB_LIMIT } from "../scores-limit.js";
 import { sortLeaderboardScoresLikeTable } from "../sort.js";
@@ -317,7 +317,7 @@ export function scheduleWildcardFetch(modsEl) {
   if (!(scoreboardRoot instanceof HTMLElement)) return;
 
   if (wildcards.length === 0) {
-    clearWildcardMergedLeaderboard(scoreboardRoot);
+    clearMergedLeaderboard(scoreboardRoot, "wildcard");
     clearWildcardLoadingOverlays();
     syncActiveModsToOriginals(modsEl);
     return;
@@ -364,7 +364,7 @@ export function scheduleWildcardFetch(modsEl) {
         // Difficulty/ruleset changed while fetching: these scores belong to another map.
         if (getWildcardBeatmapKey() !== fetchKey) return;
         if (merged.length > 0) {
-          renderWildcardMergedLeaderboard(scoreboardRoot, merged);
+          renderMergedLeaderboard(scoreboardRoot, "wildcard", merged);
         }
       })
       .catch(() => {
