@@ -1784,22 +1784,31 @@ OsuExpertPlus.pages.userProfile = (() => {
   const PLAY_DETAIL_LIST_STALE_SEL = `.play-detail-list[${PLAY_DETAIL_LIST_PROCESSED_ATTR}]`;
 
   /**
+   * Ownership / cancellation rules (B07):
+   * - `run` belongs to the profile `init` call. Every observer, listener and DOM
+   *   change made here registers its undo in `run.cleanupFns` as soon as it is
+   *   made, so init's cleanup undoes it synchronously on navigation, even while
+   *   this function is still awaiting.
+   * - After every `await`, bail out if `run.isDisposed()`: the page may already
+   *   belong to the next profile/mode.
+   * - Shared styles (play-detail, place numbers) are owned by `init`; never
+   *   remove them from here.
    * @param {string|number} userId
    * @param {string} mode
-   * @returns {Promise<function>}  Returns a cleanup fn.
+   * @param {{ isDisposed: () => boolean, cleanupFns: function[] }} run
+   * @returns {Promise<void>}
    */
-  async function initScoreFeatures(userId, mode) {
-    const cleanupFns = [];
-
-    playDetailStyle.inject();
-    cleanupFns.push(playDetailStyle.remove);
+  async function initScoreFeatures(userId, mode, run) {
+    const { isDisposed, cleanupFns } = run;
 
     await waitForStaleElementToLeave(PLAY_DETAIL_LIST_STALE_SEL);
+    if (isDisposed()) return;
 
     await waitForElement(
       '[data-page-id="top_ranks"] .play-detail-list',
       15000,
     ).catch(() => {});
+    if (isDisposed()) return;
 
     const scoreSections = Array.from(
       document.querySelectorAll(".play-detail-list"),
@@ -1814,6 +1823,11 @@ OsuExpertPlus.pages.userProfile = (() => {
     setScoreListLayoutClass(
       scoreSections,
       settings.isEnabled(SCORE_HIT_STATISTICS_ID),
+    );
+    // Registered first so it runs first, as the old returned cleanup did.
+    cleanupFns.push(() => setScoreListLayoutClass(scoreSections, false));
+    cleanupFns.push(() =>
+      scoreSections.forEach(({ listEl }) => revertPlaceNumbers(listEl)),
     );
     scoreSections.forEach(({ listEl }) =>
       syncScoreListPpDecimalsWidthClass(listEl),
@@ -1850,8 +1864,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       const { listEl, type } = section;
       // Both fetchers share in-flight/cached results, so calling again is cheap;
       // fetchScores only loads further pages when more rows are rendered.
-      scoresMap.set(
-        type,
+      const scores =
         type === "most_watched"
           ? await fetchMostWatchedScores(userId, mode)
           : await fetchScores(
@@ -1859,8 +1872,9 @@ OsuExpertPlus.pages.userProfile = (() => {
               mode,
               type,
               listEl.querySelectorAll(".play-detail").length,
-            ),
-      );
+            );
+      if (isDisposed()) return;
+      scoresMap.set(type, scores);
       processElements(
         Array.from(listEl.querySelectorAll(".play-detail")),
         scoresMap.get(type),
@@ -1871,12 +1885,14 @@ OsuExpertPlus.pages.userProfile = (() => {
     const mostWatchedSections = scoreSections.filter(
       (s) => s.type === "most_watched",
     );
+    cleanupFns.push(() =>
+      mostWatchedSections.forEach(({ listEl }) => revertMostWatchedPp(listEl)),
+    );
     if (mostWatchedSections.length > 0) {
       if (!scoresMap.has("most_watched")) {
-        scoresMap.set(
-          "most_watched",
-          await fetchMostWatchedScores(userId, mode),
-        );
+        const mw = await fetchMostWatchedScores(userId, mode);
+        if (isDisposed()) return;
+        scoresMap.set("most_watched", mw);
       }
       const mwScores = scoresMap.get("most_watched");
       mostWatchedSections.forEach(({ listEl }) =>
@@ -1889,6 +1905,7 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
       await Promise.all(scoreSections.map(_loadAndApplyStats));
+      if (isDisposed()) return;
       if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) {
         scoreSections.forEach(({ listEl }) => applyPpDecimals(listEl));
       }
@@ -2000,6 +2017,7 @@ OsuExpertPlus.pages.userProfile = (() => {
               statsFetchPending = true;
               _loadAndApplyStats(section).then(() => {
                 statsFetchPending = false;
+                if (isDisposed()) return;
                 if (settings.isEnabled(SCORE_PP_DECIMALS_ID))
                   applyPpDecimals(listEl);
               });
@@ -2016,6 +2034,7 @@ OsuExpertPlus.pages.userProfile = (() => {
                 statsFetchPending = true;
                 fetchScores(userId, mode, type, allEls.length).then((more) => {
                   statsFetchPending = false;
+                  if (isDisposed()) return;
                   scoresMap.set(type, more);
                   injectMissingStats(
                     Array.from(listEl.querySelectorAll(".play-detail")),
@@ -2123,10 +2142,9 @@ OsuExpertPlus.pages.userProfile = (() => {
         if (type === "most_watched") {
           mostWatchedSections.push(section);
           if (!scoresMap.has("most_watched")) {
-            scoresMap.set(
-              "most_watched",
-              await fetchMostWatchedScores(userId, mode),
-            );
+            const mw = await fetchMostWatchedScores(userId, mode);
+            if (isDisposed()) return;
+            scoresMap.set("most_watched", mw);
           }
           applyMostWatchedPp(listEl, scoresMap.get("most_watched"));
           if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
@@ -2134,6 +2152,7 @@ OsuExpertPlus.pages.userProfile = (() => {
 
         if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
           await _loadAndApplyStats(section);
+          if (isDisposed()) return;
           if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
         }
       } else if (type === "most_watched") {
@@ -2202,20 +2221,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       }),
     );
 
-    cleanupFns.push(() => {
-      scoreSections.forEach(({ listEl }) => revertPlaceNumbers(listEl));
-      scorePlaceNumberStyle.remove();
-      mostWatchedSections.forEach(({ listEl }) => revertMostWatchedPp(listEl));
-    });
-
-    return () => {
-      setScoreListLayoutClass(scoreSections, false);
-      cleanupFns.forEach((fn) => {
-        try {
-          fn();
-        } catch (_) {}
-      });
-    };
   }
 
   function getUserIdFromUrl() {
@@ -3715,6 +3720,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     );
   }
 
+  /** Inject only: the shared play-detail style is removed by profile `init` (B07). */
   function ensurePlayDetailStylesForRecent() {
     playDetailStyle.inject();
   }
@@ -3818,10 +3824,13 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   /**
    * Mount once per (list element identity): section below official Recent plays + show more.
+   * The official list is only removed once our list rendered successfully (B08).
    * @param {string} userId
    * @param {string} mode
+   * @param {() => boolean} isCancelled  true once the profile run was cleaned up;
+   *   checked after every await because the page may belong to the next profile.
    */
-  async function tryMountRecentScoresWithFails(userId, mode) {
+  async function tryMountRecentScoresWithFails(userId, mode, isCancelled) {
     if (document.querySelector(`.${RECENT_FAILS_WRAP_CLASS}`)) return;
 
     const listRoot = findRecentPlaysListRoot();
@@ -3888,6 +3897,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     try {
       scores = await fetchRecentScoresIncludingFails(userId, mode);
     } catch {
+      if (isCancelled()) return;
       innerList.textContent = "";
       innerList.appendChild(
         el(
@@ -3898,6 +3908,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       );
       return;
     }
+    if (isCancelled()) return;
 
     innerList.textContent = "";
     if (!scores.length) {
@@ -3916,6 +3927,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       scores.some((s) => Array.isArray(s.mods) && s.mods.length > 0)
     ) {
       modTemplate = await waitForOsuModTemplate(2500);
+      if (isCancelled()) return;
     }
     const tpl = modTemplate instanceof HTMLElement ? modTemplate : null;
 
@@ -3978,7 +3990,9 @@ OsuExpertPlus.pages.userProfile = (() => {
       clearTimeout(_recentFailsDebounce);
       _recentFailsDebounce = setTimeout(() => {
         if (cancelled) return;
-        tryMountRecentScoresWithFails(userId, mode).catch(() => {});
+        tryMountRecentScoresWithFails(userId, mode, () => cancelled).catch(
+          () => {},
+        );
       }, 200);
     };
 
@@ -9675,9 +9689,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     };
   }
 
-  let _scoreCleanup = null;
-  let _recentFailsCleanup = null;
-
   /**
    * @param {RegExpMatchArray} _match
    * @returns {function}
@@ -9719,7 +9730,13 @@ OsuExpertPlus.pages.userProfile = (() => {
       cleanups.push(startContentsReorderManager());
     }
 
+    // B07: this run owns the shared score styles and every cleanup registered by
+    // the async score features, so a stale run can never undo the next page's
+    // setup. The cleanup below runs synchronously before the next init.
     let disposed = false;
+    let recentFailsCleanup = null;
+    const scoreRun = { isDisposed: () => disposed, cleanupFns: [] };
+    playDetailStyle.inject();
 
     // The router fires on pushState, before the new profile is rendered: wait for
     // the page's own data so scores are never fetched for the previous ruleset.
@@ -9727,11 +9744,8 @@ OsuExpertPlus.pages.userProfile = (() => {
       .then((target) => {
         if (disposed || !target) return;
         const { userId, mode } = target;
-        _recentFailsCleanup = startRecentScoresWithFailsObserver(userId, mode);
-        return initScoreFeatures(userId, mode).then((cleanup) => {
-          if (disposed) cleanup?.();
-          else _scoreCleanup = cleanup;
-        });
+        recentFailsCleanup = startRecentScoresWithFailsObserver(userId, mode);
+        return initScoreFeatures(userId, mode, scoreRun);
       })
       .catch(() => {});
 
@@ -9742,14 +9756,17 @@ OsuExpertPlus.pages.userProfile = (() => {
           fn();
         } catch (_) {}
       });
-      if (typeof _recentFailsCleanup === "function") {
-        _recentFailsCleanup();
-        _recentFailsCleanup = null;
+      if (typeof recentFailsCleanup === "function") {
+        recentFailsCleanup();
+        recentFailsCleanup = null;
       }
-      if (typeof _scoreCleanup === "function") {
-        _scoreCleanup();
-        _scoreCleanup = null;
-      }
+      scoreRun.cleanupFns.splice(0).forEach((fn) => {
+        try {
+          fn();
+        } catch (_) {}
+      });
+      scorePlaceNumberStyle.remove();
+      playDetailStyle.remove();
     };
   }
 
