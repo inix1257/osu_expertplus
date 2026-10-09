@@ -53,3 +53,19 @@ A userscript for [osu.ppy.sh](https://osu.ppy.sh). Some QoL changes are included
 - Discussion pages default to the Total tab (ranked mapsets usually send you to praise tab by default)
 - Markdown/preview support for modding thread
 - Show username and avatar on voters list
+
+# Development
+
+Requires Node.js 22.13+.
+
+```sh
+npm ci            # dev tools only; nothing from node_modules ships in the userscript
+npm run build     # bundles src/main.js → dist/osu-expertplus.user.js (+ local dev loader)
+npm run check     # lint + tests + build
+```
+
+- `npm run build:dev` builds the same file with an inline source map, for testing in the browser. Don't commit it.
+- `npm run build` also writes `dist/osu-expertplus.dev.user.js` (gitignored). Install it in Tampermonkey (with "Allow access to file URLs") to load your local build on every page reload.
+- Load order lives in `src/main.js`. New files must be imported there after the modules they use.
+
+**Release** (maintainer only): `npm version patch --no-git-tag-version` → `npm run build` → commit `package.json`, `package-lock.json` and `dist/` on `main`. `npm run check:dist` verifies that the committed `dist/` matches the sources.
