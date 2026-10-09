@@ -12,7 +12,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     waitForElement,
     waitForStaleElementToLeave,
     manageStyle,
-    createCleanupBag,
     parseLocaleNumber,
     formatDecimalPp,
   } = OsuExpertPlus.dom;
@@ -928,7 +927,6 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   /**
-
    * @param {Object} score
    * @returns {number|null}
    */
@@ -1021,17 +1019,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     const midCol = rowEl.querySelector(".play-detail__score-detail-top-right");
     const acc = rowEl.querySelector(".play-detail__accuracy");
     if (!midCol || !acc || acc.closest(".oep-mid-cols")) return;
-
-    const legacy = rowEl.querySelector(".oep-accuracy-combo-row");
-    if (legacy) {
-      legacy.querySelector(".oep-combo-inline")?.remove();
-      const a = legacy.querySelector(".play-detail__accuracy");
-      const p = legacy.parentNode;
-      if (a && p) {
-        p.insertBefore(a, legacy);
-        legacy.remove();
-      }
-    }
 
     const achieved = score?.max_combo ?? 0;
     const maxCombo = _beatmapMaxComboFromScore(score);
@@ -1224,15 +1211,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       midCols.remove();
       return;
     }
-    const wrap = rowEl.querySelector(".oep-accuracy-combo-row");
-    if (!wrap) {
-      rowEl.querySelector(".oep-combo-inline")?.remove();
-      return;
-    }
-    const acc = wrap.querySelector(".play-detail__accuracy");
-    const parent = wrap.parentNode;
-    if (acc && parent) parent.insertBefore(acc, wrap);
-    wrap.remove();
+    rowEl.querySelector(".oep-combo-inline")?.remove();
   }
 
   /** Remove all injected stats rows from a list element. */
@@ -1283,16 +1262,6 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   function applyHideWeightedPp(listEl) {
     listEl.querySelectorAll(".play-detail").forEach((rowEl) => {
-      const col = rowEl.querySelector(".oep-pp-col");
-      if (col) {
-        const ppEl = col.querySelector(".play-detail__pp");
-        if (ppEl && col.parentNode) {
-          col.parentNode.insertBefore(ppEl, col);
-        }
-        col.remove();
-      }
-      rowEl.querySelector(".oep-weighted-pp-label")?.remove();
-
       rowEl
         .querySelector(".play-detail__weighted-pp")
         ?.classList.add("oep-hidden");
@@ -1960,12 +1929,9 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     function mountScoreListObserver(section) {
       const { listEl, type } = section;
-      let sectionObsBusy = false;
       let statsFetchPending = false;
 
       const obs = new MutationObserver((mutations) => {
-        if (sectionObsBusy) return;
-
         const hasNewRows = mutations.some((m) => {
           for (const node of m.addedNodes) {
             if (!(node instanceof Element)) continue;
@@ -2008,80 +1974,74 @@ OsuExpertPlus.pages.userProfile = (() => {
 
         if (!hasNewRows && !hasPpDecimalOverwrite && !hasMwPpMissing) return;
 
-        sectionObsBusy = true;
-        try {
-          if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
-          applyHideWeightedPp(listEl);
-          if (
-            settings.isEnabled(SCORE_PLACE_NUMBER_ID) &&
-            type === SCORE_PLACE_SECTION_TYPE
-          ) {
-            applyPlaceNumbers(listEl);
-          }
+        if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
+        applyHideWeightedPp(listEl);
+        if (
+          settings.isEnabled(SCORE_PLACE_NUMBER_ID) &&
+          type === SCORE_PLACE_SECTION_TYPE
+        ) {
+          applyPlaceNumbers(listEl);
+        }
 
-          const allEls = Array.from(listEl.querySelectorAll(".play-detail"));
-          if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
-            if (!scoresMap.has(type) && !statsFetchPending) {
-              // Rows appeared before the initial fetch completed (e.g. list was
-              // adopted while empty). Fetch now, then re-apply.
+        const allEls = Array.from(listEl.querySelectorAll(".play-detail"));
+        if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
+          if (!scoresMap.has(type) && !statsFetchPending) {
+            // Rows appeared before the initial fetch completed (e.g. list was
+            // adopted while empty). Fetch now, then re-apply.
+            statsFetchPending = true;
+            _loadAndApplyStats(section).then(() => {
+              statsFetchPending = false;
+              if (isDisposed()) return;
+              if (settings.isEnabled(SCORE_PP_DECIMALS_ID))
+                applyPpDecimals(listEl);
+            });
+          } else if (scoresMap.has(type)) {
+            const scores = scoresMap.get(type);
+            injectMissingStats(allEls, scores);
+            if (
+              type !== "most_watched" &&
+              allEls.length > scores.length &&
+              !statsFetchPending &&
+              !_scoreListComplete(userId, mode, type)
+            ) {
+              // "Show more" revealed rows past the pages fetched so far.
               statsFetchPending = true;
-              _loadAndApplyStats(section).then(() => {
+              fetchScores(userId, mode, type, allEls.length).then((more) => {
                 statsFetchPending = false;
                 if (isDisposed()) return;
+                scoresMap.set(type, more);
+                injectMissingStats(
+                  Array.from(listEl.querySelectorAll(".play-detail")),
+                  more,
+                );
                 if (settings.isEnabled(SCORE_PP_DECIMALS_ID))
                   applyPpDecimals(listEl);
               });
-            } else if (scoresMap.has(type)) {
-              const scores = scoresMap.get(type);
-              injectMissingStats(allEls, scores);
-              if (
-                type !== "most_watched" &&
-                allEls.length > scores.length &&
-                !statsFetchPending &&
-                !_scoreListComplete(userId, mode, type)
-              ) {
-                // "Show more" revealed rows past the pages fetched so far.
-                statsFetchPending = true;
-                fetchScores(userId, mode, type, allEls.length).then((more) => {
-                  statsFetchPending = false;
-                  if (isDisposed()) return;
-                  scoresMap.set(type, more);
-                  injectMissingStats(
-                    Array.from(listEl.querySelectorAll(".play-detail")),
-                    more,
-                  );
-                  if (settings.isEnabled(SCORE_PP_DECIMALS_ID))
-                    applyPpDecimals(listEl);
-                });
-              }
             }
           }
+        }
 
-          if (type === "most_watched" && scoresMap.has(type)) {
-            const scores = scoresMap.get(type);
-            const byBeatmap = _buildScoresByBeatmapId(scores);
-            const usageCount = new Map();
-            allEls.forEach((rowEl) => {
-              if (rowEl.querySelector(`.${MW_PP_CLASS}`)) {
-                const bmId = _beatmapIdFromRow(rowEl);
-                if (bmId) usageCount.set(bmId, (usageCount.get(bmId) ?? 0) + 1);
-                return;
-              }
+        if (type === "most_watched" && scoresMap.has(type)) {
+          const scores = scoresMap.get(type);
+          const byBeatmap = _buildScoresByBeatmapId(scores);
+          const usageCount = new Map();
+          allEls.forEach((rowEl) => {
+            if (rowEl.querySelector(`.${MW_PP_CLASS}`)) {
               const bmId = _beatmapIdFromRow(rowEl);
-              if (!bmId) return;
-              const candidates = byBeatmap.get(bmId);
-              if (!candidates) return;
-              const idx = usageCount.get(bmId) ?? 0;
-              const score = candidates[idx];
-              if (!score) return;
-              usageCount.set(bmId, idx + 1);
-              injectMostWatchedPpRow(rowEl, score);
-            });
-            if (settings.isEnabled(SCORE_PP_DECIMALS_ID))
-              applyPpDecimals(listEl);
-          }
-        } finally {
-          sectionObsBusy = false;
+              if (bmId) usageCount.set(bmId, (usageCount.get(bmId) ?? 0) + 1);
+              return;
+            }
+            const bmId = _beatmapIdFromRow(rowEl);
+            if (!bmId) return;
+            const candidates = byBeatmap.get(bmId);
+            if (!candidates) return;
+            const idx = usageCount.get(bmId) ?? 0;
+            const score = candidates[idx];
+            if (!score) return;
+            usageCount.set(bmId, idx + 1);
+            injectMostWatchedPpRow(rowEl, score);
+          });
+          if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
         }
       });
 
@@ -3538,13 +3498,9 @@ OsuExpertPlus.pages.userProfile = (() => {
     const scores = [];
     const limit = 100;
     const maxTotal = RECENT_SCORES_MERGED_MAX;
-    const maxPages = 8;
     let lastPageKey = "";
     let pageCount = 0;
     for (let offset = 0; ; offset += limit) {
-      if (pageCount >= maxPages) {
-        break;
-      }
       const q = new URLSearchParams({
         mode,
         limit: String(limit),
@@ -4071,7 +4027,6 @@ OsuExpertPlus.pages.userProfile = (() => {
   const RANKS_CARD_BG_ATTR = "data-oep-ranks-card-bg";
   const RANKS_CARD_BG_BEATMAPSET_ATTR = "data-oep-ranks-card-bg-beatmapset";
   const RANKS_CARD_BG_SELECTOR = `.play-detail[${RANKS_CARD_BG_ATTR}="1"]`;
-  const RANKS_CARD_BG_URL_VAR = "--oep-ranks-card-bg-url";
   const RANKS_CARD_BG_IMG_CLASS = "oep-card-bg-img";
   const RANKS_CARD_BASE_BG_VAR = "--oep-ranks-card-base-bg";
   const RANKS_CARD_PP_BG_VAR = "--oep-ranks-card-pp-bg";
@@ -4091,7 +4046,6 @@ OsuExpertPlus.pages.userProfile = (() => {
   const RANKS_PERIOD_IDX_MONTH_END = 28;
   const RANKS_PERIOD_YEAR_START_IDX = 29;
   const RANKS_PERIOD_FIRST_YEAR = 3;
-  const RANKS_PERIOD_LAST_YEAR = 10;
 
   const RANKS_PERIOD_HIGHLIGHT_CSS = `
     .${RANKS_DATE_FILTER_CLASS} {
@@ -4412,13 +4366,6 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   /**
-   * @returns {number}
-   */
-  function readStoredRanksPeriodIndex() {
-    return RANKS_PERIOD_IDX_DEFAULT;
-  }
-
-  /**
    * @param {HTMLElement} statusEl  <strong.oep-ranks-date-filter__period>
    * @param {HTMLElement} tailEl    <span.oep-ranks-date-filter__tail>
    * @param {number} periodIdx
@@ -4563,7 +4510,6 @@ OsuExpertPlus.pages.userProfile = (() => {
         rowEl.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`)?.remove();
         rowEl.removeAttribute(RANKS_CARD_BG_ATTR);
         rowEl.removeAttribute(RANKS_CARD_BG_BEATMAPSET_ATTR);
-        rowEl.style.removeProperty(RANKS_CARD_BG_URL_VAR);
         rowEl.style.removeProperty(RANKS_CARD_BASE_BG_VAR);
         rowEl.style.removeProperty(RANKS_CARD_PP_BG_VAR);
         rowEl.style.removeProperty(RANKS_CARD_STATS_BG_VAR);
@@ -4655,12 +4601,11 @@ OsuExpertPlus.pages.userProfile = (() => {
   function ensureRanksDateFilterBar(topRanksRoot) {
     if (topRanksRoot.querySelector(`.${RANKS_DATE_FILTER_CLASS}`)) return;
 
-    const periodIdx = readStoredRanksPeriodIndex();
-    const reversedStored = false;
+    const periodIdx = RANKS_PERIOD_IDX_DEFAULT;
 
     const statusEl = el("strong", { class: "oep-ranks-date-filter__period" });
     const tailEl = el("span", { class: "oep-ranks-date-filter__tail" });
-    setRanksFilterBarLabels(statusEl, tailEl, periodIdx, reversedStored);
+    setRanksFilterBarLabels(statusEl, tailEl, periodIdx, false);
 
     const resetBtn = el(
       "button",
@@ -4676,8 +4621,8 @@ OsuExpertPlus.pages.userProfile = (() => {
       "button",
       {
         type: "button",
-        class: `oep-ranks-date-filter__btn oep-ranks-date-filter__reverse${reversedStored ? " oep-ranks-date-filter__reverse--on" : ""}`,
-        "aria-pressed": reversedStored ? "true" : "false",
+        class: "oep-ranks-date-filter__btn oep-ranks-date-filter__reverse",
+        "aria-pressed": "false",
         "aria-label": "Reverse highlight to older scores outside the period",
       },
       "Reverse",
@@ -4754,7 +4699,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       row.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`)?.remove();
       row.removeAttribute(RANKS_CARD_BG_ATTR);
       row.removeAttribute(RANKS_CARD_BG_BEATMAPSET_ATTR);
-      row.style.removeProperty(RANKS_CARD_BG_URL_VAR);
       row.style.removeProperty(RANKS_CARD_BASE_BG_VAR);
       row.style.removeProperty(RANKS_CARD_PP_BG_VAR);
       row.style.removeProperty(RANKS_CARD_STATS_BG_VAR);
@@ -4771,7 +4715,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       );
       const idx = range
         ? clampRanksPeriodIndex(range.value)
-        : readStoredRanksPeriodIndex();
+        : RANKS_PERIOD_IDX_DEFAULT;
       if (range && String(range.value) !== String(idx))
         range.value = String(idx);
       const revBtn = topRanksRoot.querySelector(
@@ -5391,7 +5335,6 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   function bwsEnsureKirinoScoreRankColumn(valuesRow, bwsRowEl) {
-    valuesRow.querySelector(`[${BWS_KIRINO_COL_ATTR}="country"]`)?.remove();
     let scoreRow = valuesRow.querySelector(`[${BWS_KIRINO_COL_ATTR}="score"]`);
     if (!(scoreRow instanceof HTMLElement)) {
       const st = bwsKirinoScoreColumnState();
@@ -5539,7 +5482,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       if (valHost instanceof HTMLElement) {
         valHost.classList.add("oep-bws-value-stack");
       }
-      bwsRow.querySelector(".oep-bws-extra-ranks")?.remove();
       if (inp instanceof HTMLInputElement) {
         inp.removeAttribute("title");
         wireBwsAdjustInput(inp);
@@ -6722,7 +6664,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       if (!text) return;
       try {
         await navigator.clipboard.writeText(text);
-      } catch (e) {
+      } catch (_) {
         try {
           const ta = document.createElement("textarea");
           ta.value = text;
@@ -6757,7 +6699,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       }
       codeEl.textContent = "";
       copyCodeBtn.disabled = true;
-      const imgUrl = String(urlInput.value || "").trim();
       const anyArea = hotspots.length > 0;
       const anyTextUrl = hotspots.some((hs) => String(hs.url || "").trim());
       const accepted = hotspots.some((hs) =>
@@ -7836,7 +7777,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       ["right", 'div style="text-align:right;"'],
     ];
     wrapPairs.forEach(([bb, tag]) => {
-      const open = tag.includes(" ") ? `<${tag}>` : `<${tag}>`;
+      const open = `<${tag}>`;
       const closeTag = tag.split(" ")[0];
       html = html.replace(
         new RegExp(`\\[${bb}\\]([\\s\\S]*?)\\[\\/${bb}\\]`, "gi"),
@@ -8163,7 +8104,6 @@ OsuExpertPlus.pages.userProfile = (() => {
   const CONTENTS_REORDER_STYLE_ID = "osu-expertplus-profile-contents-reorder";
   const CONTENTS_REORDER_ANCHOR_ATTR = "data-oep-contents-reorder-anchor";
   const CONTENTS_REORDER_DRAGGING_CLASS = "oep-contents-reorder--dragging";
-  const CONTENTS_REORDER_DRAGOVER_CLASS = "oep-contents-reorder--dragover";
   const CONTENTS_REORDER_DROP_BEFORE_CLASS =
     "oep-contents-reorder--drop-before";
   const CONTENTS_REORDER_DROP_AFTER_CLASS = "oep-contents-reorder--drop-after";
@@ -8297,26 +8237,6 @@ OsuExpertPlus.pages.userProfile = (() => {
     return Array.from(containerMap.values()).filter(
       (anchors) => anchors.length > 0,
     );
-  }
-
-  function getPreferredVisibleContentsGroup(groups) {
-    if (!Array.isArray(groups) || !groups.length) return [];
-    for (const anchors of groups) {
-      const row = anchors[0]?.parentElement;
-      if (!(row instanceof HTMLElement)) continue;
-      const visible =
-        row.offsetParent !== null &&
-        window.getComputedStyle(row).display !== "none" &&
-        window.getComputedStyle(row).visibility !== "hidden";
-      if (visible) return anchors;
-    }
-    return groups[0] || [];
-  }
-
-  function cleanupContentsReorderHints() {
-    document
-      .querySelectorAll("[data-oep-contents-reorder-hint]")
-      .forEach((n) => n.remove());
   }
 
   function maybeCsrfToken() {
@@ -9194,12 +9114,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       });
   }
 
-  function cleanupProfileSectionCollapseToggles() {
-    document
-      .querySelectorAll("button.oep-profile-section-collapse-toggle")
-      .forEach((n) => n.remove());
-  }
-
   function teardownProfileSectionPageTitleClick() {
     document
       .querySelectorAll(`h2[${SECTION_PAGE_TITLE_CLICK_ATTR}]`)
@@ -9327,7 +9241,6 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     const bind = () => {
       clearTimeout(rebindTimer);
-      cleanupProfileSectionCollapseToggles();
       teardownProfileSectionPageTitleClick();
       teardownProfileContentsTabChevrons();
 
@@ -9364,7 +9277,6 @@ OsuExpertPlus.pages.userProfile = (() => {
       clearTimeout(rebindTimer);
       obs?.disconnect();
       document.removeEventListener("click", onContentsTabChevronClick, true);
-      cleanupProfileSectionCollapseToggles();
       teardownProfileSectionPageTitleClick();
       teardownProfileContentsTabChevrons();
       getSectionPageNodes().forEach((node) => {
@@ -9483,7 +9395,6 @@ OsuExpertPlus.pages.userProfile = (() => {
         .forEach((n) =>
           n.classList.remove(
             CONTENTS_REORDER_DRAGGING_CLASS,
-            CONTENTS_REORDER_DRAGOVER_CLASS,
             CONTENTS_REORDER_DROP_BEFORE_CLASS,
             CONTENTS_REORDER_DROP_AFTER_CLASS,
           ),
@@ -9507,7 +9418,6 @@ OsuExpertPlus.pages.userProfile = (() => {
         .querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`)
         .forEach((n) =>
           n.classList.remove(
-            CONTENTS_REORDER_DRAGOVER_CLASS,
             CONTENTS_REORDER_DROP_BEFORE_CLASS,
             CONTENTS_REORDER_DROP_AFTER_CLASS,
           ),
@@ -9652,8 +9562,6 @@ OsuExpertPlus.pages.userProfile = (() => {
         clearDragClasses();
       }
       const groups = getSortableContentsAnchorGroups();
-      const visibleGroup = getPreferredVisibleContentsGroup(groups);
-      cleanupContentsReorderHints();
 
       document
         .querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`)
@@ -9662,10 +9570,7 @@ OsuExpertPlus.pages.userProfile = (() => {
           a.removeAttribute(CONTENTS_REORDER_ANCHOR_ATTR);
           a.removeAttribute("draggable");
           a.style.removeProperty("order");
-          a.classList.remove(
-            CONTENTS_REORDER_DRAGGING_CLASS,
-            CONTENTS_REORDER_DRAGOVER_CLASS,
-          );
+          a.classList.remove(CONTENTS_REORDER_DRAGGING_CLASS);
         });
 
       groups.flat().forEach((a) => {
@@ -9713,12 +9618,8 @@ OsuExpertPlus.pages.userProfile = (() => {
           a.removeAttribute(CONTENTS_REORDER_ANCHOR_ATTR);
           a.removeAttribute("draggable");
           a.style.removeProperty("order");
-          a.classList.remove(
-            CONTENTS_REORDER_DRAGGING_CLASS,
-            CONTENTS_REORDER_DRAGOVER_CLASS,
-          );
+          a.classList.remove(CONTENTS_REORDER_DRAGGING_CLASS);
         });
-      cleanupContentsReorderHints();
       removeContentsReorderStyles();
     };
   }
