@@ -8,6 +8,10 @@ import {
   beatmapsetIdFromPath,
   isDiscussionReviewsTotal,
 } from "../../core/routes.js";
+import { renderMarkdown } from "../../editor/markdown-render.js";
+import { placeDiscussionPreviewToggle } from "../../editor/preview-toggle.js";
+import { sanitizeTree } from "../../editor/sanitize.js";
+import { replaceRange, toggleWrap } from "../../editor/textarea.js";
 
 /**
  * Markdown helper toolbar and "Preview" toggle on the discussion composers
@@ -30,174 +34,6 @@ export function startDiscussionPreview(beatmapsetId) {
     !isDiscussionReviewsTotal(location.pathname);
 
   /**
-   * @param {string} text
-   * @returns {string}
-   */
-  function escapeHtml(text) {
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
-  /**
-   * @param {string} raw
-   * @returns {string|null}
-   */
-  function sanitizeHttpUrl(raw) {
-    if (!raw) return null;
-    const candidate = String(raw).trim();
-    if (!candidate) return null;
-    try {
-      const parsed = new URL(candidate, location.origin);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-        return null;
-      return parsed.href;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /**
-   * Lightweight markdown-ish renderer (good enough for previewing common syntax).
-   * @param {string} src
-   * @returns {string}
-   */
-  function renderMarkdownPreviewHtml(src) {
-    const raw = String(src ?? "");
-    if (!raw.trim()) {
-      return `<p class="oep-discussion-preview__empty">Nothing to preview yet.</p>`;
-    }
-    const lines = raw.replace(/\r\n?/g, "\n").split("\n");
-    const out = [];
-    let inCode = false;
-    let inUl = false;
-    let inOl = false;
-    let inQuote = false;
-
-    const closeLists = () => {
-      if (inUl) {
-        out.push("</ul>");
-        inUl = false;
-      }
-      if (inOl) {
-        out.push("</ol>");
-        inOl = false;
-      }
-    };
-    const closeQuote = () => {
-      if (inQuote) {
-        out.push("</blockquote>");
-        inQuote = false;
-      }
-    };
-    const inline = (line) => {
-      let s = escapeHtml(line);
-      s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, altRaw, srcRaw) => {
-        const src = sanitizeHttpUrl(srcRaw);
-        if (!src) return escapeHtml(`![${altRaw}](${srcRaw})`);
-        const alt = escapeHtml(altRaw || "");
-        return `<img src="${escapeHtml(src)}" alt="${alt}" loading="lazy" referrerpolicy="no-referrer" />`;
-      });
-      s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
-      s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
-      s = s.replace(/__([^_\n]+)__/g, "<strong>$1</strong>");
-      s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
-      s = s.replace(/_([^_\n]+)_/g, "<em>$1</em>");
-      s = s.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
-      s = s.replace(
-        /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-        '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
-      );
-      return s;
-    };
-
-    for (const lineRaw of lines) {
-      const line = lineRaw ?? "";
-      if (/^```/.test(line.trim())) {
-        closeLists();
-        closeQuote();
-        if (!inCode) {
-          out.push("<pre><code>");
-          inCode = true;
-        } else {
-          out.push("</code></pre>");
-          inCode = false;
-        }
-        continue;
-      }
-      if (inCode) {
-        out.push(`${escapeHtml(line)}\n`);
-        continue;
-      }
-
-      const trimmed = line.trim();
-      if (!trimmed) {
-        closeLists();
-        closeQuote();
-        continue;
-      }
-
-      const quoteMatch = line.match(/^\s*>\s?(.*)$/);
-      if (quoteMatch) {
-        closeLists();
-        if (!inQuote) {
-          out.push("<blockquote>");
-          inQuote = true;
-        }
-        out.push(`<p>${inline(quoteMatch[1])}</p>`);
-        continue;
-      } else {
-        closeQuote();
-      }
-
-      const ulMatch = line.match(/^\s*[-*]\s+(.*)$/);
-      if (ulMatch) {
-        if (!inUl) {
-          if (inOl) {
-            out.push("</ol>");
-            inOl = false;
-          }
-          out.push("<ul>");
-          inUl = true;
-        }
-        out.push(`<li>${inline(ulMatch[1])}</li>`);
-        continue;
-      }
-
-      const olMatch = line.match(/^\s*(\d+)\.\s+(.*)$/);
-      if (olMatch) {
-        if (!inOl) {
-          if (inUl) {
-            out.push("</ul>");
-            inUl = false;
-          }
-          out.push("<ol>");
-          inOl = true;
-        }
-        out.push(`<li>${inline(olMatch[2])}</li>`);
-        continue;
-      }
-
-      closeLists();
-      const headingMatch = line.match(/^\s{0,3}(#{1,6})\s+(.+)$/);
-      if (headingMatch) {
-        const level = headingMatch[1].length;
-        out.push(`<h${level}>${inline(headingMatch[2])}</h${level}>`);
-        continue;
-      }
-      out.push(`<p>${inline(line)}</p>`);
-    }
-
-    if (inCode) out.push("</code></pre>");
-    closeLists();
-    closeQuote();
-    return out.join("");
-  }
-
-  /**
    * @returns {HTMLTextAreaElement[]}
    */
   function collectCandidateTextareas() {
@@ -217,79 +53,6 @@ export function startDiscussionPreview(beatmapsetId) {
       }
       return true;
     });
-  }
-
-  /**
-   * @param {HTMLElement} composerRoot
-   * @param {HTMLElement} toggleBtn
-   */
-  function placePreviewToggleButton(composerRoot, toggleBtn, textarea) {
-    const moveAsFirstChild = (parent, child) => {
-      if (!(parent instanceof HTMLElement) || !(child instanceof HTMLElement))
-        return;
-      if (child.parentElement === parent && parent.firstElementChild === child)
-        return;
-      parent.prepend(child);
-    };
-    const moveBefore = (anchor, child) => {
-      if (!(anchor instanceof HTMLElement) || !(child instanceof HTMLElement))
-        return;
-      const parent = anchor.parentElement;
-      if (!(parent instanceof HTMLElement)) return;
-      if (child.parentElement === parent && child.nextElementSibling === anchor)
-        return;
-      anchor.insertAdjacentElement("beforebegin", child);
-    };
-
-    const replyButton = Array.from(
-      composerRoot.querySelectorAll("button, [role='button']"),
-    ).find((node) => {
-      if (!(node instanceof HTMLElement)) return false;
-      const label = String(node.textContent || "")
-        .trim()
-        .toLowerCase();
-      return label === "reply" || label === "respond" || label === "response";
-    });
-    const noteButton = Array.from(
-      composerRoot.querySelectorAll("button, [role='button']"),
-    ).find(
-      (node) =>
-        node instanceof HTMLElement && node.textContent?.trim() === "Note",
-    );
-    const insertParent =
-      composerRoot.querySelector(".beatmap-discussion-new__footer") ||
-      composerRoot.querySelector("[class*='footer']") ||
-      composerRoot.querySelector("[class*='actions']");
-    if (replyButton instanceof HTMLElement && replyButton.parentElement) {
-      const replyGroup =
-        replyButton.closest(".beatmap-discussion-post__actions-group") ||
-        replyButton.parentElement;
-      if (replyGroup instanceof HTMLElement) {
-        moveAsFirstChild(replyGroup, toggleBtn);
-      } else {
-        moveBefore(replyButton, toggleBtn);
-      }
-    } else if (noteButton instanceof HTMLElement && noteButton.parentElement) {
-      const noteGroup =
-        noteButton.closest(".beatmap-discussion-post__actions-group") ||
-        noteButton.parentElement;
-      if (noteGroup instanceof HTMLElement) {
-        moveAsFirstChild(noteGroup, toggleBtn);
-      } else {
-        moveBefore(noteButton, toggleBtn);
-      }
-    } else if (
-      insertParent instanceof HTMLElement &&
-      toggleBtn.parentElement !== insertParent
-    ) {
-      moveAsFirstChild(insertParent, toggleBtn);
-    } else if (!(toggleBtn.parentElement instanceof HTMLElement)) {
-      const anchor =
-        textarea?.closest(".beatmap-discussion-new__message") ||
-        textarea?.parentElement ||
-        composerRoot;
-      moveAsFirstChild(anchor, toggleBtn);
-    }
   }
 
   /**
@@ -323,20 +86,9 @@ export function startDiscussionPreview(beatmapsetId) {
       composerRoot.classList.contains("beatmap-discussion-post--new-reply") ||
       composerRoot.classList.contains("beatmap-discussion-reply-box");
 
-    /**
-     * Replace textarea [start, end) with `replacement` in a way that participates in
-     * the native undo stack where supported (Chromium: execCommand insertText).
-     */
-    const replaceRangeUndoable = (start, end, replacement) => {
-      textarea.focus();
-      textarea.setSelectionRange(start, end);
-      const ok =
-        typeof document.execCommand === "function" &&
-        document.execCommand("insertText", false, replacement);
-      if (!ok) {
-        textarea.setRangeText(replacement, start, end, "end");
-      }
-    };
+    /** Undoable where supported; callers dispatch `input` themselves. */
+    const replaceRangeUndoable = (start, end, replacement) =>
+      replaceRange(textarea, start, end, replacement, { dispatchInput: false });
 
     const insertText = (before, after, placeholder) => {
       const start = textarea.selectionStart ?? textarea.value.length;
@@ -352,34 +104,9 @@ export function startDiscussionPreview(beatmapsetId) {
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
     };
 
-    const toggleWrap = (before, after, placeholder) => {
-      const start = textarea.selectionStart ?? textarea.value.length;
-      const end = textarea.selectionEnd ?? textarea.value.length;
-      const val = textarea.value || "";
-      const selected = val.slice(start, end);
-
-      const hasOuterWrap =
-        start >= before.length &&
-        val.slice(start - before.length, start) === before &&
-        val.slice(end, end + after.length) === after;
-
-      if (hasOuterWrap) {
-        const outerStart = start - before.length;
-        const outerEnd = end + after.length;
-        replaceRangeUndoable(outerStart, outerEnd, selected);
-        textarea.setSelectionRange(outerStart, outerStart + selected.length);
-        textarea.dispatchEvent(new Event("input", { bubbles: true }));
-        return;
-      }
-
-      const payload = `${before}${selected || placeholder}${after}`;
-      replaceRangeUndoable(start, end, payload);
-      const selStart = start + before.length;
-      const selEnd =
-        selStart + (selected ? selected.length : String(placeholder).length);
-      textarea.setSelectionRange(selStart, selEnd);
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-    };
+    /** `matchInside: false` keeps the old behaviour (only an outside wrap unwraps). */
+    const toggleMarkdownWrap = (before, after, placeholder) =>
+      toggleWrap(textarea, before, after, { placeholder, matchInside: false });
 
     const togglePrefixLines = (prefix, sample = "text") => {
       const value = textarea.value || "";
@@ -497,12 +224,18 @@ export function startDiscussionPreview(beatmapsetId) {
       el(
         "div",
         { class: "oep-markdown-helper__row" },
-        mkBtn("fas fa-bold", "Bold", () => toggleWrap("**", "**", "bold")),
-        mkBtn("fas fa-italic", "Italic", () => toggleWrap("*", "*", "italic")),
-        mkBtn("fas fa-strikethrough", "Strike", () =>
-          toggleWrap("~~", "~~", "text"),
+        mkBtn("fas fa-bold", "Bold", () =>
+          toggleMarkdownWrap("**", "**", "bold"),
         ),
-        mkBtn("fas fa-code", "Code", () => toggleWrap("`", "`", "code")),
+        mkBtn("fas fa-italic", "Italic", () =>
+          toggleMarkdownWrap("*", "*", "italic"),
+        ),
+        mkBtn("fas fa-strikethrough", "Strike", () =>
+          toggleMarkdownWrap("~~", "~~", "text"),
+        ),
+        mkBtn("fas fa-code", "Code", () =>
+          toggleMarkdownWrap("`", "`", "code"),
+        ),
         mkBtn("fas fa-link", "Link", () =>
           insertText("[", "](https://example.com)", "title"),
         ),
@@ -577,7 +310,7 @@ export function startDiscussionPreview(beatmapsetId) {
         "Preview",
       );
     }
-    placePreviewToggleButton(composerRoot, toggleBtn, textarea);
+    placeDiscussionPreviewToggle(composerRoot, toggleBtn, textarea);
 
     let preview = composerRoot.querySelector(`[${PREVIEW_ATTR}]`);
     if (!(preview instanceof HTMLElement)) {
@@ -603,11 +336,20 @@ export function startDiscussionPreview(beatmapsetId) {
     const repaint = () => {
       const visibleNow = isVisibleTextarea(textarea);
       const hasTextNow = String(textarea.value || "").trim().length > 0;
-      body.replaceChildren(
-        OsuExpertPlus.htmlSanitize.toSafeFragment(
-          renderMarkdownPreviewHtml(textarea.value || ""),
-        ),
-      );
+      const source = String(textarea.value || "");
+      if (source.trim()) {
+        body.replaceChildren(
+          sanitizeTree(renderMarkdown(source, { document })),
+        );
+      } else {
+        body.replaceChildren(
+          el(
+            "p",
+            { class: "oep-discussion-preview__empty" },
+            "Nothing to preview yet.",
+          ),
+        );
+      }
       if (isReplyComposer && !visibleNow) {
         helper.remove();
         toggleBtn.hidden = true;
@@ -727,7 +469,7 @@ export function startDiscussionPreview(beatmapsetId) {
       }
       if (helper instanceof HTMLElement) setHiddenIfChanged(helper, false);
       setHiddenIfChanged(btn, false);
-      placePreviewToggleButton(
+      placeDiscussionPreviewToggle(
         root,
         btn,
         ta instanceof HTMLTextAreaElement ? ta : null,
