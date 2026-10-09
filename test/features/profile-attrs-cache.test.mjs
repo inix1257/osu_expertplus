@@ -87,3 +87,18 @@ test("clear writes an empty store right away", () => {
   assert.deepEqual(h.writes, [{}]);
   assert.equal(h.store.get("a"), undefined);
 });
+
+test("only ranked, approved and loved maps are permanent (B37)", async () => {
+  const { isPermanentBeatmap } =
+    await import("../../src/features/profile/beatmap-attributes.js");
+  for (const ranked of [1, 2, 4, "1"]) {
+    assert.equal(isPermanentBeatmap({ ranked }), true, `ranked ${ranked}`);
+  }
+  for (const ranked of [0, -1, -2, 3]) {
+    assert.equal(isPermanentBeatmap({ ranked }), false, `ranked ${ranked}`);
+  }
+  assert.equal(isPermanentBeatmap({ status: "loved" }), true);
+  assert.equal(isPermanentBeatmap({ status: "qualified" }), false);
+  assert.equal(isPermanentBeatmap({}), false, "unknown is not permanent");
+  assert.equal(isPermanentBeatmap(undefined), false);
+});

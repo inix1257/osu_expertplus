@@ -10,8 +10,15 @@ import {
   MODDED_SR_ATTR,
   _extractRowData,
   _fetchBeatmapAttributesCached,
+  isPermanentBeatmap,
+  rememberRowBeatmap,
+  rowBeatmap,
 } from "./beatmap-attributes.js";
-import { _applyByBeatmapId, _buildScoresByBeatmapId } from "./score-rows.js";
+import {
+  _applyByBeatmapId,
+  _buildScoresByBeatmapId,
+  _getSectionType,
+} from "./score-rows.js";
 import {
   _applyApiMaxComboToComboInline,
   injectStatsRow,
@@ -24,10 +31,16 @@ async function _fetchAndApplySr(rowEl) {
   if (!beatmapId) return;
 
   const diffMods = difficultyMods(mods);
+  // B37: persist only when the row's score says the map is ranked, approved
+  // or loved; Best Performance rows are always ranked or approved.
+  const persist =
+    isPermanentBeatmap(rowBeatmap(rowEl)) ||
+    _getSectionType(rowEl.closest(".play-detail-list") ?? rowEl) === "best";
   const { sr, maxCombo } = await _fetchBeatmapAttributesCached(
     beatmapId,
     diffMods,
     ruleset,
+    { persist },
   );
 
   if (!rowEl.hasAttribute(MODDED_SR_ATTR)) return;
@@ -125,5 +138,8 @@ export function revertModdedStarRatings() {
 export function processElements(elements, scores) {
   const byBeatmap = _buildScoresByBeatmapId(scores);
   const usageCount = new Map();
-  _applyByBeatmapId(elements, byBeatmap, usageCount, injectStatsRow);
+  _applyByBeatmapId(elements, byBeatmap, usageCount, (rowEl, score) => {
+    rememberRowBeatmap(rowEl, score?.beatmap);
+    injectStatsRow(rowEl, score);
+  });
 }

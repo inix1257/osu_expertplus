@@ -12,6 +12,7 @@ import {
 import {
   MODDED_SR_ID,
   clearBeatmapAttributesCache,
+  rememberRowBeatmap,
 } from "../beatmap-attributes.js";
 import {
   _observeRow,
@@ -98,6 +99,7 @@ function populateRecentScoresInnerList(
   const rows = scores.map((s) => buildPlayDetailRowFromApiScore(s, tpl));
   rows.forEach((r, i) => {
     const score = scores[i];
+    rememberRowBeatmap(r, score?.beatmap);
 
     const moreEl = r.querySelector(".play-detail__more");
     const optionsMenu = buildScoreOptionsMenu(score);

@@ -32,15 +32,39 @@ const SR_CACHE_VERSION_GM_KEY = "oep.srCacheVersion";
   } catch (_) {}
 })();
 
-const RANKED_STATUS_RANKED = 1;
-const RANKED_STATUS_LOVED = 4;
+/** osu-web `ranked` values whose difficulty can no longer change. */
+const PERMANENT_RANKED = new Set([1, 2, 4]); // ranked, approved, loved
+const PERMANENT_STATUS = new Set(["ranked", "approved", "loved"]);
 
-function _isCacheableRankedStatus(ranked) {
-  return (
-    ranked === undefined ||
-    ranked === RANKED_STATUS_RANKED ||
-    ranked === RANKED_STATUS_LOVED
-  );
+/**
+ * Whether a beatmap's star rating may be cached for 14 days: only when the
+ * score data says it is ranked, approved or loved (B37). Unknown means no:
+ * a pending or graveyarded map can still be updated.
+ * @param {{ ranked?: unknown, status?: unknown } | null | undefined} beatmap
+ * @returns {boolean}
+ */
+export function isPermanentBeatmap(beatmap) {
+  if (!beatmap || typeof beatmap !== "object") return false;
+  if (beatmap.ranked != null)
+    return PERMANENT_RANKED.has(Number(beatmap.ranked));
+  return PERMANENT_STATUS.has(String(beatmap.status ?? ""));
+}
+
+/** @type {WeakMap<Element, object>} row -> the beatmap of the score it shows */
+const rowBeatmaps = new WeakMap();
+
+/**
+ * Remember which beatmap a score row shows, for {@link isPermanentBeatmap}.
+ * @param {Element} rowEl
+ * @param {object|null|undefined} beatmap
+ */
+export function rememberRowBeatmap(rowEl, beatmap) {
+  if (beatmap && typeof beatmap === "object") rowBeatmaps.set(rowEl, beatmap);
+}
+
+/** @param {Element} rowEl */
+export function rowBeatmap(rowEl) {
+  return rowBeatmaps.get(rowEl);
 }
 
 /** @type {Map<string|number, Promise<number|null>>} */
@@ -232,7 +256,8 @@ const _attrsInFlight = new Map();
  * @param {string|number} beatmapId
  * @param {string[]} diffMods
  * @param {string} ruleset
- * @param {{ ranked?: number }} [opts]
+ * @param {{ persist?: boolean }} [opts]  persist: store for 14 days (only
+ *   for beatmaps known to be permanent, B37); always kept for the session
  * @returns {Promise<{ key: string, sr: number|null, maxCombo: number|null }>}
  */
 export async function _fetchBeatmapAttributesCached(
@@ -251,7 +276,7 @@ export async function _fetchBeatmapAttributesCached(
     return { key, ...persisted };
   }
 
-  const ranked = opts?.ranked;
+  const persist = opts?.persist === true;
 
   if (!_attrsInFlight.has(key)) {
     const p = OsuExpertPlus.api
@@ -275,7 +300,7 @@ export async function _fetchBeatmapAttributesCached(
 
         const packed = { sr, maxCombo };
         _attrsSessionCache.set(key, packed);
-        if (_isCacheableRankedStatus(ranked)) {
+        if (persist) {
           attrsStore.set(key, packed);
         }
         return packed;

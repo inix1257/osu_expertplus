@@ -5,7 +5,10 @@
 import { difficultyMods, modAcronyms } from "../../../osu/mods.js";
 import { rulesetFromId } from "../../../osu/ruleset.js";
 import { beatmapMaxComboFromScore } from "../../../osu/score.js";
-import { _fetchBeatmapAttributesCached } from "../beatmap-attributes.js";
+import {
+  _fetchBeatmapAttributesCached,
+  isPermanentBeatmap,
+} from "../beatmap-attributes.js";
 import { _applyApiMaxComboToComboInline } from "../score-stats.js";
 export const RECENT_FAILS_WRAP_CLASS = "oep-recent-scores-with-fails";
 export const RECENT_FAILS_HEADER_CLASS = "oep-recent-fails-header";
@@ -128,7 +131,7 @@ export function enrichPlayDetailRowsMaxComboFromAttributes(
           score.beatmap.id,
           difficultyMods(modAcronyms(score.mods)),
           rulesetFromId(score.ruleset_id),
-          { ranked: score.beatmap.ranked },
+          { persist: isPermanentBeatmap(score.beatmap) },
         ).then(({ maxCombo }) => {
           if (maxCombo != null && rowEl.isConnected) {
             _applyApiMaxComboToComboInline(rowEl, maxCombo);
