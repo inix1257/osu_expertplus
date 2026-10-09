@@ -44,52 +44,61 @@ export const KNOWN_BBCODE_TAGS = new Set([
   "notice",
 ]);
 
+/**
+ * The first BBCode structure problem in `text`, as a sentence, or null.
+ * Only known tags count (B46): unknown or malformed bracket text (`[#1]`,
+ * `[2024]`, `[ ]`, a lone `[` or `]`) is plain text for osu-web and is not
+ * reported, and `[code]…[/code]` content is not checked.
+ * @param {string} text
+ * @returns {string | null}
+ */
 export function firstBbcodeFormatIssue(text) {
   const value = String(text || "");
+  const lower = value.toLowerCase();
   /** @type {string[]} */
   const stack = [];
-  const selfClosing = new Set(["*"]);
   let i = 0;
   while (i < value.length) {
-    const ch = value[i];
-    if (ch === "]") {
-      return "Unexpected closing bracket `]`.";
-    }
-    if (ch !== "[") {
-      i += 1;
+    const open = value.indexOf("[", i);
+    if (open === -1) break;
+    const close = value.indexOf("]", open + 1);
+    const nextOpen = value.indexOf("[", open + 1);
+    if (close === -1 || (nextOpen !== -1 && nextOpen < close)) {
+      // A "[" without its own "]" is text, unless the text ends in what
+      // looks like a known tag that lost its bracket (`[b`, `[color=red`).
+      if (close === -1) {
+        const m = /^\[\/?([a-z*]+)(?:=\S*)?$/i.exec(value.slice(open));
+        if (m && KNOWN_BBCODE_TAGS.has(m[1].toLowerCase())) {
+          return "Missing closing bracket `]` for a BBCode tag.";
+        }
+      }
+      i = open + 1;
       continue;
     }
-    const closeIdx = value.indexOf("]", i + 1);
-    if (closeIdx === -1) {
-      return "Missing closing bracket `]` for a BBCode tag.";
-    }
-    const rawTag = value.slice(i + 1, closeIdx).trim();
-    if (!rawTag) {
-      return "Empty BBCode tag `[]` is invalid.";
-    }
-    const isClosing = rawTag.startsWith("/");
+    const rawTag = value.slice(open + 1, close).trim();
     const name = parseBbcodeTagName(rawTag);
-    if (!name || !/^[a-z*]+$/.test(name)) {
-      return `Invalid tag name in \`[${rawTag}]\`.`;
-    }
-    // Unknown bracketed text is treated as plain text, not BBCode.
-    if (!KNOWN_BBCODE_TAGS.has(name)) {
-      i = closeIdx + 1;
+    i = close + 1;
+    if (!KNOWN_BBCODE_TAGS.has(name)) continue;
+    const isClosing = rawTag.startsWith("/");
+    if (name === "*") continue; // list items need no closing tag
+    if (!isClosing) {
+      if (name === "code") {
+        const end = lower.indexOf("[/code]", i);
+        if (end === -1) return "Unclosed tag `[code]` found.";
+        i = end + "[/code]".length;
+        continue;
+      }
+      stack.push(name);
       continue;
     }
-    if (!isClosing && !selfClosing.has(name)) {
-      stack.push(name);
-    } else if (isClosing) {
-      const expected = stack[stack.length - 1];
-      if (!expected) {
-        return `Closing tag \`[/${name}]\` has no matching opening tag.`;
-      }
-      if (expected !== name) {
-        return `Mismatched tag order: expected \`[/${expected}]\` before \`[/${name}]\`.`;
-      }
-      stack.pop();
+    const expected = stack[stack.length - 1];
+    if (!expected) {
+      return `Closing tag \`[/${name}]\` has no matching opening tag.`;
     }
-    i = closeIdx + 1;
+    if (expected !== name) {
+      return `Mismatched tag order: expected \`[/${expected}]\` before \`[/${name}]\`.`;
+    }
+    stack.pop();
   }
   if (stack.length) {
     return `Unclosed tag \`[${stack[stack.length - 1]}]\` found.`;
