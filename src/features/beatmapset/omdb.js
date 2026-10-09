@@ -851,7 +851,7 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
   voteControls.addEventListener("mouseleave", onVoteControlsMouseLeave);
   clearBtn.addEventListener("click", () => submitVote(-2));
 
-  omdb
+  omdb()
     .fetchBeatmapsetRatings(beatmapsetId)
     .then((list) => {
       if (disposed || !pathRe.test(location.pathname)) return;
