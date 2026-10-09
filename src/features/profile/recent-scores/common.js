@@ -32,30 +32,45 @@ function findHistoricalPage() {
 }
 
 /**
- * osu-web always renders Recent plays as the first play-detail-list inside
- * the historical section regardless of UI language. Matching by heading text
- * fails on non-English interfaces, so use position instead.
+ * The play-detail lists osu-web rendered in Historical (not ours).
+ * @returns {HTMLElement[]}
  */
-export function findRecentPlaysListRoot() {
+function historicalPlayDetailLists() {
   const page = findHistoricalPage();
-  if (!page) return null;
-  const lists = Array.from(page.querySelectorAll(".play-detail-list")).filter(
-    (el) => el instanceof HTMLElement,
+  if (!page) return [];
+  return Array.from(page.querySelectorAll(".play-detail-list")).filter(
+    (el) =>
+      el instanceof HTMLElement && !el.closest(`.${RECENT_FAILS_WRAP_CLASS}`),
   );
-  return lists[0] ?? null;
 }
 
 /**
- * osu-web renders "Most Watched Replays" as the second play-detail-list in
- * historical. Language-independent positional lookup.
+ * osu-web's Recent Plays list. Found by markup, not position or heading text
+ * (B39): Recent is a `PlayDetailList` (`play-detail-list u-relative`, always
+ * rendered, possibly empty), while Most Watched Replays is a bare
+ * `.play-detail-list` that is only rendered when it has entries
+ * (osu-web `profile-page/play-detail-list.tsx`, `historical.tsx`). The old
+ * "first list" lookup removed Most Watched when Recent was missing.
+ * @returns {HTMLElement|null}
+ */
+export function findRecentPlaysListRoot() {
+  return (
+    historicalPlayDetailLists().find((el) =>
+      el.classList.contains("u-relative"),
+    ) ?? null
+  );
+}
+
+/**
+ * osu-web's Most Watched Replays list (see {@link findRecentPlaysListRoot}).
+ * @returns {HTMLElement|null}
  */
 export function findMostWatchedReplaysListRoot() {
-  const page = findHistoricalPage();
-  if (!page) return null;
-  const lists = Array.from(page.querySelectorAll(".play-detail-list")).filter(
-    (el) => el instanceof HTMLElement,
+  return (
+    historicalPlayDetailLists().find(
+      (el) => !el.classList.contains("u-relative"),
+    ) ?? null
   );
-  return lists[1] ?? null;
 }
 
 export function removeOfficialRecentPlaysSection(listRoot) {

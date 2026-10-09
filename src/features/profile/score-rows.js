@@ -148,11 +148,15 @@ export function _getSectionType(listEl) {
   if (listEl.closest(`.${RECENT_FAILS_WRAP_CLASS}`)) return null;
 
   // Lists inside the "historical" section are never pinned/best/firsts.
-  // The Most Watched Replays list there has its own dedicated fetch.
+  // The Most Watched Replays list there has its own dedicated fetch; osu-web's
+  // own Recent Plays list is not one of ours to process (B40: it used to be
+  // treated as Most Watched too).
   // This check must precede the pp-weight check below because osu! renders
   // .play-detail__weighted-pp on Most Watched Replays cards just as it does
   // for Best Performance, which would otherwise cause a false "best" match.
-  if (listEl.closest('[data-page-id="historical"]')) return "most_watched";
+  if (listEl.closest('[data-page-id="historical"]')) {
+    return listEl.classList.contains("u-relative") ? null : "most_watched";
+  }
 
   // "best" always renders pp-weight elements (language-independent)
   if (
