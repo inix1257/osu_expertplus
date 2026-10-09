@@ -2,6 +2,7 @@
  * Finds osu-web BBCode editors on the page and attaches the helper (WS-40).
  */
 
+import { observe } from "../../core/observe.js";
 import { el } from "../../features/legacy.js";
 import {
   BBHELP_BTN_CLASS,
@@ -24,33 +25,8 @@ import {
 import { openImagemapHelper } from "./imagemap.js";
 import { ensureBbcodeFormatChecker } from "./linter.js";
 import { ensureBbcodeLivePreview } from "./live-preview.js";
-import {
-  injectBbcodeHelperStyles,
-  removeBbcodeHelperStyles,
-} from "./styles.js";
+import { acquireBbcodeHelperStyles } from "./styles.js";
 import { createBbcodeButtons } from "./toolbar.js";
-
-/**
- * True when a mutation batch contains an added node that matches selector
- * (or contains matching descendants).
- * @param {MutationRecord[]} mutations
- * @param {string} selector
- * @returns {boolean}
- */
-function mutationsIncludeSelector(mutations, selector) {
-  for (const m of mutations) {
-    for (const node of m.addedNodes) {
-      if (!(node instanceof Element)) continue;
-      try {
-        if (node.matches(selector)) return true;
-        if (node.querySelector(selector)) return true;
-      } catch (_) {
-        // Invalid selectors in third-party markup must not break observers.
-      }
-    }
-  }
-  return false;
-}
 
 function enhanceSingleBbcodeEditor(editorEl) {
   if (!(editorEl instanceof HTMLElement)) return;
@@ -135,12 +111,16 @@ function teardownBbcodeHelpers() {
   document
     .querySelectorAll(`${BBHELP_INPUT_SELECTOR}[${BBHELP_PREVIEW_DONE_ATTR}]`)
     .forEach((n) => n.removeAttribute(BBHELP_PREVIEW_DONE_ATTR));
-  removeBbcodeHelperStyles();
 }
 
-/** @returns {function} */
+/**
+ * Attach the helper to every visible `.bbcode-editor` now and whenever one
+ * (or its textarea) is added.
+ * @returns {() => void} dispose
+ */
 export function startBbcodeHelperManager() {
-  injectBbcodeHelperStyles();
+  const releaseStyles = acquireBbcodeHelperStyles();
+  const ac = new AbortController();
 
   const scan = () => {
     document.querySelectorAll(`.${BBHELP_WRAP_CLASS}`).forEach((wrap) => {
@@ -174,23 +154,19 @@ export function startBbcodeHelperManager() {
   };
 
   scan();
-  const obs = new MutationObserver((mutations) => {
-    if (
-      mutationsIncludeSelector(
-        mutations,
-        `${BBHELP_EDITOR_SELECTOR}, ${BBHELP_EDITOR_SELECTOR} ${BBHELP_INPUT_SELECTOR}`,
-      )
-    ) {
-      scan();
-    }
-  });
-  obs.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
+  observe.subscribe(
+    {
+      selector: `${BBHELP_EDITOR_SELECTOR}, ${BBHELP_EDITOR_SELECTOR} ${BBHELP_INPUT_SELECTOR}`,
+      schedule: "sync",
+      signal: ac.signal,
+      label: "profile/bbcode-helper",
+    },
+    scan,
+  );
 
   return () => {
-    obs.disconnect();
+    ac.abort();
     teardownBbcodeHelpers();
+    releaseStyles();
   };
 }

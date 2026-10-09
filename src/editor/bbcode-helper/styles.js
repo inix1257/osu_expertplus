@@ -435,16 +435,10 @@ export const BBHELP_CSS = `
   }
 `;
 
-let bbcodeStyleHandle = null;
-function bbcodeStyle() {
-  bbcodeStyleHandle ??= manageStyle(BBHELP_STYLE_ID, BBHELP_CSS);
-  return bbcodeStyleHandle;
-}
-
-export function injectBbcodeHelperStyles() {
-  bbcodeStyle().inject();
-}
-
-export function removeBbcodeHelperStyles() {
-  bbcodeStyle().remove();
+/**
+ * Add the helper stylesheet (reference counted).
+ * @returns {() => void} release
+ */
+export function acquireBbcodeHelperStyles() {
+  return manageStyle(BBHELP_STYLE_ID, BBHELP_CSS).acquire();
 }
