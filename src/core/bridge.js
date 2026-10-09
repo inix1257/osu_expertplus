@@ -8,6 +8,8 @@
 import * as lifecycle from "./lifecycle.js";
 import { createLogger, log } from "./log.js";
 import { observe } from "./observe.js";
+import * as pageHooks from "./page-hooks.js";
+import * as pageWindow from "./page-window.js";
 import * as routes from "./routes.js";
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
@@ -16,5 +18,7 @@ window.OsuExpertPlus.core = Object.freeze({
   lifecycle,
   log,
   observe,
+  pageHooks,
+  pageWindow,
   routes,
 });

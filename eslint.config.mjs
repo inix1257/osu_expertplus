@@ -9,6 +9,9 @@ const userscriptGlobals = {
   GM_deleteValue: "readonly",
   GM_xmlhttpRequest: "readonly",
   unsafeWindow: "readonly",
+  // Firefox userscript sandbox (Xray) helpers.
+  exportFunction: "readonly",
+  cloneInto: "readonly",
   OsuExpertPlus: "writable",
 };
 
