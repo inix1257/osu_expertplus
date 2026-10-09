@@ -45,7 +45,9 @@ OsuExpertPlus.navRecentNotification = (() => {
       cursor: pointer;
       z-index: 1;
     }
-    .${PILL_CLASS}[hidden] {
+    .${PILL_CLASS}[hidden],
+    .nav2:has(.nav-click-popup.js-click-menu--active) .${PILL_CLASS},
+    body:has(.nav2 .nav-click-popup.js-click-menu--active) .${TIP_CLASS} {
       display: none;
     }
     .${PILL_CLASS}:hover {
