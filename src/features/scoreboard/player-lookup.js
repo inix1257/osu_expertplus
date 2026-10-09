@@ -315,6 +315,10 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
           return;
         }
         statusEl.textContent = lookupErrorStatus(err, stage);
+        // The table must not keep showing the previous player (B81).
+        resultKey = null;
+        const boardRoot = findBeatmapScoreboardRoot();
+        if (hasUserSearchResultRows(boardRoot)) clearLookupResults(boardRoot);
         resetBtn.hidden = false;
       } finally {
         searching = false;
