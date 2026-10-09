@@ -26,7 +26,55 @@ export function startDiscussionPreview(beatmapsetId) {
   const MARKER_ATTR = "data-oep-discussion-preview-bound";
   const ROOT_MARKER_ATTR = "data-oep-discussion-preview-root-bound";
   const HELPER_ATTR = "data-oep-markdown-helper";
-  let previewEnabled = false;
+
+  /**
+   * Per-textarea state, so a re-bind (reply box reopened) reuses the
+   * listeners instead of stacking new ones (B55).
+   * @typedef {{ textarea: HTMLTextAreaElement, isReply: boolean,
+   *   helper: HTMLElement|null, toggleBtn: HTMLButtonElement|null,
+   *   preview: HTMLElement|null, body: HTMLElement|null }} Composer
+   * @type {WeakMap<HTMLTextAreaElement, Composer>}
+   */
+  const composers = new WeakMap();
+  /** Toggle button → the composer it currently belongs to. @type {WeakMap<HTMLButtonElement, Composer>} */
+  const toggleOwners = new WeakMap();
+
+  /**
+   * Preview on/off lives on each composer's own toggle (`aria-pressed`)
+   * rather than in one flag shared by every composer (B55).
+   * @param {Composer} c
+   */
+  const isPreviewEnabled = (c) =>
+    c.toggleBtn?.getAttribute("aria-pressed") === "true";
+
+  /** @param {Composer} c */
+  function repaint(c) {
+    const { textarea, helper, toggleBtn, preview, body } = c;
+    if (!toggleBtn || !preview || !body) return;
+    const visibleNow = isVisibleTextarea(textarea);
+    const source = String(textarea.value || "");
+    const hasTextNow = source.trim().length > 0;
+    if (hasTextNow) {
+      body.replaceChildren(sanitizeTree(renderMarkdown(source, { document })));
+    } else {
+      body.replaceChildren(
+        el(
+          "p",
+          { class: "oep-discussion-preview__empty" },
+          "Nothing to preview yet.",
+        ),
+      );
+    }
+    if (c.isReply && !visibleNow) {
+      helper?.remove();
+      setHiddenIfChanged(toggleBtn, true);
+      setHiddenIfChanged(preview, true);
+      return;
+    }
+    if (helper) setHiddenIfChanged(helper, false);
+    setHiddenIfChanged(toggleBtn, !hasTextNow);
+    setHiddenIfChanged(preview, !hasTextNow || !isPreviewEnabled(c));
+  }
 
   const isSupportedDiscussionPath = () =>
     beatmapsetIdFromPath(location.pathname) === beatmapsetId &&
@@ -85,6 +133,22 @@ export function startDiscussionPreview(beatmapsetId) {
     const isReplyComposer =
       composerRoot.classList.contains("beatmap-discussion-post--new-reply") ||
       composerRoot.classList.contains("beatmap-discussion-reply-box");
+
+    let composer = composers.get(textarea);
+    if (!composer) {
+      const c = {
+        textarea,
+        isReply: isReplyComposer,
+        helper: null,
+        toggleBtn: null,
+        preview: null,
+        body: null,
+      };
+      composer = c;
+      composers.set(textarea, c);
+      textarea.addEventListener("input", () => repaint(c));
+    }
+    composer.isReply = isReplyComposer;
 
     /** Undoable where supported; callers dispatch `input` themselves. */
     const replaceRangeUndoable = (start, end, replacement) =>
@@ -298,18 +362,29 @@ export function startDiscussionPreview(beatmapsetId) {
 
     let toggleBtn = composerRoot.querySelector(`[${TOGGLE_ATTR}]`);
     if (!(toggleBtn instanceof HTMLButtonElement)) {
-      toggleBtn = el(
+      const btn = el(
         "button",
         {
           type: "button",
           class: "oep-discussion-preview-toggle",
           [TOGGLE_ATTR]: "1",
-          "aria-pressed": previewEnabled ? "true" : "false",
+          "aria-pressed": "false",
           title: "Toggle post preview",
         },
         "Preview",
       );
+      // One listener per button, however often the composer is re-bound (B55).
+      btn.addEventListener("click", () => {
+        const owner = toggleOwners.get(btn);
+        btn.setAttribute(
+          "aria-pressed",
+          btn.getAttribute("aria-pressed") === "true" ? "false" : "true",
+        );
+        if (owner) repaint(owner);
+      });
+      toggleBtn = btn;
     }
+    toggleOwners.set(toggleBtn, composer);
     placeDiscussionPreviewToggle(composerRoot, toggleBtn, textarea);
 
     let preview = composerRoot.querySelector(`[${PREVIEW_ATTR}]`);
@@ -319,7 +394,7 @@ export function startDiscussionPreview(beatmapsetId) {
         {
           class: "oep-discussion-preview",
           [PREVIEW_ATTR]: "1",
-          hidden: previewEnabled ? null : "",
+          hidden: isPreviewEnabled(composer) ? null : "",
         },
         el("p", { class: "oep-discussion-preview__title" }, "Post preview"),
         el("div", { class: "oep-discussion-preview__body" }),
@@ -333,44 +408,11 @@ export function startDiscussionPreview(beatmapsetId) {
 
     const body = preview.querySelector(".oep-discussion-preview__body");
     if (!(body instanceof HTMLElement)) return;
-    const repaint = () => {
-      const visibleNow = isVisibleTextarea(textarea);
-      const hasTextNow = String(textarea.value || "").trim().length > 0;
-      const source = String(textarea.value || "");
-      if (source.trim()) {
-        body.replaceChildren(
-          sanitizeTree(renderMarkdown(source, { document })),
-        );
-      } else {
-        body.replaceChildren(
-          el(
-            "p",
-            { class: "oep-discussion-preview__empty" },
-            "Nothing to preview yet.",
-          ),
-        );
-      }
-      if (isReplyComposer && !visibleNow) {
-        helper.remove();
-        toggleBtn.hidden = true;
-        preview.hidden = true;
-        return;
-      }
-      helper.hidden = false;
-      toggleBtn.hidden = !hasTextNow;
-      preview.hidden = !hasTextNow || !previewEnabled;
-    };
-
-    toggleBtn.addEventListener("click", () => {
-      previewEnabled = !previewEnabled;
-      toggleBtn?.setAttribute(
-        "aria-pressed",
-        previewEnabled ? "true" : "false",
-      );
-      repaint();
-    });
-    textarea.addEventListener("input", repaint);
-    repaint();
+    composer.helper = helper;
+    composer.toggleBtn = toggleBtn;
+    composer.preview = preview;
+    composer.body = body;
+    repaint(composer);
   }
 
   /** Remove helpers outside a visible reply/new-discussion shell (e.g. stuck before Respond). */
