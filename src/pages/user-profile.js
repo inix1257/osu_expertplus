@@ -5054,6 +5054,7 @@ OsuExpertPlus.pages.userProfile = (() => {
   };
 
   const BWS_RANKING_CSS = `
+    .profile-detail-stats__chart-numbers--top .profile-detail-stats__values.${BWS_VALUES_ROW_CLASS},
     .profile-detail__chart-numbers--top .profile-detail__values.${BWS_VALUES_ROW_CLASS} {
       display: flex;
       flex-direction: row;
@@ -5154,10 +5155,14 @@ OsuExpertPlus.pages.userProfile = (() => {
     };
   }
 
+  /** osu-web renamed `profile-detail__*` to `profile-detail-stats__*`; accept both. */
+  const PROFILE_HEADER_RANK_VALUES_SELECTOR = [
+    ".profile-detail-stats__chart-numbers--top .profile-detail-stats__values",
+    ".profile-detail__chart-numbers--top .profile-detail__values",
+  ].join(", ");
+
   function findProfileHeaderRankValuesRow() {
-    return document.querySelector(
-      ".profile-detail__chart-numbers--top .profile-detail__values",
-    );
+    return document.querySelector(PROFILE_HEADER_RANK_VALUES_SELECTOR);
   }
 
   function parseProfileGlobalRankForBws() {
