@@ -1853,10 +1853,8 @@ OsuExpertPlus.pages.userProfile = (() => {
       scorePlaceNumberStyle.inject();
     }
 
-    if (settings.isEnabled(MODDED_SR_ID)) {
-      initSrObserver();
-      cleanupFns.push(() => teardownSrObserver());
-    }
+    // The module-level SR observer is torn down by init's cleanup (B38).
+    if (settings.isEnabled(MODDED_SR_ID)) initSrObserver();
 
     const scoresMap = new Map();
 
@@ -9783,6 +9781,8 @@ OsuExpertPlus.pages.userProfile = (() => {
           fn();
         } catch (_) {}
       });
+      // Also started later by the SR toggle or the Recent list (B38).
+      teardownSrObserver();
       scorePlaceNumberStyle.remove();
       playDetailStyle.remove();
     };
