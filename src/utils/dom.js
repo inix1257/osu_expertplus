@@ -23,6 +23,8 @@ OsuExpertPlus.dom = (() => {
 
   /**
    * Create an element with optional attributes and children.
+   * Attribute values of `null`, `undefined` or `false` are skipped and `true`
+   * becomes an empty (boolean) attribute.
    * @param {string} tag
    * @param {Object} [attrs={}]
    * @param {...(string|Element)} children
@@ -30,6 +32,7 @@ OsuExpertPlus.dom = (() => {
   function el(tag, attrs = {}, ...children) {
     const element = document.createElement(tag);
     for (const [key, value] of Object.entries(attrs)) {
+      if (value == null || value === false) continue;
       if (key === "class") {
         element.className = value;
       } else if (key.startsWith("on") && typeof value === "function") {
@@ -41,7 +44,7 @@ OsuExpertPlus.dom = (() => {
       ) {
         Object.assign(element.style, /** @type {object} */ (value));
       } else {
-        element.setAttribute(key, value);
+        element.setAttribute(key, value === true ? "" : value);
       }
     }
     for (const child of children) {

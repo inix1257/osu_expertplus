@@ -38,3 +38,28 @@ test("parseLocaleNumber: ko", () => {
   assert.equal(parse("1,234.56"), 1234.56);
   assert.equal(parse("1,234"), 1234);
 });
+
+test("el skips null/undefined/false attributes and writes true as empty (B63)", () => {
+  const { OsuExpertPlus } = loadScripts(["src/utils/dom.js"]);
+  const node = OsuExpertPlus.dom.el(
+    "button",
+    {
+      class: "a b",
+      hidden: null,
+      title: undefined,
+      "data-x": false,
+      disabled: true,
+      "aria-pressed": "false",
+      tabindex: 0,
+    },
+    "label",
+  );
+  assert.equal(node.className, "a b");
+  assert.equal(node.hasAttribute("hidden"), false);
+  assert.equal(node.hasAttribute("title"), false);
+  assert.equal(node.hasAttribute("data-x"), false);
+  assert.equal(node.getAttribute("disabled"), "");
+  assert.equal(node.getAttribute("aria-pressed"), "false");
+  assert.equal(node.getAttribute("tabindex"), "0");
+  assert.equal(node.textContent, "label");
+});
