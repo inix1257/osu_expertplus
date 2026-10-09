@@ -16,6 +16,7 @@ const OUT = path.join(ROOT, "dist", "osu-expertplus.user.js");
 // Files are concatenated in this exact order.
 const FILES = [
   "src/utils/dom.js",
+  "src/utils/html-sanitize.js",
   "src/utils/difficulty-colours.js",
   "src/utils/auth.js",
   "src/utils/api.js",

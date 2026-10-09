@@ -7917,8 +7917,10 @@ OsuExpertPlus.pages.userProfile = (() => {
     };
 
     const repaint = () => {
-      previewBody.innerHTML = _renderSimpleBbcodePreviewHtml(
-        textarea.value || "",
+      previewBody.replaceChildren(
+        OsuExpertPlus.htmlSanitize.toSafeFragment(
+          _renderSimpleBbcodePreviewHtml(textarea.value || ""),
+        ),
       );
       preview.hidden = !previewEnabled;
       toggleBtn.setAttribute("aria-pressed", previewEnabled ? "true" : "false");

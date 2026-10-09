@@ -5405,7 +5405,11 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       const repaint = () => {
         const visibleNow = isVisibleTextarea(textarea);
         const hasTextNow = String(textarea.value || "").trim().length > 0;
-        body.innerHTML = renderMarkdownPreviewHtml(textarea.value || "");
+        body.replaceChildren(
+          OsuExpertPlus.htmlSanitize.toSafeFragment(
+            renderMarkdownPreviewHtml(textarea.value || ""),
+          ),
+        );
         if (isReplyComposer && !visibleNow) {
           helper.remove();
           toggleBtn.hidden = true;
