@@ -9663,8 +9663,14 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
           type: "text/plain;charset=utf-8",
         });
         const objectUrl = URL.createObjectURL(blob);
-        const opened = window.open(objectUrl, "_blank", "noopener,noreferrer");
-        if (!opened) {
+        // No "noopener" feature: with it window.open always returns null, which
+        // made every click look like a blocked popup. Sever the opener manually.
+        const opened = window.open(objectUrl, "_blank");
+        if (opened) {
+          try {
+            opened.opener = null;
+          } catch (_) {}
+        } else {
           flashMsg("Popup blocked — allow popups for osu.ppy.sh to view .osu.");
         }
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120000);
