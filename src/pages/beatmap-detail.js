@@ -5462,20 +5462,22 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         const hasTextNow =
           ta instanceof HTMLTextAreaElement &&
           String(ta.value || "").trim().length > 0;
+        // Guarded writes: `hidden` is in the observer's attributeFilter, and
+        // re-assigning the same value still records a mutation (idle loop).
         if (isReplyComposer && !isVisibleTextarea(ta)) {
-          btn.hidden = true;
-          if (preview instanceof HTMLElement) preview.hidden = true;
+          setHiddenIfChanged(btn, true);
+          if (preview instanceof HTMLElement) setHiddenIfChanged(preview, true);
           if (helper instanceof HTMLElement) helper.remove();
           return;
         }
         if ((isReplyComposer || isNewDiscussionRoot) && !hasTextNow) {
-          btn.hidden = true;
-          if (preview instanceof HTMLElement) preview.hidden = true;
-          if (helper instanceof HTMLElement) helper.hidden = false;
+          setHiddenIfChanged(btn, true);
+          if (preview instanceof HTMLElement) setHiddenIfChanged(preview, true);
+          if (helper instanceof HTMLElement) setHiddenIfChanged(helper, false);
           return;
         }
-        if (helper instanceof HTMLElement) helper.hidden = false;
-        btn.hidden = false;
+        if (helper instanceof HTMLElement) setHiddenIfChanged(helper, false);
+        setHiddenIfChanged(btn, false);
         placePreviewToggleButton(
           root,
           btn,
