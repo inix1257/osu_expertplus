@@ -7497,6 +7497,21 @@ OsuExpertPlus.pages.userProfile = (() => {
       .replace(/'/g, "&#39;");
   }
 
+  /** Reverse `_escapePreviewHtml` (renderer input is already escaped). */
+  function _unescapePreviewHtml(text) {
+    return String(text ?? "")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, "&");
+  }
+
+  /** `_sanitizeHttpPreviewUrl` for a URL taken from escaped renderer input. */
+  function _sanitizeEscapedPreviewUrl(escapedRaw) {
+    return _sanitizeHttpPreviewUrl(_unescapePreviewHtml(escapedRaw));
+  }
+
   function _sanitizeHttpPreviewUrl(raw) {
     const src = String(raw || "").trim();
     if (!src) return "";
@@ -7711,14 +7726,14 @@ OsuExpertPlus.pages.userProfile = (() => {
     html = html.replace(
       /\[url=(.*?)\]([\s\S]*?)\[\/url\]/gi,
       (_, hrefRaw, labelRaw) => {
-        const href = _sanitizeHttpPreviewUrl(hrefRaw);
+        const href = _sanitizeEscapedPreviewUrl(hrefRaw);
         const label = String(labelRaw || "");
         if (!href) return label;
         return `<a href="${_escapePreviewHtml(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
       },
     );
     html = html.replace(/\[url\]([\s\S]*?)\[\/url\]/gi, (_, hrefRaw) => {
-      const href = _sanitizeHttpPreviewUrl(hrefRaw);
+      const href = _sanitizeEscapedPreviewUrl(hrefRaw);
       if (!href) return String(hrefRaw || "");
       const label = _escapePreviewHtml(href);
       return `<a href="${label}" target="_blank" rel="noopener noreferrer">${label}</a>`;
@@ -7727,7 +7742,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       /\[imagemap=([^\]]+)\]([\s\S]*?)\[\/imagemap\]/gi,
       (_, srcRaw) => {
         const maybeSrc = String(srcRaw || "").trim();
-        const srcUrl = _sanitizeHttpPreviewUrl(maybeSrc);
+        const srcUrl = _sanitizeEscapedPreviewUrl(maybeSrc);
         if (!srcUrl) return "";
         return `<div class="oep-bbhelp-preview__imagemap"><img src="${_escapePreviewHtml(srcUrl)}" alt="imagemap preview" loading="lazy" referrerpolicy="no-referrer" /><div class="oep-bbhelp-preview__imagemap-meta">ImageMap base image preview</div></div>`;
       },
@@ -7736,7 +7751,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       /\[imagemap\(([^)\]]+)\)\]([\s\S]*?)\[\/imagemap\]/gi,
       (_, srcRaw) => {
         const maybeSrc = String(srcRaw || "").trim();
-        const srcUrl = _sanitizeHttpPreviewUrl(maybeSrc);
+        const srcUrl = _sanitizeEscapedPreviewUrl(maybeSrc);
         if (!srcUrl) return "";
         return `<div class="oep-bbhelp-preview__imagemap"><img src="${_escapePreviewHtml(srcUrl)}" alt="imagemap preview" loading="lazy" referrerpolicy="no-referrer" /><div class="oep-bbhelp-preview__imagemap-meta">ImageMap base image preview</div></div>`;
       },
@@ -7748,13 +7763,15 @@ OsuExpertPlus.pages.userProfile = (() => {
         const srcMatch = body.match(
           /https?:\/\/[^\s\]]+\.(?:png|jpe?g|gif|webp|bmp|svg)/i,
         );
-        const srcUrl = _sanitizeHttpPreviewUrl(srcMatch ? srcMatch[0] : "");
+        const srcUrl = _sanitizeEscapedPreviewUrl(
+          srcMatch ? srcMatch[0] : "",
+        );
         if (!srcUrl) return "";
         return `<div class="oep-bbhelp-preview__imagemap"><img src="${_escapePreviewHtml(srcUrl)}" alt="imagemap preview" loading="lazy" referrerpolicy="no-referrer" /><div class="oep-bbhelp-preview__imagemap-meta">ImageMap base image preview</div></div>`;
       },
     );
     html = html.replace(/\[img\]([\s\S]*?)\[\/img\]/gi, (_, srcRaw) => {
-      const srcUrl = _sanitizeHttpPreviewUrl(srcRaw);
+      const srcUrl = _sanitizeEscapedPreviewUrl(srcRaw);
       if (!srcUrl) return "";
       return `<img src="${_escapePreviewHtml(srcUrl)}" alt="preview image" loading="lazy" referrerpolicy="no-referrer" />`;
     });
