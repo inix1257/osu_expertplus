@@ -61,9 +61,7 @@ function injectComboAfterAccuracy(rowEl, score) {
   if (!midCol || !acc || acc.closest(".oep-mid-cols")) return;
 
   const achieved = score?.max_combo ?? 0;
-  const maxCombo = beatmapMaxComboFromScore(score, {
-    legacyManiaGreatOnly: true,
-  });
+  const maxCombo = beatmapMaxComboFromScore(score);
   const maxStr =
     maxCombo != null && Number.isFinite(Number(maxCombo))
       ? String(maxCombo)

@@ -128,3 +128,21 @@ test("full combo trusts the score's perfect flag, also after the attributes look
   _applyApiMaxComboToComboInline(plain, 499);
   assert.equal(comboNums(plain)[0].full, true);
 });
+
+test("mania max combo comes from maximum_statistics.perfect (B68)", () => {
+  const row = playDetailRow(window.document);
+  injectStatsRow(row, {
+    ruleset_id: 3,
+    max_combo: 120,
+    maximum_statistics: {
+      perfect: 100,
+      legacy_combo_increase: 20,
+      ignore_hit: 40,
+    },
+    statistics: { perfect: 90 },
+  });
+  assert.deepEqual(comboNums(row), [
+    { text: "120", full: true },
+    { text: "120", full: true },
+  ]);
+});

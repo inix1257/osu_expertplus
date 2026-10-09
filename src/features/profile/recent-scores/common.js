@@ -127,8 +127,7 @@ export function enrichPlayDetailRowsMaxComboFromAttributes(
 
   for (let i = 0; i < rows.length; i++) {
     const score = scores[i];
-    if (beatmapMaxComboFromScore(score, { legacyManiaGreatOnly: true }) != null)
-      continue;
+    if (beatmapMaxComboFromScore(score) != null) continue;
     if (score?.beatmap?.id == null) continue;
     scoreByRow.set(rows[i], score);
     io.observe(rows[i]);
