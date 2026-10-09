@@ -15,17 +15,12 @@ OsuExpertPlus.modIconsAsAcronyms = (() => {
   /** Real text node — osu-web uses ::after for both letters and masked SVGs; those rules tie our specificity. */
   const MOD_ICONS_ACRONYM_LABEL_CLASS = "oep-mod-acronym-label";
 
-  /** Fallback when parent `.mod` has no type (e.g. odd markup); mirrors osu difficulty reduction set. */
-  const MOD_ACRONYM_REDUCTION = new Set([
-    "EZ",
-    "NF",
-    "HT",
-    "DC",
-    "NR",
-    "SO",
-    "MU",
-  ]);
-  /** Fallback for difficulty-increasing–style mods (excl. automation / keys → white). */
+  /**
+   * Mod type per osu!lazer (matches the `mod--type-*` class osu-web renders on `.mod`).
+   * Used when building mod chips from API data and as a fallback when the parent
+   * `.mod` carries no type. Anything unlisted is `Fun`.
+   */
+  const MOD_ACRONYM_REDUCTION = new Set(["EZ", "NF", "HT", "DC", "NR"]);
   const MOD_ACRONYM_INCREASE = new Set([
     "HR",
     "SD",
@@ -35,46 +30,28 @@ OsuExpertPlus.modIconsAsAcronyms = (() => {
     "HD",
     "FL",
     "FI",
-    "BL",
-    "DA",
-    "AC",
-    "WU",
-    "WD",
-    "DF",
-    "TC",
-    "SV2",
-    "NS",
-    "TP",
-    "MF",
-    "MG",
-    "AD",
-    "AS",
-    "CS",
-    "DS",
-    "RD",
-    "SI",
-    "ST",
-    "SY",
-    "TD",
-    "BM",
     "CO",
-    "DP",
-    "FR",
-    "GR",
-    "IN",
-    "MR",
-    "RP",
-    "SW",
-    "TR",
-    "WG",
-    "BR",
-    "BU",
+    "BL",
+    "AC",
+    "ST",
   ]);
   /**
    * osu-web `mod.less`: `.mod-type(Conversion, @osu-colour-purple-1)` — blue-purple
-   * chip (e.g. Classic / CL). Not DifficultyIncrease/Reduction/Fun.
+   * chip (e.g. Classic / CL, Difficulty Adjust, Mirror).
    */
-  const MOD_ACRONYM_CONVERSION = new Set(["CL"]);
+  const MOD_ACRONYM_CONVERSION = new Set([
+    "CL",
+    "DA",
+    "MR",
+    "RD",
+    "DS",
+    "IN",
+    "CS",
+    "HO",
+    "TP",
+  ]);
+  const MOD_ACRONYM_AUTOMATION = new Set(["AT", "CN", "RX", "AP", "SO"]);
+  const MOD_ACRONYM_SYSTEM = new Set(["TD", "SV2"]);
 
   const MOD_ICONS_ACRONYM_CSS = `
     .${MOD_ICONS_ACRONYM_CLASS}.mod__icon {
@@ -197,7 +174,11 @@ OsuExpertPlus.modIconsAsAcronyms = (() => {
     const u = String(acronym).trim().toUpperCase();
     if (MOD_ACRONYM_REDUCTION.has(u)) return "mod--type-DifficultyReduction";
     if (MOD_ACRONYM_INCREASE.has(u)) return "mod--type-DifficultyIncrease";
-    if (MOD_ACRONYM_CONVERSION.has(u)) return "mod--type-Conversion";
+    if (MOD_ACRONYM_CONVERSION.has(u) || /^\d+K$/.test(u)) {
+      return "mod--type-Conversion";
+    }
+    if (MOD_ACRONYM_AUTOMATION.has(u)) return "mod--type-Automation";
+    if (MOD_ACRONYM_SYSTEM.has(u)) return "mod--type-System";
     return "mod--type-Fun";
   }
 

@@ -3025,27 +3025,55 @@ OsuExpertPlus.pages.userProfile = (() => {
     for (const mod of modsList || []) {
       const ac = typeof mod === "string" ? mod : mod?.acronym;
       if (!ac) continue;
+      let chip;
       if (templateModEl instanceof HTMLElement) {
-        const cloned = /** @type {HTMLElement} */ (
-          templateModEl.cloneNode(true)
-        );
-        patchClonedModForAcronym(cloned, ac);
-        modsInner.appendChild(cloned);
+        chip = /** @type {HTMLElement} */ (templateModEl.cloneNode(true));
+        patchClonedModForAcronym(chip, ac);
       } else {
         const safe = String(ac).replace(/[^A-Za-z0-9]/g, "") || "X";
-        modsInner.appendChild(
-          el(
-            "div",
-            { class: `mod ${modTypeClassForAcronym(ac)}` },
-            el("div", {
-              class: `mod__icon mod__icon--${safe}`,
-              "data-acronym": ac,
-            }),
-          ),
+        chip = el(
+          "div",
+          { class: `mod ${modTypeClassForAcronym(ac)}` },
+          el("div", {
+            class: `mod__icon mod__icon--${safe}`,
+            "data-acronym": ac,
+          }),
         );
       }
+      applyModCustomisation(chip, mod);
+      modsInner.appendChild(chip);
     }
     return modsInner;
+  }
+
+  /**
+   * Show a custom rate (DT/NC/HT/DC `speed_change`) the way osu-web does: a
+   * `.mod__extender` with "1.30×" plus the customised-cog badge when settings differ.
+   * @param {HTMLElement} chip  `.mod` element
+   * @param {unknown} mod  API mod object (strings carry no settings)
+   */
+  function applyModCustomisation(chip, mod) {
+    const settings = mod && typeof mod === "object" ? mod.settings : null;
+    if (!settings || typeof settings !== "object") return;
+    if (!Object.keys(settings).length) return;
+
+    const rate = Number(settings.speed_change);
+    if (Number.isFinite(rate) && rate > 0) {
+      const label = `${rate.toFixed(2)}×`;
+      chip.querySelector(".mod__extender")?.remove();
+      chip.appendChild(el("div", { class: "mod__extender" }, el("span", {}, label)));
+      chip.setAttribute("title", `${mod.acronym} (${label})`);
+    }
+
+    // The badge is an inline <use> sprite with a hashed URL; borrow osu's own copy.
+    const badge = document.querySelector(
+      ".mod__customised-indicator:not(.oep-mod-badge-clone)",
+    );
+    if (badge instanceof HTMLElement && !chip.querySelector(".mod__customised-indicator")) {
+      const copy = /** @type {HTMLElement} */ (badge.cloneNode(true));
+      copy.classList.add("oep-mod-badge-clone");
+      chip.appendChild(copy);
+    }
   }
 
   /**
@@ -3229,6 +3257,22 @@ OsuExpertPlus.pages.userProfile = (() => {
     );
     viewLink.addEventListener("click", () => menu.removeAttribute("data-open"));
     menu.appendChild(viewLink);
+
+    if (score.has_replay) {
+      const replayLink = el(
+        "a",
+        {
+          class: SCORE_OPTIONS_ITEM_CLASS,
+          href: `https://osu.ppy.sh/scores/${scoreId}/download`,
+          rel: "noopener noreferrer",
+        },
+        "Download replay",
+      );
+      replayLink.addEventListener("click", () =>
+        menu.removeAttribute("data-open"),
+      );
+      menu.appendChild(replayLink);
+    }
 
     const isOwnProfile =
       getProfileUserId() != null &&
@@ -3516,6 +3560,14 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   async function fetchRecentScoresPrimaryWithFails(userId, mode) {
+    // Prefer the site endpoint: it returns lazer-shaped scores (mod objects with
+    // settings, Classic/DA/FF/AD, custom rates). API v2 is only a fallback since
+    // its score shape depends on the request's `x-api-version`.
+    const site = await fetchRecentScoresPaginatedHtmlWithFails(
+      userId,
+      mode,
+    ).catch(() => []);
+    if (site.length) return site;
     try {
       const data = await OsuExpertPlus.api.getUserRecentScores(
         userId,
@@ -3526,7 +3578,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       );
       return Array.isArray(data) ? data : [];
     } catch {
-      return fetchRecentScoresPaginatedHtmlWithFails(userId, mode);
+      return [];
     }
   }
 
@@ -9542,6 +9594,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       .catch(() => {});
 
     return () => {
+      disposed = true;
       cleanups.forEach((fn) => {
         try {
           fn();
@@ -9560,4 +9613,3 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   return { name, init };
 })();
-      disposed = true;
