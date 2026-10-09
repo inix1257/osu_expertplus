@@ -382,18 +382,22 @@ export function applyBeatmapScoreboardLeaderboardSort(scoreboardRoot) {
     return;
   }
 
-  const sortedVisible = visible.slice().sort((a, b) => {
-    const ar = /** @type {HTMLTableRowElement} */ (a);
-    const br = /** @type {HTMLTableRowElement} */ (b);
-    const pa = beatmapScoreboardRowSortPrimary(ar, colMap, sortKey);
-    const pb = beatmapScoreboardRowSortPrimary(br, colMap, sortKey);
-    const pc = desc ? pb - pa : pa - pb;
-    if (pc !== 0) return pc;
-    const ta = beatmapScoreboardRowSortTieScore(ar, colMap);
-    const tb = beatmapScoreboardRowSortTieScore(br, colMap);
-    const tc = desc ? tb - ta : ta - tb;
-    return tc;
+  // Read each row's keys once instead of on every comparison.
+  const keyed = visible.map((r) => {
+    const row = /** @type {HTMLTableRowElement} */ (r);
+    return {
+      row,
+      primary: beatmapScoreboardRowSortPrimary(row, colMap, sortKey),
+      tie: beatmapScoreboardRowSortTieScore(row, colMap),
+    };
   });
+  const sortedVisible = keyed
+    .sort((a, b) => {
+      const pc = desc ? b.primary - a.primary : a.primary - b.primary;
+      if (pc !== 0) return pc;
+      return desc ? b.tie - a.tie : a.tie - b.tie;
+    })
+    .map((k) => k.row);
 
   const desired = [...sortedVisible, ...hidden];
   let same = true;

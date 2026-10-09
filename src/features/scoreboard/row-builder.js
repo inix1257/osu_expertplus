@@ -323,7 +323,32 @@ export function applyScoreboardFlagCell(td, refTd, user, ruleset) {
  * @returns {{ rank: number|null, grade: number|null, score: number|null, pp: number|null, accuracy: number|null, flag: number|null, user: number|null, combo: number|null, mods: number|null, time: number|null, hitstatIndices: number[] }}
  */
 export function buildBeatmapScoreboardColumnMap(templateRow, table) {
+  // One refresh pass asks for the same table's map several times; reuse it
+  // while the header, the template row's shape and the ruleset are the same.
   const ths = [...table.querySelectorAll("thead th")];
+  const key = [
+    getBeatmapPageRuleset(),
+    templateRow.cells.length,
+    ...ths.map((th) => `${th.className}\u0000${th.textContent}`),
+  ].join("\u0001");
+  const cached = columnMapCache.get(table);
+  if (cached && cached.key === key) {
+    return cached.map;
+  }
+  const map = computeColumnMap(templateRow, table, ths);
+  columnMapCache.set(table, { key, map });
+  return map;
+}
+
+/** @type {WeakMap<HTMLTableElement, { key: string, map: ReturnType<typeof computeColumnMap> }>} */
+const columnMapCache = new WeakMap();
+
+/**
+ * @param {HTMLTableRowElement} templateRow
+ * @param {HTMLTableElement} table
+ * @param {HTMLTableCellElement[]} ths
+ */
+function computeColumnMap(templateRow, table, ths) {
   const idx = (mod) => {
     const suf = `__header--${mod}`;
     const th = ths.find((t) => [...t.classList].some((c) => c.endsWith(suf)));
