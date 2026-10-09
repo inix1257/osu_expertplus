@@ -145,3 +145,49 @@ test("manageStyle.acquire keeps the style until the last release (B64)", () => {
   a.remove();
   assert.equal(document.getElementById("oep-test-style"), null);
 });
+
+test("set*IfChanged helpers write only when the value changes", async () => {
+  const { window, document, dom } = loadDom();
+  const node = document.createElement("div");
+  document.body.appendChild(node);
+  const records = [];
+  const mo = new window.MutationObserver((r) => records.push(...r));
+  mo.observe(node, { attributes: true, childList: true });
+  const settle = async () => {
+    await new Promise((r) => setTimeout(r, 0));
+    const n = records.length;
+    records.length = 0;
+    return n;
+  };
+
+  dom.setAttrIfChanged(node, "data-a", "1");
+  dom.setAttrIfChanged(node, "data-a", 1);
+  assert.equal(await settle(), 1);
+  dom.setAttrIfChanged(node, "data-a", null);
+  dom.setAttrIfChanged(node, "data-a", null);
+  assert.equal(await settle(), 1);
+  assert.equal(node.hasAttribute("data-a"), false);
+
+  dom.toggleClassIfChanged(node, "on", true);
+  dom.toggleClassIfChanged(node, "on", true);
+  assert.equal(await settle(), 1);
+  dom.toggleClassIfChanged(node, "on", false);
+  dom.toggleClassIfChanged(node, "on", false);
+  assert.equal(await settle(), 1);
+
+  dom.setStylePropIfChanged(node, "--x", "2px");
+  dom.setStylePropIfChanged(node, "--x", "2px");
+  assert.equal(await settle(), 1);
+  assert.equal(node.style.getPropertyValue("--x"), "2px");
+  dom.setStylePropIfChanged(node, "--x", null);
+  dom.setStylePropIfChanged(node, "--x", "");
+  assert.equal(await settle(), 1);
+
+  dom.setTextIfChanged(node, "t");
+  dom.setTextIfChanged(node, "t");
+  assert.equal(await settle(), 1);
+  dom.setHiddenIfChanged(node, true);
+  dom.setHiddenIfChanged(node, true);
+  assert.equal(await settle(), 1);
+  mo.disconnect();
+});

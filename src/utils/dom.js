@@ -1,4 +1,4 @@
-/** DOM helpers: qs/qsa/el, wait*, manageStyle, createCleanupBag, set*IfChanged */
+/** DOM helpers: qs/qsa/el, wait*, manageStyle, createCleanupBag, set*IfChanged (write only on change, so document observers are not re-triggered) */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
@@ -256,6 +256,58 @@ OsuExpertPlus.dom = (() => {
   }
 
   /**
+   * Set an attribute only when its value differs; `null`/`undefined` removes
+   * it (only if present).
+   * @param {Element|null|undefined} node
+   * @param {string} name
+   * @param {string|number|null|undefined} value
+   */
+  function setAttrIfChanged(node, name, value) {
+    if (!node) return;
+    if (value == null) {
+      if (node.hasAttribute(name)) node.removeAttribute(name);
+      return;
+    }
+    const next = String(value);
+    if (node.getAttribute(name) !== next) node.setAttribute(name, next);
+  }
+
+  /**
+   * Add or remove a class only when that changes the class list.
+   * @param {Element|null|undefined} node
+   * @param {string} className
+   * @param {boolean} on
+   */
+  function toggleClassIfChanged(node, className, on) {
+    if (!node) return;
+    const next = !!on;
+    if (node.classList.contains(className) !== next) {
+      node.classList.toggle(className, next);
+    }
+  }
+
+  /**
+   * Set an inline style property (e.g. `--my-var` or `background-color`)
+   * only when it differs; `null`/`undefined`/`""` removes it.
+   * @param {HTMLElement|null|undefined} node
+   * @param {string} prop
+   * @param {string|number|null|undefined} value
+   */
+  function setStylePropIfChanged(node, prop, value) {
+    if (!node) return;
+    if (value == null || value === "") {
+      if (node.style.getPropertyValue(prop) !== "") {
+        node.style.removeProperty(prop);
+      }
+      return;
+    }
+    const next = String(value);
+    if (node.style.getPropertyValue(prop) !== next) {
+      node.style.setProperty(prop, next);
+    }
+  }
+
+  /**
    * Parse a locale-formatted number string (handles period or comma as
    * decimal separator and spaces/commas/periods as group separators).
    * @param {string} str
@@ -326,6 +378,9 @@ OsuExpertPlus.dom = (() => {
     createCleanupBag,
     setTextIfChanged,
     setHiddenIfChanged,
+    setAttrIfChanged,
+    toggleClassIfChanged,
+    setStylePropIfChanged,
     parseLocaleNumber,
     formatDecimalPp,
   };

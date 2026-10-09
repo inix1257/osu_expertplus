@@ -7,6 +7,7 @@
 
 import * as lifecycle from "./lifecycle.js";
 import { createLogger, log } from "./log.js";
+import { observe } from "./observe.js";
 import * as routes from "./routes.js";
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
@@ -14,5 +15,6 @@ window.OsuExpertPlus.core = Object.freeze({
   createLogger,
   lifecycle,
   log,
+  observe,
   routes,
 });
