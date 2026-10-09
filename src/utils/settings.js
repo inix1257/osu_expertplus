@@ -8,7 +8,7 @@ OsuExpertPlus.settings = (() => {
       id: "header.navRecentNotification",
       label: "Latest chat / notification under header badges",
       description:
-        "Shows the newest unread chat message or notification as a one-line pill under the chat/notification counter in the top-right header (click it to open the matching popup). Read from the page’s own notification data — no extra requests, and nothing is marked as read.",
+        "Shows the newest unread chat message or notification as a one-line “username: content” pill under the chat/notification counter in the top-right header, stretched left to the Twitter button (click it to open the matching popup). Hover shows the full text; truncated comments and discussion posts are fetched once with a read-only request. Uses the page’s own notification data, so nothing is marked as read.",
       group: "Header",
       default: true,
     },
