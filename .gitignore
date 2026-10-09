@@ -21,3 +21,5 @@ Thumbs.db
 .cursor/*
 
 CLAUDE.md
+# Local dev loader (absolute file:// path)
+dist/osu-expertplus.dev.user.js

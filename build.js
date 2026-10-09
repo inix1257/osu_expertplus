@@ -12,6 +12,10 @@ const path = require("path");
 
 const ROOT = __dirname;
 const OUT = path.join(ROOT, "dist", "osu-expertplus.user.js");
+// Local dev loader: same metadata, but @require's the built file from disk so
+// Tampermonkey picks up every rebuild on page reload. Machine-specific, so it
+// is gitignored. Needs "Allow access to file URLs" for Tampermonkey.
+const DEV_OUT = path.join(ROOT, "dist", "osu-expertplus.dev.user.js");
 
 // Files are concatenated in this exact order.
 const FILES = [
@@ -97,6 +101,21 @@ function build() {
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, parts.join("\n"), "utf8");
   console.log(`Built → ${OUT}`);
+
+  buildDevLoader();
+}
+
+function buildDevLoader() {
+  const fileUrl = "file:///" + OUT.replace(/\\/g, "/").replace(/^\//, "");
+  const header = METADATA.replace(/\n'use strict';\n$/, "\n")
+    .replace(/^\/\/ @name .*$/m, (line) => `${line} (dev)`)
+    .replace(/^\/\/ @(downloadURL|updateURL) .*\n/gm, "")
+    .replace(
+      "// ==/UserScript==",
+      `// @require      ${fileUrl}\n// ==/UserScript==`
+    );
+  fs.writeFileSync(DEV_OUT, header, "utf8");
+  console.log(`Built → ${DEV_OUT}`);
 }
 
 build();
