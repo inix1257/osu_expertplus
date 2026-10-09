@@ -47,7 +47,13 @@ test("formatStars: boundaries per call site (D10)", () => {
       header,
       `header ${v}`,
     );
-    assert.equal(formatStars(v, STAR_FORMAT.profileBadge), badge, `badge ${v}`);
+    // The old badge rounded (`toFixed(2)`); D10-1 floors it like the header.
+    assert.equal(formatStars(v, { rounding: "round" }), badge, `badge ${v}`);
+    assert.equal(
+      formatStars(v, STAR_FORMAT.profileBadge),
+      formatStars(v, { ...STAR_FORMAT.header, locale: "en" }).replace(/,/g, ""),
+      `badge ${v} (D10-1)`,
+    );
     assert.equal(oldCard(v), card, `card ${v} (old)`);
     assert.equal(oldBadge(v), badge, `badge ${v} (old)`);
     // The old header uses the runtime default locale.

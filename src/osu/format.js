@@ -54,7 +54,8 @@ export function pageLocale() {
  */
 
 /**
- * The three behaviours in use until D10 is decided.
+ * Star rating text per call site. D10-1: every site floors to 2 decimals;
+ * the shape (trailing zeros, locale) stays per site.
  * @type {Readonly<Record<"card"|"header"|"profileBadge", Readonly<StarFormatOptions>>>}
  */
 export const STAR_FORMAT = Object.freeze({
@@ -62,8 +63,8 @@ export const STAR_FORMAT = Object.freeze({
   card: Object.freeze({ rounding: "truncate", trimZeros: true }),
   /** beatmap-detail `formatBeatmapsetHeaderStarRatingText` */
   header: Object.freeze({ rounding: "floor", localize: true }),
-  /** user-profile modded SR badge (`sr.toFixed(2)`) */
-  profileBadge: Object.freeze({ rounding: "round" }),
+  /** profile modded SR badge: fixed 2 decimals (was `sr.toFixed(2)`) */
+  profileBadge: Object.freeze({ rounding: "floor" }),
 });
 
 /**
