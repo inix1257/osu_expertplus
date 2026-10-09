@@ -15,7 +15,7 @@ import {
   clearMergedLeaderboard,
   renderMergedLeaderboard,
 } from "../merged-leaderboard.js";
-import { EXTENDED_LB_LIMIT } from "../scores-limit.js";
+import { beatmapScoresLimit } from "../scores-limit.js";
 import { sortLeaderboardScoresLikeTable } from "../sort.js";
 import { queueClicks } from "./click-runner.js";
 import {
@@ -253,7 +253,7 @@ export async function fetchAndMergeWildcardLeaderboards(
           type,
           // Omitting mods[] returns every mod combination; NM is required for nomod.
           mods: mods.length ? mods : ["NM"],
-          limit: EXTENDED_LB_LIMIT,
+          limit,
         },
         { signal },
       )
@@ -354,7 +354,7 @@ export function scheduleWildcardFetch(modsEl) {
       beatmapId,
       combos,
       mode,
-      EXTENDED_LB_LIMIT,
+      beatmapScoresLimit(),
       signal,
       leaderboardType,
     )

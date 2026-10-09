@@ -7,6 +7,15 @@ import { addRequestRewriter } from "../../core/page-hooks.js";
 import { settingIds, settings } from "../legacy.js";
 
 export const EXTENDED_LB_LIMIT = 100;
+/** osu-web's own page size. */
+export const DEFAULT_LB_LIMIT = 50;
+
+/** @returns {number} scores per leaderboard request with the current setting */
+export function beatmapScoresLimit() {
+  return settings().isEnabled(settingIds().API_EXTENDED_LEADERBOARD)
+    ? EXTENDED_LB_LIMIT
+    : DEFAULT_LB_LIMIT;
+}
 let scoresLimitRewriterInstalled = false;
 /**
  * @param {string} rawUrl
