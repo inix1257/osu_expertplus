@@ -340,7 +340,8 @@ export function renumberBeatmapScoreboardVisibleRanks(visibleRows, colMap) {
     const target = shell instanceof HTMLElement ? shell : td;
     const cur = String(target.textContent ?? "").trim();
     if (cur === "?") continue;
-    const next = String(i + 1);
+    // osu-web prints the rank as `#N` (scoreboard table-row.tsx); keep that.
+    const next = `#${i + 1}`;
     if (cur !== next) target.textContent = next;
   }
 }
