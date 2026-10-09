@@ -12,37 +12,37 @@ export const SCOREBOARD_GLOBAL_RANK_BADGE_CLASS = "oep-scoreboard-rank-badge";
  * Global ranks move slowly, and every looked-up id costs one osu! API rate-limit unit
  * (`GET /users` is charged per id), so keep them for a while across difficulty switches.
  */
-export const SCOREBOARD_GLOBAL_RANK_CACHE_TTL_MS = 30 * 60 * 1000;
+const SCOREBOARD_GLOBAL_RANK_CACHE_TTL_MS = 30 * 60 * 1000;
 
 /** `GET /users` returns every ruleset's statistics, so one lookup fills all four. */
-export const SCOREBOARD_GLOBAL_RANK_MODES = ["osu", "taiko", "fruits", "mania"];
+const SCOREBOARD_GLOBAL_RANK_MODES = ["osu", "taiko", "fruits", "mania"];
 
 /** Rows near the viewport are collected for this long, then looked up in one batch. */
-export const SCOREBOARD_GLOBAL_RANK_BATCH_MS = 100;
+const SCOREBOARD_GLOBAL_RANK_BATCH_MS = 100;
 
 /** @type {Map<string, { rank: number|null, ts: number }>} */
-export const _scoreboardGlobalRankCache = new Map();
+const _scoreboardGlobalRankCache = new Map();
 
 /** @typedef {{ userLink: HTMLElement, mode: string }} ScoreboardRankWaiter */
 /** @type {Map<number, ScoreboardRankWaiter[]>}  userId -> links waiting for the next batch */
-export const _scoreboardGlobalRankPending = new Map();
+const _scoreboardGlobalRankPending = new Map();
 
 /** @type {Map<number, ScoreboardRankWaiter[]>}  userId -> links waiting on a request in flight */
-export const _scoreboardGlobalRankInFlight = new Map();
+const _scoreboardGlobalRankInFlight = new Map();
 
-export let _scoreboardGlobalRankFlushTimer = 0;
+let _scoreboardGlobalRankFlushTimer = 0;
 
 /** @type {IntersectionObserver|null} */
-export let _scoreboardGlobalRankIo = null;
+let _scoreboardGlobalRankIo = null;
 
 /** @type {Set<Element>}  Rows currently observed (to drop ones React removed). */
-export const _scoreboardGlobalRankObserved = new Set();
+const _scoreboardGlobalRankObserved = new Set();
 
 /**
  * @param {string} mode
  * @param {number} userId
  */
-export function scoreboardGlobalRankCacheKey(mode, userId) {
+function scoreboardGlobalRankCacheKey(mode, userId) {
   return `${mode}|${userId}`;
 }
 
@@ -50,7 +50,7 @@ export function scoreboardGlobalRankCacheKey(mode, userId) {
  * @param {HTMLElement} row
  * @returns {number|null}
  */
-export function scoreboardRowUserId(row) {
+function scoreboardRowUserId(row) {
   const card = row.querySelector("a.js-usercard[data-user-id]");
   if (card instanceof HTMLElement) {
     const id = Number(card.getAttribute("data-user-id"));
@@ -70,7 +70,7 @@ export function scoreboardRowUserId(row) {
  * @param {HTMLElement} userLink  the username `<a>` to badge
  * @param {number|null} rank
  */
-export function paintScoreboardGlobalRankBadge(userLink, rank) {
+function paintScoreboardGlobalRankBadge(userLink, rank) {
   if (!(userLink instanceof HTMLElement)) return;
   const host = userLink.parentElement || userLink;
   let badge = host.querySelector(`.${SCOREBOARD_GLOBAL_RANK_BADGE_CLASS}`);
@@ -94,7 +94,7 @@ export function paintScoreboardGlobalRankBadge(userLink, rank) {
  * @param {number} userId
  * @returns {number|null|undefined}  undefined when not cached (or expired)
  */
-export function getCachedScoreboardGlobalRank(mode, userId) {
+function getCachedScoreboardGlobalRank(mode, userId) {
   const cached = _scoreboardGlobalRankCache.get(
     scoreboardGlobalRankCacheKey(mode, userId),
   );
@@ -103,7 +103,7 @@ export function getCachedScoreboardGlobalRank(mode, userId) {
   return cached.rank;
 }
 
-export function flushScoreboardGlobalRankLookups() {
+function flushScoreboardGlobalRankLookups() {
   _scoreboardGlobalRankFlushTimer = 0;
   const ids = Array.from(_scoreboardGlobalRankPending.keys());
   if (!ids.length) return;
@@ -151,7 +151,7 @@ export function flushScoreboardGlobalRankLookups() {
  * Paint from cache, or queue the row's player for the next batched lookup.
  * @param {HTMLElement} row
  */
-export function requestScoreboardGlobalRank(row) {
+function requestScoreboardGlobalRank(row) {
   if (!settings().isEnabled(settingIds().SCOREBOARD_GLOBAL_RANK)) return;
   const userLink = row.querySelector("a.js-usercard");
   if (!(userLink instanceof HTMLElement)) return;
@@ -180,7 +180,7 @@ export function requestScoreboardGlobalRank(row) {
   }
 }
 
-export function scoreboardGlobalRankIo() {
+function scoreboardGlobalRankIo() {
   if (!_scoreboardGlobalRankIo) {
     _scoreboardGlobalRankIo = new IntersectionObserver(
       (entries) => {
@@ -252,4 +252,18 @@ export function syncBeatmapScoreboardGlobalRanks(scoreboardRoot) {
       io.observe(row);
     }
   }
+}
+
+/**
+ * Stops lookups for the page being left (B21): disconnects the row
+ * IntersectionObserver, cancels the pending batch timer and forgets rows
+ * still waiting. Cached ranks are kept (they are shared across pages).
+ */
+export function disposeScoreboardGlobalRanks() {
+  _scoreboardGlobalRankIo?.disconnect();
+  _scoreboardGlobalRankIo = null;
+  _scoreboardGlobalRankObserved.clear();
+  window.clearTimeout(_scoreboardGlobalRankFlushTimer);
+  _scoreboardGlobalRankFlushTimer = 0;
+  _scoreboardGlobalRankPending.clear();
 }

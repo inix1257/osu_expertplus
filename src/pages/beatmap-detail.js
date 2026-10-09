@@ -19,7 +19,10 @@ import {
   getBeatmapPageRuleset,
   readBeatmapsetJson,
 } from "../features/scoreboard/context.js";
-import { syncBeatmapScoreboardGlobalRanks } from "../features/scoreboard/global-rank.js";
+import {
+  disposeScoreboardGlobalRanks,
+  syncBeatmapScoreboardGlobalRanks,
+} from "../features/scoreboard/global-rank.js";
 import {
   refreshBeatmapScoreboardTableEnhancements,
   setScoreboardRefreshPass,
@@ -7260,6 +7263,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     bag.add(startBeatmapScoreUserSearchManager(pathRe));
     bag.add(startBeatmapScoreboardHideRateEditFilterBar(pathRe));
     bag.add(startBeatmapScoreboardTableEnhancementsLive(pathRe));
+    bag.add(disposeScoreboardGlobalRanks);
     bag.add(startDiscussionTabLinkPatcher(beatmapsetId));
     bag.add(startBeatmapsetFavouriteButtonPinkIndicator(header));
     bag.add(startPickerDiffNames(header, pathRe));
