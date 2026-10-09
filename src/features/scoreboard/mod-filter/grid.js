@@ -42,6 +42,7 @@ import {
   MOD_GRID_COLLAPSED_CLASS,
   modButtonAcronym,
   modDifficultyRow,
+  resetModFilterState,
   setGridCloneOn,
   STABLE_MOD_ACRONYMS,
   state,
@@ -728,7 +729,7 @@ export async function setupBeatmapScoreboardModGrid() {
     ac.abort();
     clearWildcardState();
     cancelClicks();
-    state.mergedTarget.clear();
     if (document.body.contains(grid)) stopBeatmapScoreboardModGridLive(grid);
+    resetModFilterState();
   };
 }

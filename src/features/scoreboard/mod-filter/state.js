@@ -95,6 +95,14 @@ export function createModFilterState() {
 export const state = createModFilterState();
 
 /**
+ * Start over with empty state (grid disposal). Pending timers and fetches
+ * must be stopped first (`clearWildcardState`).
+ */
+export function resetModFilterState() {
+  Object.assign(state, createModFilterState());
+}
+
+/**
  * @param {HTMLElement} modRoot
  * @returns {0|1|2}
  */

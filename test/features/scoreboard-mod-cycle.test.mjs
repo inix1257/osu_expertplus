@@ -125,6 +125,6 @@ test("merged DT/NC: the wildcard step needs credentials", () => {
   assert.deepEqual([on(dt), on(nc)], [false, false]);
   assert.equal(state.mergedStep.get("DT_NC"), 3);
   assert.ok(state.wildcard.get("DT") > 0, "DT is a wildcard");
-  window.clearTimeout(state.wildcardDebounceTimer);
+  globalThis.window.clearTimeout(state.wildcardDebounceTimer);
   state.wildcardAbortCtrl?.abort();
 });
