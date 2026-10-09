@@ -53,7 +53,9 @@ export function modalButton(label, attrs = {}) {
 
 /**
  * Keyboard and outside-click handling of a picker: Escape and a click on the
- * overlay close it, Enter applies.
+ * overlay close it. Enter applies, except on a focused button, which does
+ * its own thing (Enter on Cancel used to apply the value), and while an IME
+ * is composing.
  * @param {HTMLElement} overlay
  * @param {{ apply: () => void, close: () => void }} actions
  */
@@ -63,6 +65,9 @@ export function bindPickerKeys(overlay, { apply, close }) {
   });
   overlay.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") close();
-    if (ev.key === "Enter") apply();
+    if (ev.key !== "Enter" || ev.isComposing) return;
+    if (/** @type {any} */ (ev.target)?.closest?.("button")) return;
+    ev.preventDefault();
+    apply();
   });
 }

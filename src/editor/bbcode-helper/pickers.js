@@ -3,6 +3,7 @@
  */
 
 import { el } from "../../features/legacy.js";
+import { isSafeColor } from "../sanitize.js";
 import { toggleWrap } from "../textarea.js";
 import { BBHELP_MODAL_CLASS } from "./constants.js";
 import {
@@ -52,9 +53,17 @@ export function openColorPicker(textarea) {
     swatch.style.background = v || "#ff66aa";
   };
   const close = modal.close;
+  const hintText = hint.textContent;
   const apply = () => {
     const value = String(textInput.value || "").trim();
     if (!value) return;
+    // Only what the preview (and the old sanitizer) accept as a colour.
+    if (!isSafeColor(value)) {
+      textInput.setAttribute("aria-invalid", "true");
+      hint.textContent = "Use #RGB, #RRGGBB or a color name (letters only).";
+      textInput.focus();
+      return;
+    }
     toggleWrap(textarea, `[color=${value}]`, "[/color]");
     close();
   };
@@ -63,7 +72,11 @@ export function openColorPicker(textarea) {
     textInput.value = colorInput.value;
     updateSwatch();
   });
-  textInput.addEventListener("input", updateSwatch);
+  textInput.addEventListener("input", () => {
+    textInput.removeAttribute("aria-invalid");
+    hint.textContent = hintText;
+    updateSwatch();
+  });
   cancelBtn.addEventListener("click", close);
   applyBtn.addEventListener("click", apply);
   bindPickerKeys(overlay, { apply, close });

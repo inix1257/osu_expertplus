@@ -162,6 +162,9 @@ export const BBHELP_CSS = `
     font: inherit;
     padding: 6px 8px;
   }
+  .${BBHELP_MODAL_CLASS} input[aria-invalid="true"] {
+    border-color: #f0ad4e;
+  }
   .${BBHELP_MODAL_CLASS} textarea {
     width: 100%;
     box-sizing: border-box;

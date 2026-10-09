@@ -20,6 +20,7 @@ function setup(html) {
     "HTMLTextAreaElement",
     "HTMLButtonElement",
     "HTMLInputElement",
+    "KeyboardEvent",
     "MutationObserver",
     "Event",
     "OsuExpertPlus",
@@ -256,4 +257,45 @@ test("imagemap modal drops its document listeners on Cancel and on page change (
   // Leaving the page with the modal open.
   assert.equal(doc.querySelector(".oep-bbhelp-modal"), null);
   assert.equal(live.size, 0);
+});
+
+function key(window, target, k) {
+  target.dispatchEvent(
+    new window.KeyboardEvent("keydown", { key: k, bubbles: true }),
+  );
+}
+
+test("colour picker: Enter on Cancel cancels, only hex or names apply", async () => {
+  const window = setup(EDITOR);
+  const { openColorPicker } =
+    await import("../../src/editor/bbcode-helper/pickers.js");
+  const doc = window.document;
+  const ta = doc.querySelector("textarea");
+  ta.value = "hi";
+  ta.setSelectionRange(0, 2);
+
+  openColorPicker(ta);
+  let modal = doc.querySelector(".oep-bbhelp-modal");
+  const cancel = [...modal.querySelectorAll("button")].find(
+    (b) => b.textContent === "Cancel",
+  );
+  key(window, cancel, "Enter");
+  assert.equal(ta.value, "hi", "Enter on Cancel does not apply");
+
+  modal.remove();
+  openColorPicker(ta);
+  modal = doc.querySelector(".oep-bbhelp-modal");
+  const text = modal.querySelector('input[type="text"]');
+  text.value = "red;position:fixed";
+  key(window, text, "Enter");
+  assert.equal(ta.value, "hi");
+  assert.equal(text.getAttribute("aria-invalid"), "true");
+  assert.ok(doc.querySelector(".oep-bbhelp-modal"), "stays open");
+
+  text.value = "#abc";
+  text.dispatchEvent(new window.Event("input", { bubbles: true }));
+  assert.equal(text.hasAttribute("aria-invalid"), false);
+  key(window, text, "Enter");
+  assert.equal(ta.value, "[color=#abc]hi[/color]");
+  assert.equal(doc.querySelector(".oep-bbhelp-modal"), null);
 });
