@@ -57,75 +57,129 @@ OsuExpertPlus.dom = (() => {
     return element;
   }
 
-  /** Wait for selector match to disconnect (SPA teardown); no-op if absent. Use before waitForElement on re-nav. */
-  function waitForStaleElementToLeave(
-    selector,
-    timeout = 8000,
-    root = document.documentElement,
-  ) {
-    return new Promise((resolve) => {
+  /**
+   * Normalizes `(timeout, root)` positional arguments or a
+   * `{ timeout, root, signal }` object (as the 2nd or 3rd argument).
+   * @param {unknown} a
+   * @param {unknown} b
+   * @param {number} defaultTimeout
+   * @returns {{ timeout: number, root: ParentNode, signal?: AbortSignal }}
+   */
+  function waitOptions(a, b, defaultTimeout) {
+    const isOpts = (v) =>
+      v != null && typeof v === "object" && !(v instanceof Node);
+    const opts = isOpts(a) ? a : isOpts(b) ? b : {};
+    const timeout =
+      typeof a === "number" ? a : (opts.timeout ?? defaultTimeout);
+    const root =
+      b instanceof Node ? b : (opts.root ?? document.documentElement);
+    return { timeout, root, signal: opts.signal };
+  }
+
+  function abortError() {
+    return new DOMException("The operation was aborted.", "AbortError");
+  }
+
+  /**
+   * Wait for a selector match to disconnect (SPA teardown); resolves at once
+   * if absent, and also after `timeout` ms. Use before waitForElement on re-nav.
+   * Rejects with an `AbortError` if `signal` aborts first.
+   * @param {string} selector
+   * @param {number | { timeout?: number, root?: ParentNode, signal?: AbortSignal }} [timeoutOrOpts=8000]
+   * @param {ParentNode | { timeout?: number, root?: ParentNode, signal?: AbortSignal }} [rootOrOpts=document.documentElement]
+   * @returns {Promise<void>}
+   */
+  function waitForStaleElementToLeave(selector, timeoutOrOpts, rootOrOpts) {
+    const { timeout, root, signal } = waitOptions(
+      timeoutOrOpts,
+      rootOrOpts,
+      8000,
+    );
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) return reject(abortError());
       const stale = root.querySelector(selector);
       if (!stale || !stale.isConnected) {
         return resolve();
       }
 
+      let timer = 0;
+      const finish = (fn) => {
+        observer.disconnect();
+        window.clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        fn();
+      };
+      const onAbort = () => finish(() => reject(abortError()));
       const observer = new MutationObserver(() => {
-        if (!stale.isConnected) {
-          observer.disconnect();
-          resolve();
-        }
+        if (!stale.isConnected) finish(resolve);
       });
       observer.observe(root, { childList: true, subtree: true });
-      setTimeout(() => {
-        observer.disconnect();
-        resolve();
-      }, timeout);
+      timer = window.setTimeout(() => finish(resolve), timeout);
+      signal?.addEventListener("abort", onAbort, { once: true });
     });
   }
 
   /**
    * Wait for an element matching `selector` to appear in the DOM.
-   * Resolves with the element or rejects after `timeout` ms.
+   * Resolves with the element, rejects after `timeout` ms, or rejects with an
+   * `AbortError` if `signal` aborts first.
    * @param {string} selector
-   * @param {number} [timeout=10000]
-   * @param {Element} [root=document.body]
+   * @param {number | { timeout?: number, root?: ParentNode, signal?: AbortSignal }} [timeoutOrOpts=10000]
+   * @param {ParentNode | { timeout?: number, root?: ParentNode, signal?: AbortSignal }} [rootOrOpts=document.documentElement]
    * @returns {Promise<Element>}
    */
-  function waitForElement(
-    selector,
-    timeout = 10000,
-    root = document.documentElement,
-  ) {
+  function waitForElement(selector, timeoutOrOpts, rootOrOpts) {
+    const { timeout, root, signal } = waitOptions(
+      timeoutOrOpts,
+      rootOrOpts,
+      10000,
+    );
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) return reject(abortError());
       const existing = root.querySelector(selector);
       if (existing) return resolve(existing);
 
+      let timer = 0;
+      const finish = (fn) => {
+        observer.disconnect();
+        window.clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        fn();
+      };
+      const onAbort = () => finish(() => reject(abortError()));
       const observer = new MutationObserver(() => {
         const found = root.querySelector(selector);
-        if (found) {
-          observer.disconnect();
-          resolve(found);
-        }
+        if (found) finish(() => resolve(found));
       });
 
       observer.observe(root, { childList: true, subtree: true });
 
-      setTimeout(() => {
-        observer.disconnect();
-        reject(
-          new Error(
-            `waitForElement: "${selector}" not found within ${timeout}ms`,
+      timer = window.setTimeout(() => {
+        finish(() =>
+          reject(
+            new Error(
+              `waitForElement: "${selector}" not found within ${timeout}ms`,
+            ),
           ),
         );
       }, timeout);
+      signal?.addEventListener("abort", onAbort, { once: true });
     });
   }
 
+  /** @type {Map<string, number>} style id → acquire() count */
+  const styleRefCounts = new Map();
+
   /**
-   * Manages a <style> element lifecycle.  inject() is idempotent.
+   * Manages a <style> element lifecycle. inject() is idempotent.
+   *
+   * For a style that several features or overlapping page runs share, use
+   * `acquire()`: it injects on the first holder and returns a release
+   * function; the element is removed when the last holder releases (B64).
+   * `remove()` still removes the element regardless of holders.
    * @param {string} id   Unique element id for deduplication.
    * @param {string} css  Stylesheet text content.
-   * @returns {{ inject: () => void, remove: () => void }}
+   * @returns {{ inject: () => void, remove: () => void, acquire: () => () => void }}
    */
   function manageStyle(id, css) {
     const inject = () => {
@@ -136,7 +190,23 @@ OsuExpertPlus.dom = (() => {
       document.head.appendChild(s);
     };
     const remove = () => document.getElementById(id)?.remove();
-    return { inject, remove };
+    const acquire = () => {
+      styleRefCounts.set(id, (styleRefCounts.get(id) ?? 0) + 1);
+      inject();
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        const left = (styleRefCounts.get(id) ?? 1) - 1;
+        if (left > 0) {
+          styleRefCounts.set(id, left);
+        } else {
+          styleRefCounts.delete(id);
+          remove();
+        }
+      };
+    };
+    return { inject, remove, acquire };
   }
 
   /**
