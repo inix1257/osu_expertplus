@@ -42,6 +42,8 @@ import { findOsuModTemplateNode, waitForOsuModTemplate } from "./mods.js";
 import {
   SCORE_OPTIONS_BTN_CLASS,
   buildScoreOptionsMenu,
+  disposeScoreOptionsMenus,
+  removeScoreOptionsMenu,
 } from "./options-menu.js";
 import { buildPlayDetailRowFromApiScore } from "./row-builder.js";
 import {
@@ -79,7 +81,7 @@ function populateRecentScoresInnerList(
 ) {
   // Remove portaled option menus from a previous render before clearing the list.
   innerList.querySelectorAll(`.${SCORE_OPTIONS_BTN_CLASS}`).forEach((b) => {
-    b._oepMenu?.remove();
+    removeScoreOptionsMenu(b);
   });
   innerList.textContent = "";
   innerList.classList.toggle(
@@ -358,5 +360,6 @@ export function startRecentScoresWithFailsObserver(userId, mode) {
     document
       .querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`)
       .forEach((n) => n.remove());
+    disposeScoreOptionsMenus();
   };
 }

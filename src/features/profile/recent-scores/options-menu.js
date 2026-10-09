@@ -19,22 +19,49 @@ function _closeAllScoreOptionsMenus() {
     .forEach((m) => m.removeAttribute("data-open"));
 }
 
-let _scoreOptionsDocListenerAdded = false;
+/** Menus portaled into <body> so far (B42: removed on cleanup). */
+const portaledMenus = new Set();
+/** @type {WeakMap<Element, HTMLElement>} options button -> its menu */
+const menuByButton = new WeakMap();
+/** @type {((e: MouseEvent) => void) | null} */
+let docClickListener = null;
+
 function _ensureScoreOptionsDocListener() {
-  if (_scoreOptionsDocListenerAdded) return;
-  _scoreOptionsDocListenerAdded = true;
+  if (docClickListener) return;
   // Menus are portaled to <body> so we cannot use .closest() from the menu
   // element. Instead, close everything unless the click lands on a wrap button
   // or inside an open menu.
-  document.addEventListener(
-    "click",
-    (e) => {
-      const inWrap = e.target.closest(`.${SCORE_OPTIONS_WRAP_CLASS}`);
-      const inMenu = e.target.closest(`.${SCORE_OPTIONS_MENU_CLASS}`);
-      if (!inWrap && !inMenu) _closeAllScoreOptionsMenus();
-    },
-    { capture: true },
-  );
+  docClickListener = (e) => {
+    const target = /** @type {Element} */ (e.target);
+    const inWrap = target.closest?.(`.${SCORE_OPTIONS_WRAP_CLASS}`);
+    const inMenu = target.closest?.(`.${SCORE_OPTIONS_MENU_CLASS}`);
+    if (!inWrap && !inMenu) _closeAllScoreOptionsMenus();
+  };
+  document.addEventListener("click", docClickListener, { capture: true });
+}
+
+/**
+ * Remove the portaled menu of one options button (list re-render).
+ * @param {Element} btn
+ */
+export function removeScoreOptionsMenu(btn) {
+  const menu = menuByButton.get(btn);
+  if (!menu) return;
+  menu.remove();
+  portaledMenus.delete(menu);
+}
+
+/**
+ * Remove every portaled menu and the document click listener (B42). Called
+ * by the Recent cleanup; menus and the listener come back on the next open.
+ */
+export function disposeScoreOptionsMenus() {
+  portaledMenus.forEach((m) => m.remove());
+  portaledMenus.clear();
+  if (docClickListener) {
+    document.removeEventListener("click", docClickListener, { capture: true });
+    docClickListener = null;
+  }
 }
 
 /**
@@ -49,11 +76,9 @@ export function buildScoreOptionsMenu(score) {
   const scoreId = score?.id;
   if (scoreId == null) return null;
 
-  _ensureScoreOptionsDocListener();
-
-  // Portal: menu lives in <body>, completely outside the card hierarchy.
+  // Portal: the menu lives in <body>, completely outside the card hierarchy,
+  // and only once it is first opened (B42: up to 200 rows).
   const menu = el("div", { class: SCORE_OPTIONS_MENU_CLASS });
-  document.body.appendChild(menu);
 
   const viewLink = el(
     "a",
@@ -154,6 +179,11 @@ export function buildScoreOptionsMenu(score) {
     const isOpen = menu.hasAttribute("data-open");
     _closeAllScoreOptionsMenus();
     if (!isOpen) {
+      _ensureScoreOptionsDocListener();
+      if (!menu.isConnected) {
+        document.body.appendChild(menu);
+        portaledMenus.add(menu);
+      }
       const rect = btn.getBoundingClientRect();
       menu.style.top = `${rect.bottom + 2}px`;
       menu.style.right = `${window.innerWidth - rect.right}px`;
@@ -161,9 +191,9 @@ export function buildScoreOptionsMenu(score) {
     }
   });
 
-  // Attach menu reference to the button so it can be cleaned up when the
-  // score list is repopulated (populateRecentScoresInnerList).
-  btn._oepMenu = menu;
+  // So the menu can be removed when the list is repopulated
+  // (populateRecentScoresInnerList).
+  menuByButton.set(btn, menu);
 
   return el("div", { class: SCORE_OPTIONS_WRAP_CLASS }, btn);
 }
