@@ -18,6 +18,7 @@ import {
   BEATMAP_PREVIEW,
   CARD_EXTRA,
   legacyFn,
+  LEGACY_SCOREBOARD,
 } from "./legacy.mjs";
 
 test("formatStars: boundaries per call site (D10)", () => {
@@ -103,10 +104,10 @@ test("formatRelativeShort: floor vs round boundaries (D10)", () => {
     [3 * 365 * D, "3y", "3y"],
     [-2 * H, "now", "2h"],
   ];
-  const oldFloor = legacyFn(BEATMAP_DETAIL, "formatScoreboardShortAgo", {
+  const oldFloor = legacyFn(LEGACY_SCOREBOARD, "formatScoreboardShortAgo", {
     Date: fixedDate(NOW),
   });
-  const oldRound = legacyFn(BEATMAP_DETAIL, "_scoreTopRelativeTime", {
+  const oldRound = legacyFn(LEGACY_SCOREBOARD, "_scoreTopRelativeTime", {
     Date: fixedDate(NOW),
   });
   for (const [age, floor, round] of cases) {
@@ -175,8 +176,8 @@ test("formatDuration: card (seconds) vs preview (ms, hours)", () => {
 });
 
 test("flagFilename matches both beatmap-detail versions", () => {
-  const oldTop = legacyFn(BEATMAP_DETAIL, "_scoreTopFlagFilename");
-  const oldRow = legacyFn(BEATMAP_DETAIL, "toUnicodeFlagFilename");
+  const oldTop = legacyFn(LEGACY_SCOREBOARD, "_scoreTopFlagFilename");
+  const oldRow = legacyFn(LEGACY_SCOREBOARD, "toUnicodeFlagFilename");
   const cases = [
     ["RU", "1f1f7-1f1fa"],
     ["kr", "1f1f0-1f1f7"],

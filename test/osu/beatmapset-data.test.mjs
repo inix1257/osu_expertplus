@@ -16,6 +16,7 @@ import {
   CARD_EXTRA,
   USER_PROFILE,
   legacyFn,
+  LEGACY_SCOREBOARD,
 } from "./legacy.mjs";
 
 const SET = {
@@ -55,18 +56,18 @@ function legacyGetters(win) {
     qs: (sel) => win.document.querySelector(sel),
   };
   const readBeatmapsetJsonOld = legacyFn(
-    BEATMAP_DETAIL,
+    LEGACY_SCOREBOARD,
     "readBeatmapsetJson",
     deps,
   );
   const ctx = { ...deps, readBeatmapsetJson: readBeatmapsetJsonOld };
   const getBeatmapPageRuleset = legacyFn(
-    BEATMAP_DETAIL,
+    LEGACY_SCOREBOARD,
     "getBeatmapPageRuleset",
     ctx,
   );
   const getBeatmapPageBeatmapId = legacyFn(
-    BEATMAP_DETAIL,
+    LEGACY_SCOREBOARD,
     "getBeatmapPageBeatmapId",
     { ...ctx, getBeatmapPageRuleset },
   );

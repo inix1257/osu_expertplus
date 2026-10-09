@@ -17,7 +17,7 @@ import {
   scoreMergeKey,
   statsCells,
 } from "../../src/osu/score.js";
-import { BEATMAP_DETAIL, USER_PROFILE, legacyFn } from "./legacy.mjs";
+import { LEGACY_SCOREBOARD, USER_PROFILE, legacyFn } from "./legacy.mjs";
 
 const PROFILE = { legacyOsuGreat: "300+geki" };
 const SCOREBOARD = { legacyOsuGreat: "300" };
@@ -305,7 +305,7 @@ test("hitstatValue matches hitstatTextFromHeaderLabel", () => {
     "???",
   ];
   for (const ruleset of ["osu", "fruits"]) {
-    const old = legacyFn(BEATMAP_DETAIL, "hitstatTextFromHeaderLabel", {
+    const old = legacyFn(LEGACY_SCOREBOARD, "hitstatTextFromHeaderLabel", {
       getBeatmapPageRuleset: () => ruleset,
     });
     for (const score of scores) {
@@ -324,7 +324,7 @@ test("hitstatValue matches hitstatTextFromHeaderLabel", () => {
 });
 
 test("hitstatClassFromLabel matches beatmapHitstatColorClassFromLabel", () => {
-  const old = legacyFn(BEATMAP_DETAIL, "beatmapHitstatColorClassFromLabel");
+  const old = legacyFn(LEGACY_SCOREBOARD, "beatmapHitstatColorClassFromLabel");
   const cases = [
     ["mania_perfect", "mania-perfect"],
     ["mania_good", "mania-good"],
@@ -388,7 +388,7 @@ test("full combo: profile (combo only) vs scoreboard (API flags)", () => {
 });
 
 test("scoreIndicatesPerfectCombo matches scoreApiIndicatesComboPerfect", () => {
-  const old = legacyFn(BEATMAP_DETAIL, "scoreApiIndicatesComboPerfect");
+  const old = legacyFn(LEGACY_SCOREBOARD, "scoreApiIndicatesComboPerfect");
   for (const s of [
     { perfect: true },
     { is_perfect_combo: true },
@@ -465,7 +465,7 @@ test("beatmapMaxComboFromScore matches _beatmapMaxComboFromScore except B68", ()
 });
 
 test("leaderboardScoreId matches beatmap-detail", () => {
-  const old = legacyFn(BEATMAP_DETAIL, "leaderboardScoreId");
+  const old = legacyFn(LEGACY_SCOREBOARD, "leaderboardScoreId");
   for (const s of [
     { id: 123 },
     { id: 0, legacy_score_id: 55 },

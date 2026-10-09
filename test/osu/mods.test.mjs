@@ -21,7 +21,7 @@ import {
   speedChangeFromMod,
 } from "../../src/osu/mods.js";
 import { loadScripts } from "../helpers/load-script.mjs";
-import { BEATMAP_DETAIL, USER_PROFILE, legacyFn } from "./legacy.mjs";
+import { LEGACY_SCOREBOARD, USER_PROFILE, legacyFn } from "./legacy.mjs";
 
 const SPEED_DEPS = {
   SCOREBOARD_MOD_DEFAULT_SPEED_UP: 1.5,
@@ -29,12 +29,15 @@ const SPEED_DEPS = {
   SCOREBOARD_MOD_SPEED_EPS: 0.005,
 };
 const oldShouldShow = legacyFn(
-  BEATMAP_DETAIL,
+  LEGACY_SCOREBOARD,
   "shouldShowScoreboardModSpeedIndicator",
   SPEED_DEPS,
 );
-const oldSpeedChange = legacyFn(BEATMAP_DETAIL, "speedChangeFromScoreMod");
-const oldFormatRate = legacyFn(BEATMAP_DETAIL, "formatScoreboardModSpeedRate");
+const oldSpeedChange = legacyFn(LEGACY_SCOREBOARD, "speedChangeFromScoreMod");
+const oldFormatRate = legacyFn(
+  LEGACY_SCOREBOARD,
+  "formatScoreboardModSpeedRate",
+);
 
 test("modAcronym / modAcronyms: strings and objects", () => {
   const cases = [
@@ -166,7 +169,7 @@ test("modRateLabel: profile vs scoreboard", () => {
 });
 
 test("scoreHasNonstandardRate matches beatmap-detail", () => {
-  const old = legacyFn(BEATMAP_DETAIL, "scoreHasNonstandardRate", {
+  const old = legacyFn(LEGACY_SCOREBOARD, "scoreHasNonstandardRate", {
     speedChangeFromScoreMod: oldSpeedChange,
     shouldShowScoreboardModSpeedIndicator: oldShouldShow,
   });
@@ -210,7 +213,7 @@ test("modTypeClass matches mod-icons modTypeClassForAcronym", () => {
 });
 
 test("modFullName matches beatmap-detail", () => {
-  const old = legacyFn(BEATMAP_DETAIL, "modFullName");
+  const old = legacyFn(LEGACY_SCOREBOARD, "modFullName");
   for (const ac of ["DT", "hd", " NC ", "4K", "10K", "11K", "SV2", "ZZ", ""]) {
     assert.equal(modFullName(ac), old(ac), JSON.stringify(ac));
   }

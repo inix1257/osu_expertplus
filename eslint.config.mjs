@@ -61,6 +61,7 @@ export default [
       "src/editor/**/*.js",
       "src/features/**/*.js",
       "src/pages/beatmap-discussion.js",
+      "src/pages/beatmap-detail.js",
     ],
     languageOptions: { sourceType: "module" },
   },
