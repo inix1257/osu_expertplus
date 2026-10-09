@@ -4,9 +4,9 @@
  */
 
 import { el } from "../../features/legacy.js";
+import { safeHttpUrl } from "../sanitize.js";
 import { replaceRange } from "../textarea.js";
 import { BBHELP_BTN_CLASS, BBHELP_MODAL_CLASS } from "./constants.js";
-import { _sanitizeHttpPreviewUrl } from "./live-preview.js";
 
 export function _openImagemapHelper(textarea) {
   // State
@@ -836,7 +836,7 @@ export function _openImagemapHelper(textarea) {
   document.addEventListener("mouseup", onGlobalMouseUp);
 
   const loadImage = () => {
-    const safe = _sanitizeHttpPreviewUrl(String(urlInput.value || "").trim());
+    const safe = safeHttpUrl(String(urlInput.value || "").trim());
     if (!safe) {
       imgPlaceholder.style.display = "";
       imgPlaceholder.textContent =
