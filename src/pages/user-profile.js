@@ -8451,6 +8451,9 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   /**
+   * Legacy subsection key, only used to migrate old collapse state. It must
+   * reproduce keys written by older versions exactly, so keep the regex as is
+   * (the doubled `'` was never `’`; B74).
    * @param {string} text
    * @param {Set<string>} usedSlugs
    * @returns {string}
