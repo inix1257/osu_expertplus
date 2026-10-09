@@ -4,7 +4,11 @@
  * scripts, and a DOM canonicalizer for golden comparisons.
  */
 import { loadScripts } from "../helpers/load-script.mjs";
-import { BEATMAP_DETAIL, USER_PROFILE, legacySource } from "../osu/legacy.mjs";
+import {
+  LEGACY_DISCUSSION,
+  USER_PROFILE,
+  legacySource,
+} from "../osu/legacy.mjs";
 
 /** @returns {{ window: any, document: Document, OsuExpertPlus: any }} */
 export function setupWindow() {
@@ -71,7 +75,7 @@ export function oldBbcodeRenderer(window) {
  */
 export function oldMarkdownRenderer(window) {
   return legacyGroup(
-    BEATMAP_DETAIL,
+    LEGACY_DISCUSSION,
     ["escapeHtml", "sanitizeHttpUrl", "renderMarkdownPreviewHtml"],
     "renderMarkdownPreviewHtml",
     { location: window.location },

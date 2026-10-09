@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   beatmapsetIdFromPath,
+  discussionPath,
+  discussionTotalPath,
+  isDiscussionReviewsTotal,
   isAccountEdit,
   isBeatmapsetDiscussion,
   isBeatmapsetsListing,
@@ -35,6 +38,27 @@ test("isBeatmapsetDiscussion", () => {
   );
   assert.equal(isBeatmapsetDiscussion("/beatmapsets/1"), false);
   assert.equal(isBeatmapsetDiscussion("/beatmapsets/discussions"), false);
+  assert.equal(isBeatmapsetDiscussion("/beatmapsets/1/discussionx"), false);
+});
+
+test("discussion paths", () => {
+  assert.equal(discussionPath(39804), "/beatmapsets/39804/discussion");
+  assert.equal(
+    discussionTotalPath("39804"),
+    "/beatmapsets/39804/discussion/-/generalAll/total",
+  );
+  assert.equal(
+    isDiscussionReviewsTotal("/beatmapsets/1/discussion/-/reviews/total"),
+    true,
+  );
+  assert.equal(
+    isDiscussionReviewsTotal("/beatmapsets/1/discussion/-/reviews/totalx"),
+    false,
+  );
+  assert.equal(
+    isDiscussionReviewsTotal("/beatmapsets/1/discussion/-/generalAll/total"),
+    false,
+  );
 });
 
 test("isUserProfile and isAccountEdit", () => {

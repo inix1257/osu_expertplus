@@ -10,6 +10,7 @@ function createRouter(pages) {
   return new Router({
     accountEdit: noop,
     beatmapDetail: noop,
+    beatmapDiscussion: noop,
     beatmapsetsListing: noop,
     userProfile: noop,
     ...pages,
@@ -113,4 +114,22 @@ test("listing page does not start on /beatmapsets/discussions or /events (B25)",
     router._navigate(p);
   }
   assert.deepEqual(seen, ["/beatmapsets", "/beatmapsets/"]);
+});
+
+test("discussion paths go to beatmapDiscussion, not beatmapDetail", () => {
+  const seen = [];
+  const router = createRouter({
+    beatmapDetail: { init: (m) => void seen.push(["detail", m[1]]) },
+    beatmapDiscussion: { init: (m) => void seen.push(["discussion", m[1]]) },
+  });
+  router._navigate("/beatmapsets/7/discussion");
+  router._navigate("/beatmapsets/7/discussion/-/generalAll/total");
+  router._navigate("/beatmapsets/7");
+  router._navigate("/beatmapsets/7/discussionx");
+  assert.deepEqual(seen, [
+    ["discussion", "7"],
+    ["discussion", "7"],
+    ["detail", "7"],
+    ["detail", "7"],
+  ]);
 });

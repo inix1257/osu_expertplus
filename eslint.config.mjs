@@ -31,7 +31,15 @@ const baselineRules = {
 };
 
 export default [
-  { ignores: ["dist/", "web.js", "docs/", "node_modules/"] },
+  {
+    ignores: [
+      "dist/",
+      "web.js",
+      "docs/",
+      "node_modules/",
+      "test/fixtures/legacy/",
+    ],
+  },
   js.configs.recommended,
   {
     // Legacy scripts that attach themselves to window.OsuExpertPlus.
@@ -52,6 +60,7 @@ export default [
       "src/osu/**/*.js",
       "src/editor/**/*.js",
       "src/features/**/*.js",
+      "src/pages/beatmap-discussion.js",
     ],
     languageOptions: { sourceType: "module" },
   },

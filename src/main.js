@@ -26,11 +26,14 @@ import "./utils/beatmapsets-listing-mode.js";
 import "./utils/nav-recent-notification.js";
 import "./pages/beatmapsets-listing.js";
 import "./pages/beatmap-detail.js";
+import { beatmapDiscussion } from "./pages/beatmap-discussion.js";
 import "./pages/user-profile.js";
 import "./pages/account-edit.js";
 import "./ui/settings-panel.js";
 
 const { OsuExpertPlus } = window;
+
+OsuExpertPlus.pages.beatmapDiscussion = beatmapDiscussion;
 
 OsuExpertPlus.settingsPanel.init();
 OsuExpertPlus.modIconsAsAcronyms.install(OsuExpertPlus.settings);

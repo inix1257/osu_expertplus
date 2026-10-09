@@ -58,5 +58,8 @@ export function legacyFn(file, name, deps = {}) {
 
 export const BEATMAP_DETAIL = "src/pages/beatmap-detail.js";
 export const USER_PROFILE = "src/pages/user-profile.js";
+/** Discussion helpers removed from beatmap-detail by WS-30 (frozen copy). */
+export const LEGACY_DISCUSSION =
+  "test/fixtures/legacy/beatmap-detail-discussion.js";
 export const CARD_EXTRA = "src/utils/beatmap-card-extra.js";
 export const BEATMAP_PREVIEW = "src/utils/beatmap-preview.js";

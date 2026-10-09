@@ -3,6 +3,7 @@
 import { createLogger } from "./log.js";
 import {
   ACCOUNT_EDIT_RE,
+  BEATMAPSET_DISCUSSION_RE,
   BEATMAPSET_RE,
   BEATMAPSETS_LISTING_RE,
   USER_PROFILE_RE,
@@ -35,6 +36,8 @@ export class Router {
     /** @type {{ pattern: RegExp, module: PageModule }[]} */
     this._routes = [
       { pattern: ACCOUNT_EDIT_RE, module: pages.accountEdit },
+      // Before beatmapDetail: discussion paths also match BEATMAPSET_RE.
+      { pattern: BEATMAPSET_DISCUSSION_RE, module: pages.beatmapDiscussion },
       { pattern: BEATMAPSET_RE, module: pages.beatmapDetail },
       { pattern: BEATMAPSETS_LISTING_RE, module: pages.beatmapsetsListing },
       { pattern: USER_PROFILE_RE, module: pages.userProfile },

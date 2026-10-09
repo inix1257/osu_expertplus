@@ -5,7 +5,7 @@ import {
   placeBbcodePreviewToggle,
   placeDiscussionPreviewToggle,
 } from "../../src/editor/preview-toggle.js";
-import { BEATMAP_DETAIL, USER_PROFILE, legacyFn } from "../osu/legacy.mjs";
+import { LEGACY_DISCUSSION, USER_PROFILE, legacyFn } from "../osu/legacy.mjs";
 import { setupWindow } from "./helpers.mjs";
 
 const { window, document } = setupWindow();
@@ -14,7 +14,7 @@ const oldFindCancel = legacyFn(USER_PROFILE, "_findCancelActionNode", {
   HTMLElement: window.HTMLElement,
 });
 const oldPlaceDiscussion = legacyFn(
-  BEATMAP_DETAIL,
+  LEGACY_DISCUSSION,
   "placePreviewToggleButton",
   {
     HTMLElement: window.HTMLElement,
