@@ -12,6 +12,7 @@ import {
   WILDCARD_DUPE_ROW_ATTR,
   WILDCARD_LOADING_CLASS,
 } from "./context.js";
+import { MERGED_NOTICE_CLASS } from "./merged-leaderboard.js";
 import {
   MOD_GRID_ATTR,
   MOD_GRID_COLLAPSED_CLASS,
@@ -292,6 +293,12 @@ export const SCOREBOARD_CSS = `
   /* Rows hidden by the rate filter or a merged leaderboard (see ROW_HIDE_ATTR). */
   tr[${ROW_HIDE_ATTR}] {
     display: none !important;
+  }
+  /* Empty or failed wildcard merge. */
+  tr.${MERGED_NOTICE_CLASS} > td {
+    padding: 1.5rem 0.5rem;
+    text-align: center;
+    color: hsl(var(--hsl-l2, 0 0% 70%));
   }
   /* Custom-rate (non 1.00×/1.50×) scores — slightly dimmed. */
   tr[${RATE_EDIT_ROW_ATTR}] {

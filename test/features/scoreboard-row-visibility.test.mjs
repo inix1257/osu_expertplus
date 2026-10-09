@@ -104,9 +104,7 @@ test("the rate filter survives a merged leaderboard being cleared (B09)", () => 
 });
 
 test("turning the rate filter off keeps merged-hidden rows hidden (B09)", () => {
-  const { root, tbody, enabled } = setup(
-    row("n1") + row("n2", { rate: true }),
-  );
+  const { root, tbody, enabled } = setup(row("n1") + row("n2", { rate: true }));
   refreshBeatmapScoreboardTableEnhancements(root);
   for (const r of tbody.rows) setRowHidden(r, "merged", true);
   tbody.insertAdjacentHTML(

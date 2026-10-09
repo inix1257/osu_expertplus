@@ -4,6 +4,7 @@
  * shows the result in place of osu-web's rows.
  */
 
+import { createLogger } from "../../../core/log.js";
 import { leaderboardScoreId } from "../../../osu/score.js";
 import { isAuthConfigured, settingIds, settings } from "../../legacy.js";
 import {
@@ -14,6 +15,7 @@ import {
 import {
   clearMergedLeaderboard,
   renderMergedLeaderboard,
+  showMergedNotice,
 } from "../merged-leaderboard.js";
 import { beatmapScoresLimit } from "../scores-limit.js";
 import { sortLeaderboardScoresLikeTable } from "../sort.js";
@@ -39,6 +41,12 @@ import {
   modButtonAcronym,
   state,
 } from "./state.js";
+
+const log = createLogger("scoreboard/wildcard");
+
+const EMPTY_NOTICE = "No scores with these mods.";
+const FAILED_NOTICE =
+  "Could not load the scores for these mods. Try again later.";
 
 /** Drop the wildcard loading overlay everywhere (an aborted fetch never clears its own). */
 export function clearWildcardLoadingOverlays() {
@@ -220,7 +228,8 @@ export function readBeatmapScoreboardLeaderboardType(scoreboardRoot) {
 
 /**
  * Fetch leaderboard scores for multiple mod combinations, merge, dedup, sort,
- * and return the top `limit` scores. Uses `GET /beatmaps/{beatmapId}/scores` on
+ * and return the top `limit` scores. Throws the first error when every
+ * combination failed; with some failed, merges the rest (B11). Uses `GET /beatmaps/{beatmapId}/scores` on
  * osu.ppy.sh (site JSON), not `/api/v2`.
  * @param {string} beatmapId  difficulty id (same as in `/beatmaps/{id}/scores`)
  * @param {string[][]} modCombos
@@ -244,6 +253,8 @@ export async function fetchAndMergeWildcardLeaderboards(
     leaderboardType === "team"
       ? leaderboardType
       : "global";
+  /** @type {unknown[]} */
+  const failures = [];
   const fetches = modCombos.map((mods) =>
     OsuExpertPlus.api
       .getBeatmapScoresWebsite(
@@ -258,11 +269,21 @@ export async function fetchAndMergeWildcardLeaderboards(
         { signal },
       )
       .then((res) => res?.scores || [])
-      .catch(() => []),
+      .catch((err) => {
+        if (!signal.aborted) failures.push(err);
+        return [];
+      }),
   );
 
   const results = await Promise.all(fetches);
   if (signal.aborted) return [];
+  if (failures.length === modCombos.length) throw failures[0];
+  if (failures.length) {
+    log.warn(
+      `${failures.length} of ${modCombos.length} mod combinations failed:`,
+      failures[0],
+    );
+  }
 
   const seen = new Set();
   const merged = [];
@@ -363,12 +384,18 @@ export function scheduleWildcardFetch(modsEl) {
         if (signal.aborted) return;
         // Difficulty/ruleset changed while fetching: these scores belong to another map.
         if (getWildcardBeatmapKey() !== fetchKey) return;
+        // An empty result must not leave the previous combination's rows (B11).
         if (merged.length > 0) {
           renderMergedLeaderboard(scoreboardRoot, "wildcard", merged);
+        } else {
+          showMergedNotice(scoreboardRoot, "wildcard", EMPTY_NOTICE);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         removeLoadingOverlay();
+        if (signal.aborted || getWildcardBeatmapKey() !== fetchKey) return;
+        log.warn("wildcard leaderboard fetch failed:", err);
+        showMergedNotice(scoreboardRoot, "wildcard", FAILED_NOTICE);
       });
   }, 1000);
 }

@@ -29,6 +29,9 @@ import { resolveBeatmapScoreboardModTemplateEl } from "./row-mods.js";
 
 /** @typedef {"wildcard"|"lookup"} MergedKind */
 
+/** Single-cell row standing in for an empty or failed merged leaderboard. */
+export const MERGED_NOTICE_CLASS = "oep-merged-notice";
+
 /** Row marker per kind. */
 export const MERGED_ROW_ATTRS = {
   wildcard: WILDCARD_MERGED_ROW_ATTR,
@@ -125,6 +128,50 @@ function prependTeamFlag(playerTd, team) {
 }
 
 /**
+ * Drop every injected row and hide osu-web's rows for a merged leaderboard.
+ * @param {HTMLElement} tbody
+ * @returns {Element|null}  the first osu-web row (insert merged rows before it)
+ */
+function replaceNativeRows(tbody) {
+  tbody
+    .querySelectorAll(
+      `tr[${EXTENDED_SCORE_ROW_ATTR}], tr[${WILDCARD_MERGED_ROW_ATTR}], tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`,
+    )
+    .forEach((r) => r.remove());
+  const nativeRows = [...tbody.querySelectorAll(SCOREBOARD_ROW_SEL)];
+  for (const nr of nativeRows) setRowHidden(nr, "merged", true);
+  return nativeRows[0] ?? null;
+}
+
+/**
+ * A merged leaderboard with a message instead of scores (no scores, or the
+ * fetch failed): osu-web's rows stay hidden, since they answer a different
+ * query.
+ * @param {HTMLElement} scoreboardRoot
+ * @param {MergedKind} kind
+ * @param {string} text
+ */
+export function showMergedNotice(scoreboardRoot, kind, text) {
+  const found = findScoreboardTable(scoreboardRoot);
+  if (!found) return;
+  const { table, tbody } = found;
+  const firstNative = replaceNativeRows(tbody);
+  const columns =
+    table.tHead?.rows[0]?.cells.length ||
+    /** @type {HTMLTableRowElement|null} */ (firstNative)?.cells.length ||
+    1;
+  const tr = document.createElement("tr");
+  tr.className = MERGED_NOTICE_CLASS;
+  tr.setAttribute(MERGED_ROW_ATTRS[kind], "1");
+  const td = document.createElement("td");
+  td.colSpan = columns;
+  td.textContent = text;
+  tr.appendChild(td);
+  tbody.insertBefore(tr, firstNative);
+  refreshBeatmapScoreboardTableEnhancements(scoreboardRoot);
+}
+
+/**
  * Show `scores` in place of osu-web's rows (which stay in the tbody, hidden).
  *
  * - wildcard: ranked 1..n in order; a player's lower entries are dimmed.
@@ -161,18 +208,9 @@ export function renderMergedLeaderboard(
 
   opts.beforeInsert?.();
 
-  tbody
-    .querySelectorAll(
-      `tr[${EXTENDED_SCORE_ROW_ATTR}], tr[${WILDCARD_MERGED_ROW_ATTR}], tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`,
-    )
-    .forEach((r) => r.remove());
-
-  const nativeRows = [...tbody.querySelectorAll(SCOREBOARD_ROW_SEL)];
-  for (const nr of nativeRows) setRowHidden(nr, "merged", true);
-
   // Insert before the hidden native rows so nth-child alternation starts at
   // 1 and matches the visual first row.
-  const firstNative = nativeRows[0] ?? null;
+  const firstNative = replaceNativeRows(tbody);
 
   // Track which user ids have already appeared so secondary scores can be dimmed.
   const seenUserIds = new Set();
