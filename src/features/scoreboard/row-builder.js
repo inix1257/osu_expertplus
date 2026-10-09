@@ -23,7 +23,7 @@ import {
   SCOREBOARD_PP_ORIGINAL_ATTR,
   SCORE_USER_SEARCH_RESULT_ATTR,
   WILDCARD_MERGED_ROW_ATTR,
-  _rowScoreMap,
+  registerRowScore,
   getBeatmapPageRuleset,
 } from "./context.js";
 import { applyScoreboardModsCell } from "./row-mods.js";
@@ -505,7 +505,7 @@ export function applyApiScoreToBeatmapScoreRow(
   mapFullCombo,
 ) {
   tr.setAttribute(EXTENDED_SCORE_ROW_ATTR, "1");
-  _rowScoreMap.set(tr, score);
+  registerRowScore(tr, score);
   // Use real table cell indices (works with colspans and hidden columns).
   const tds = [...tr.cells];
   const uid = score.user?.id ?? score.user_id;

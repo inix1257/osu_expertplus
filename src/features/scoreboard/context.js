@@ -26,8 +26,24 @@ export const EXTENDED_SCORE_ROW_ATTR = "data-oep-api-extended-score";
 export const SCOREBOARD_HTML_TABLE_SEL =
   "table.beatmap-scoreboard-table__table";
 
-/** Maps injected table row elements to their source score API objects for top-panel sync. */
-export const _rowScoreMap = new WeakMap();
+/** Injected table rows → the API score they show (read by the top panel). */
+const rowScores = new WeakMap();
+
+/**
+ * @param {HTMLTableRowElement} row
+ * @param {object} score  API score
+ */
+export function registerRowScore(row, score) {
+  rowScores.set(row, score);
+}
+
+/**
+ * @param {Element} row
+ * @returns {object|undefined}  the API score an injected row was built from
+ */
+export function getRowScore(row) {
+  return rowScores.get(row);
+}
 
 export function findBeatmapScoreboardRoot() {
   const mods = document.querySelector(".beatmapset-scoreboard__mods");

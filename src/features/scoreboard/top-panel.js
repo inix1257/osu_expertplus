@@ -17,7 +17,7 @@ import {
   SCOREBOARD_HTML_TABLE_SEL,
   SCORE_USER_SEARCH_RESULT_ATTR,
   WILDCARD_MERGED_ROW_ATTR,
-  _rowScoreMap,
+  getRowScore,
   getBeatmapPageRuleset,
 } from "./context.js";
 import { leaderboardTableScoreNumber } from "./sort.js";
@@ -422,6 +422,9 @@ export function applyNativeRowToTopItem(item, row) {
  * filter, and sort order.
  * @param {HTMLElement} scoreboardRoot
  */
+/** Override card → the row it was built from. @type {WeakMap<Element, { row: Element, score: object|undefined, text: string }>} */
+const overrideSources = new WeakMap();
+
 export function refreshBeatmapScoreTopPanel(scoreboardRoot) {
   // B79: osu-web dropped the `__item` wrapper; the card is now
   // `.beatmap-scoreboard-top > .beatmap-score-top`. Both are accepted.
@@ -435,14 +438,33 @@ export function refreshBeatmapScoreTopPanel(scoreboardRoot) {
   const parent = nativeItem.parentElement;
   if (!parent) return;
 
-  // Remove any previously inserted override panel.
-  for (const old of parent.querySelectorAll(`[${SCORE_TOP_OVERRIDE_ATTR}]`)) {
-    old.remove();
+  const existing = [...parent.querySelectorAll(`[${SCORE_TOP_OVERRIDE_ATTR}]`)];
+  const topRow = getEffectiveBoardTopRow(scoreboardRoot);
+  const score = topRow ? getRowScore(topRow) : undefined;
+  const source = topRow
+    ? { row: topRow, score, text: topRow.textContent }
+    : null;
+
+  // Every refresh used to rebuild the card; keep it while it already shows
+  // the same row with the same content.
+  const current =
+    existing.length === 1 ? overrideSources.get(existing[0]) : null;
+  if (
+    source &&
+    current &&
+    current.row === source.row &&
+    current.score === source.score &&
+    current.text === source.text &&
+    existing[0].nextElementSibling === nativeItem
+  ) {
+    if (nativeItem.style.display !== "none") nativeItem.style.display = "none";
+    return;
   }
 
-  const topRow = getEffectiveBoardTopRow(scoreboardRoot);
+  for (const old of existing) old.remove();
+
   if (!topRow) {
-    nativeItem.style.display = "";
+    if (nativeItem.style.display) nativeItem.style.display = "";
     return;
   }
 
@@ -450,8 +472,8 @@ export function refreshBeatmapScoreTopPanel(scoreboardRoot) {
 
   const overrideItem = /** @type {HTMLElement} */ (nativeItem.cloneNode(true));
   overrideItem.setAttribute(SCORE_TOP_OVERRIDE_ATTR, "1");
+  overrideSources.set(overrideItem, source);
 
-  const score = _rowScoreMap.get(topRow);
   if (score) {
     applyApiScoreToTopItem(overrideItem, score, topRow);
   } else {
