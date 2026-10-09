@@ -270,7 +270,10 @@ const STAT_CLASS = Object.freeze({
 
 /** @type {Readonly<Record<"profile"|"scoreboard", Readonly<StatsDisplayOptions>>>} */
 export const STATS_DISPLAY = Object.freeze({
-  profile: Object.freeze({ classes: "profile", legacyOsuGreat: "300+geki" }),
+  // D10-5: legacy osu 300 is count_300 only everywhere. In osu! count_geki
+  // counts all-300 combo sections, not extra hits; lazer's legacy decoder
+  // maps only count_300 to Great, so the old profile sum double counted.
+  profile: Object.freeze({ classes: "profile", legacyOsuGreat: "300" }),
   scoreboard: Object.freeze({ classes: "scoreboard", legacyOsuGreat: "300" }),
 });
 

@@ -247,9 +247,10 @@ test("statsCells: order and class names per scheme", () => {
   const osuLegacy = {
     statistics: { count_300: 10, count_geki: 2, count_100: 1 },
   };
+  // D10-5: count_geki is not added on top of count_300 (was 12).
   assert.deepEqual(
     vals(statsCells(osuLegacy, STATS_DISPLAY.profile)),
-    [12, 1, 0, 0],
+    [10, 1, 0, 0],
   );
   assert.deepEqual(
     vals(statsCells(osuLegacy, STATS_DISPLAY.scoreboard)),
