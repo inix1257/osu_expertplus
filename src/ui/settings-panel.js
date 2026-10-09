@@ -64,7 +64,8 @@ OsuExpertPlus.settingsPanel = (() => {
   function refreshFabOsuApiWarning() {
     const { anchor } = fabUi;
     if (!anchor) return;
-    anchor.classList.toggle(FAB_NEEDS_API_CLASS, !auth.isConfigured());
+    // Warn when credentials are missing or the last token request failed.
+    anchor.classList.toggle(FAB_NEEDS_API_CLASS, auth.getStatus() !== "ok");
     syncPanelAboveFab();
   }
 
@@ -593,8 +594,8 @@ OsuExpertPlus.settingsPanel = (() => {
       autocomplete: "new-password",
     });
 
-    clientIdInput.value = GM_getValue("oep_client_id", "");
-    if (GM_getValue("oep_client_secret", "")) {
+    clientIdInput.value = auth.getClientId();
+    if (auth.hasSecret()) {
       clientSecretInput.placeholder = "(saved — enter to change)";
     }
 
@@ -608,7 +609,12 @@ OsuExpertPlus.settingsPanel = (() => {
       statusEl.className = `osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--${type}`;
     }
 
-    if (auth.isConfigured()) {
+    if (auth.getStatus() === "error") {
+      setStatus(
+        "Saved credentials could not get a token. Check them and save again.",
+        "error",
+      );
+    } else if (auth.isConfigured()) {
       setStatus("Credentials saved. API v2 active.", "ok");
     } else {
       setStatus("No credentials — using session fallback.");
@@ -633,27 +639,27 @@ OsuExpertPlus.settingsPanel = (() => {
 
     saveBtn.addEventListener("click", async () => {
       const id = clientIdInput.value.trim();
-      const secret =
-        clientSecretInput.value.trim() || GM_getValue("oep_client_secret", "");
+      const secret = clientSecretInput.value.trim();
 
-      if (!id || !secret) {
+      if (!id || (!secret && !auth.hasSecret())) {
         setStatus("Both Client ID and Secret are required.", "error");
         return;
       }
 
-      auth.setCredentials(id, secret);
-      clientIdInput.value = id;
-      clientSecretInput.value = "";
-      clientSecretInput.placeholder = "(saved — enter to change)";
       setStatus("Verifying…", "info");
 
       try {
-        await auth.getToken();
+        // Saves only when a token can be issued (an empty secret keeps the
+        // saved one).
+        await auth.verifyAndSaveCredentials(id, secret);
+        clientIdInput.value = id;
+        clientSecretInput.value = "";
+        clientSecretInput.placeholder = "(saved — enter to change)";
         setStatus("Credentials saved & verified. API v2 active.", "ok");
         location.reload();
       } catch (e) {
         setStatus(
-          `Failed: ${e.message.replace("[osu! Expert+] ", "")}`,
+          `Not saved: ${e.message.replace("[osu! Expert+] ", "")}`,
           "error",
         );
       } finally {

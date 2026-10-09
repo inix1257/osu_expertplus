@@ -11,7 +11,17 @@ OsuExpertPlus.auth = (() => {
   const KEY_TOKEN_EXPIRY = "oep_token_expiry"; // Unix ms
 
   // Dedupe concurrent token refresh
+  /** @type {Promise<string>|null} */
   let _fetchPromise = null;
+  /**
+   * Bumped whenever credentials or the cached token are cleared, so a token
+   * request that started before that is not stored afterwards (B34).
+   */
+  let _generation = 0;
+  /** Failed token requests are not retried for this long. */
+  const FAILURE_TTL_MS = 5 * 60 * 1000;
+  /** @type {{ error: Error, until: number, generation: number } | null} */
+  let _failure = null;
 
   function getClientId() {
     return GM_getValue(KEY_CLIENT_ID, "");
@@ -22,6 +32,31 @@ OsuExpertPlus.auth = (() => {
 
   function isConfigured() {
     return Boolean(getClientId() && getClientSecret());
+  }
+
+  /** Whether a client secret is saved (the value itself stays in auth). */
+  function hasSecret() {
+    return Boolean(getClientSecret());
+  }
+
+  /** @returns {Error|null} the cached token failure, while it is current. */
+  function currentFailure() {
+    if (!_failure) return null;
+    if (_failure.generation !== _generation || Date.now() >= _failure.until) {
+      _failure = null;
+      return null;
+    }
+    return _failure.error;
+  }
+
+  /**
+   * `"unset"`: no credentials; `"error"`: the last token request failed
+   * (within the last few minutes); `"ok"`: configured and not known to fail.
+   * @returns {"unset"|"ok"|"error"}
+   */
+  function getStatus() {
+    if (!isConfigured()) return "unset";
+    return currentFailure() ? "error" : "ok";
   }
 
   /**
@@ -46,6 +81,8 @@ OsuExpertPlus.auth = (() => {
     GM_deleteValue(KEY_ACCESS_TOKEN);
     GM_deleteValue(KEY_TOKEN_EXPIRY);
     _fetchPromise = null;
+    _failure = null;
+    _generation++;
   }
 
   function getCachedToken() {
@@ -57,13 +94,13 @@ OsuExpertPlus.auth = (() => {
   }
 
   /**
-   * Fetch a new access token from osu! using the stored client credentials.
-   * @returns {Promise<string>}  The raw access token string.
+   * Request a client-credentials token for the given credentials. Stores
+   * nothing.
+   * @param {string} clientId
+   * @param {string} clientSecret
+   * @returns {Promise<{ token: string, expiresAt: number }>}
    */
-  async function fetchNewToken() {
-    const clientId = getClientId();
-    const clientSecret = getClientSecret();
-
+  async function requestToken(clientId, clientSecret) {
     if (!clientId || !clientSecret) {
       throw new Error("[osu! Expert+] OAuth credentials not configured.");
     }
@@ -91,11 +128,62 @@ OsuExpertPlus.auth = (() => {
     const data = await resp.json();
     const token = data.access_token;
     const expiresIn = data.expires_in ?? 86400; // seconds
+    if (!token) {
+      throw new Error("[osu! Expert+] Token response had no access_token.");
+    }
+    return { token, expiresAt: Date.now() + expiresIn * 1000 };
+  }
 
-    GM_setValue(KEY_ACCESS_TOKEN, token);
-    GM_setValue(KEY_TOKEN_EXPIRY, Date.now() + expiresIn * 1000);
+  /** @param {{ token: string, expiresAt: number }} t */
+  function storeToken(t) {
+    GM_setValue(KEY_ACCESS_TOKEN, t.token);
+    GM_setValue(KEY_TOKEN_EXPIRY, t.expiresAt);
+  }
 
-    return token;
+  /**
+   * Fetch a new access token from osu! using the stored client credentials.
+   * The result is stored only if nothing was cleared meanwhile (B34); a
+   * failure is cached for FAILURE_TTL_MS.
+   * @returns {Promise<string>}  The raw access token string.
+   */
+  async function fetchNewToken() {
+    const generation = _generation;
+    try {
+      const t = await requestToken(getClientId(), getClientSecret());
+      if (generation !== _generation) {
+        // Credentials changed while this request ran: use the new ones.
+        return getToken();
+      }
+      storeToken(t);
+      return t.token;
+    } catch (err) {
+      if (generation === _generation) {
+        _failure = {
+          error: err instanceof Error ? err : new Error(String(err)),
+          until: Date.now() + FAILURE_TTL_MS,
+          generation,
+        };
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Verify credentials by requesting a token, and save them (with the token)
+   * only when that succeeds (B33). An empty secret means "keep the saved
+   * secret".
+   * @param {string} clientId
+   * @param {string} clientSecret
+   * @returns {Promise<void>}  rejects with the token error; nothing is saved
+   */
+  async function verifyAndSaveCredentials(clientId, clientSecret) {
+    const id = String(clientId || "").trim();
+    const secret = String(clientSecret || "").trim() || getClientSecret();
+    const t = await requestToken(id, secret);
+    GM_setValue(KEY_CLIENT_ID, id);
+    GM_setValue(KEY_CLIENT_SECRET, secret);
+    clearCachedToken();
+    storeToken(t);
   }
 
   /**
@@ -109,11 +197,16 @@ OsuExpertPlus.auth = (() => {
     const cached = getCachedToken();
     if (cached) return cached;
 
+    const failed = currentFailure();
+    if (failed) throw failed;
+
     // Deduplicate concurrent requests.
     if (!_fetchPromise) {
-      _fetchPromise = fetchNewToken().finally(() => {
-        _fetchPromise = null;
+      const p = fetchNewToken().finally(() => {
+        // A clear (or a newer request) may have replaced it meanwhile.
+        if (_fetchPromise === p) _fetchPromise = null;
       });
+      _fetchPromise = p;
     }
 
     return _fetchPromise;
@@ -131,6 +224,10 @@ OsuExpertPlus.auth = (() => {
 
   return {
     isConfigured,
+    hasSecret,
+    getClientId,
+    getStatus,
+    verifyAndSaveCredentials,
     setCredentials,
     clearCredentials,
     clearCachedToken,
