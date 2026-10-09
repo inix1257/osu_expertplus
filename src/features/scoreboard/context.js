@@ -37,7 +37,10 @@ export const CREDENTIALS_CHANGED_EVENT = "oep-osu-api-credentials-changed";
 
 /** Wildcard row that is not the player's highest-ranked score in the merged list. */
 export const WILDCARD_DUPE_ROW_ATTR = "data-oep-wildcard-dupe";
-/** Row whose effective speed is not 1.00× or 1.50× (a custom-rate score). */
+/**
+ * Custom-rate score: a mod's speed differs from its default (1.50× for
+ * DT/NC, 0.75× for HT/DC; see `isNonDefaultSpeed`).
+ */
 export const RATE_EDIT_ROW_ATTR = "data-oep-rate-edit";
 /**
  * Why a score row is hidden: a space-separated list of reasons, each added
@@ -48,7 +51,7 @@ export const RATE_EDIT_ROW_ATTR = "data-oep-rate-edit";
  *   - `rate`: a custom-rate score while “Hide custom rate scores” is on
  */
 export const ROW_HIDE_ATTR = "data-oep-hide";
-/** In-page “hide custom rate scores” control. */
+/** In-page “Hide custom rate scores” toggle; always shown on the scoreboard. */
 export const RATE_EDIT_FILTER_BAR_ATTR = "data-oep-rate-edit-filter-bar";
 /** Player lookup bar wrapper; sits inside the tools row with the rate filter. */
 export const SCOREBOARD_USER_SEARCH_ATTR = "data-oep-beatmap-user-search";

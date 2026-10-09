@@ -262,7 +262,7 @@ export function renderMergedLeaderboard(
       else seenUserIds.add(uidKey);
     }
 
-    // Dim rows with a custom rate (anything other than 1.00× or 1.50×).
+    // Dim rows with a custom rate (a speed other than the mod default).
     if (scoreHasNonstandardRate(score)) {
       row.setAttribute(RATE_EDIT_ROW_ATTR, "1");
     }

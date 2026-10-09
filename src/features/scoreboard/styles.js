@@ -300,7 +300,7 @@ export const SCOREBOARD_CSS = `
     text-align: center;
     color: hsl(var(--hsl-l2, 0 0% 70%));
   }
-  /* Custom-rate (non 1.00×/1.50×) scores — slightly dimmed. */
+  /* Custom-rate scores (speed other than the mod default) — slightly dimmed. */
   tr[${RATE_EDIT_ROW_ATTR}] {
     opacity: 0.6;
   }
