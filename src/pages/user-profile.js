@@ -687,95 +687,168 @@ OsuExpertPlus.pages.userProfile = (() => {
     });
   }
 
-  /** GET /users/{id}/scores/{type} paginated; same order as DOM. */
-  async function fetchScores(userId, mode, type) {
-    const scores = [];
-    const limit = 100;
-    const maxTotal = 1000;
-    const maxPages = 20;
-    let lastPageKey = "";
-    let pageCount = 0;
+  /**
+   * Profile score lists are cached across SPA navigations (mode switches, back/forward)
+   * for a short time so revisiting a profile does not refetch everything. The viewer's
+   * own profile is never served from the cache (new plays would show stale stats); only
+   * concurrent requests are shared there.
+   */
+  const PROFILE_SCORES_CACHE_TTL_MS = 2 * 60 * 1000;
+  const SCORE_LIST_PAGE_SIZE = 100;
+  const SCORE_LIST_MAX_TOTAL = 1000;
 
-    for (let offset = 0; ; offset += limit) {
-      if (pageCount >= maxPages) {
-        break;
-      }
-      const url = `/users/${userId}/scores/${type}?mode=${mode}&limit=${limit}&offset=${offset}&include=beatmap`;
-      let resp;
-      try {
-        resp = await fetch(url, {
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        });
-      } catch {
-        break;
-      }
+  function _profileScoresCacheTtl(userId) {
+    return String(userId) === String(getCurrentUserIdFromHeader())
+      ? 0
+      : PROFILE_SCORES_CACHE_TTL_MS;
+  }
 
-      if (!resp.ok) break;
+  /**
+   * @typedef {{ scores: object[], done: boolean, ts: number, lastPageKey: string, pending: Promise<boolean>|null }} ScoreListEntry
+   * @type {Map<string, ScoreListEntry>}
+   */
+  const _scoreListCache = new Map();
 
-      let body;
-      try {
-        body = await resp.json();
-      } catch {
-        break;
-      }
+  /** @returns {ScoreListEntry} */
+  function _scoreListEntry(userId, mode, type) {
+    const key = `${userId}:${mode}:${type}`;
+    let entry = _scoreListCache.get(key);
+    const ttl = _profileScoresCacheTtl(userId);
+    if (!entry || (!entry.pending && Date.now() - entry.ts >= ttl)) {
+      entry = { scores: [], done: false, ts: Date.now(), lastPageKey: "", pending: null };
+      _scoreListCache.set(key, entry);
+    }
+    return entry;
+  }
 
-      const items = Array.isArray(body)
+  /**
+   * Fetch the next page of a score list into `entry`.
+   * @param {ScoreListEntry} entry
+   * @returns {Promise<boolean>}  true when new scores were appended
+   */
+  async function _fetchScoreListPage(userId, mode, type, entry) {
+    const offset = entry.scores.length;
+    const url = `/users/${userId}/scores/${type}?mode=${mode}&limit=${SCORE_LIST_PAGE_SIZE}&offset=${offset}&include=beatmap`;
+    let items;
+    try {
+      const resp = await OsuExpertPlus.api.siteFetch(url, {
+        headers: { Accept: "application/json" },
+      });
+      if (!resp.ok) return false;
+      const body = await resp.json();
+      items = Array.isArray(body)
         ? body
         : Array.isArray(body?.items)
           ? body.items
           : [];
-      pageCount += 1;
-      if (!items.length) break;
-
-      const pageKey = items
-        .map((it) =>
-          it?.id != null
-            ? String(it.id)
-            : `${it?.beatmap?.id ?? "?"}:${it?.ended_at ?? "?"}:${it?.total_score ?? "?"}`,
-        )
-        .join("|");
-      if (pageKey && pageKey === lastPageKey) {
-        break;
-      }
-      lastPageKey = pageKey;
-
-      scores.push(...items);
-      if (scores.length >= maxTotal) {
-        break;
-      }
-      if (items.length < limit) break;
+    } catch {
+      return false;
     }
 
-    const out = scores.slice(0, maxTotal);
-    return out;
+    if (items.length < SCORE_LIST_PAGE_SIZE) entry.done = true;
+    if (!items.length) return false;
+
+    const pageKey = items
+      .map((it) =>
+        it?.id != null
+          ? String(it.id)
+          : `${it?.beatmap?.id ?? "?"}:${it?.ended_at ?? "?"}:${it?.total_score ?? "?"}`,
+      )
+      .join("|");
+    if (pageKey && pageKey === entry.lastPageKey) {
+      entry.done = true;
+      return false;
+    }
+    entry.lastPageKey = pageKey;
+
+    entry.scores.push(...items);
+    if (entry.scores.length >= SCORE_LIST_MAX_TOTAL) entry.done = true;
+    return true;
   }
+
+  /**
+   * GET /users/{id}/scores/{type}, same order as DOM. Only fetches as many pages as
+   * needed to cover the `needed` rows currently rendered; later calls with a larger
+   * `needed` (after "Show more") continue from where the cache left off.
+   * @param {string|number} userId
+   * @param {string} mode
+   * @param {string} type
+   * @param {number} needed
+   * @returns {Promise<object[]>}  Live array (grows as more pages load).
+   */
+  async function fetchScores(userId, mode, type, needed) {
+    const entry = _scoreListEntry(userId, mode, type);
+    const target = Math.min(Math.max(needed, 1), SCORE_LIST_MAX_TOTAL);
+    while (!entry.done && entry.scores.length < target) {
+      if (!entry.pending) {
+        entry.pending = _fetchScoreListPage(userId, mode, type, entry).finally(
+          () => {
+            entry.pending = null;
+          },
+        );
+      }
+      if (!(await entry.pending)) break;
+    }
+    return entry.scores;
+  }
+
+  /** @returns {boolean}  Whether every row of the list has been fetched. */
+  function _scoreListComplete(userId, mode, type) {
+    return _scoreListCache.get(`${userId}:${mode}:${type}`)?.done === true;
+  }
+
+  /**
+   * Share one in-flight / recently resolved promise per key.
+   * @template T
+   * @param {Map<string, { ts: number, pending: boolean, promise: Promise<T> }>} cache
+   * @param {string} key
+   * @param {number} ttlMs
+   * @param {() => Promise<T>} factory
+   * @returns {Promise<T>}
+   */
+  function _sharedPromise(cache, key, ttlMs, factory) {
+    const hit = cache.get(key);
+    if (hit && (hit.pending || Date.now() - hit.ts < ttlMs)) return hit.promise;
+    const entry = { ts: Date.now(), pending: true, promise: null };
+    entry.promise = factory().then(
+      (value) => {
+        entry.pending = false;
+        entry.ts = Date.now();
+        return value;
+      },
+      (err) => {
+        if (cache.get(key) === entry) cache.delete(key);
+        throw err;
+      },
+    );
+    cache.set(key, entry);
+    return entry.promise;
+  }
+
+  const _mostWatchedCache = new Map();
 
   /**
    * Fetches "Most Watched Replays" scores from the historical extra-pages endpoint.
    * Returns an ordered array of score objects ready for processElements().
    */
-  async function fetchMostWatchedScores(userId, mode) {
-    const url = `/users/${userId}/extra-pages/historical?mode=${mode}`;
-    let resp;
-    try {
-      resp = await fetch(url, {
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-    } catch {
-      return [];
-    }
-    if (!resp.ok) return [];
-    let body;
-    try {
-      body = await resp.json();
-    } catch {
-      return [];
-    }
-    const items = body?.score_replay_stats?.items;
-    if (!Array.isArray(items)) return [];
-    return items.map((item) => item?.score).filter(Boolean);
+  function fetchMostWatchedScores(userId, mode) {
+    return _sharedPromise(
+      _mostWatchedCache,
+      `${userId}:${mode}`,
+      _profileScoresCacheTtl(userId),
+      async () => {
+        const url = `/users/${userId}/extra-pages/historical?mode=${mode}`;
+        // Throwing (instead of returning []) drops the cache entry so a later call retries.
+        const resp = await OsuExpertPlus.api.siteFetch(url, {
+          headers: { Accept: "application/json" },
+        });
+        if (!resp.ok) throw new Error(`historical ${resp.status}`);
+        const body = await resp.json();
+        const items = body?.score_replay_stats?.items;
+        if (!Array.isArray(items)) return [];
+        return items.map((item) => item?.score).filter(Boolean);
+      },
+    ).catch(() => []);
   }
 
   /**
@@ -1285,7 +1358,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       return _beatmapMaxComboInFlight.get(beatmapId);
     }
     const p = OsuExpertPlus.api
-      .getBeatmap(beatmapId)
+      .getBeatmap(beatmapId, { priority: "low" })
       .then((data) => {
         const mc = data?.max_combo;
         return mc != null && Number.isFinite(Number(mc)) && Number(mc) > 0
@@ -1775,14 +1848,19 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     async function _loadAndApplyStats(section) {
       const { listEl, type } = section;
-      if (!scoresMap.has(type)) {
-        scoresMap.set(
-          type,
-          type === "most_watched"
-            ? await fetchMostWatchedScores(userId, mode)
-            : await fetchScores(userId, mode, type),
-        );
-      }
+      // Both fetchers share in-flight/cached results, so calling again is cheap;
+      // fetchScores only loads further pages when more rows are rendered.
+      scoresMap.set(
+        type,
+        type === "most_watched"
+          ? await fetchMostWatchedScores(userId, mode)
+          : await fetchScores(
+              userId,
+              mode,
+              type,
+              listEl.querySelectorAll(".play-detail").length,
+            ),
+      );
       processElements(
         Array.from(listEl.querySelectorAll(".play-detail")),
         scoresMap.get(type),
@@ -1814,6 +1892,43 @@ OsuExpertPlus.pages.userProfile = (() => {
       if (settings.isEnabled(SCORE_PP_DECIMALS_ID)) {
         scoreSections.forEach(({ listEl }) => applyPpDecimals(listEl));
       }
+    }
+
+    /**
+     * Inject stats into rows that do not have them (new rows, or rows osu! re-rendered).
+     * @param {HTMLElement[]} allEls
+     * @param {Object[]} scores
+     */
+    function injectMissingStats(allEls, scores) {
+      const byBeatmap = _buildScoresByBeatmapId(scores);
+      const usageCount = new Map();
+      // First pass: count already-matched rows so duplicate-beatmapId
+      // candidates are consumed in the correct order.
+      allEls.forEach((rowEl) => {
+        const already =
+          rowEl.hasAttribute(SCORE_STATS_ATTR) &&
+          rowEl.querySelector(".oep-score-stats");
+        if (!already) return;
+        const bmId = _beatmapIdFromRow(rowEl);
+        if (bmId) usageCount.set(bmId, (usageCount.get(bmId) ?? 0) + 1);
+      });
+      // Second pass: inject only rows that are missing stats.
+      allEls.forEach((rowEl) => {
+        const needsReinjection =
+          !rowEl.hasAttribute(SCORE_STATS_ATTR) ||
+          !rowEl.querySelector(".oep-score-stats");
+        if (!needsReinjection) return;
+        rowEl.removeAttribute(SCORE_STATS_ATTR);
+        const bmId = _beatmapIdFromRow(rowEl);
+        if (!bmId) return;
+        const candidates = byBeatmap.get(bmId);
+        if (!candidates) return;
+        const idx = usageCount.get(bmId) ?? 0;
+        const score = candidates[idx];
+        if (!score) return;
+        usageCount.set(bmId, idx + 1);
+        injectStatsRow(rowEl, score);
+      });
     }
 
     function mountScoreListObserver(section) {
@@ -1890,35 +2005,26 @@ OsuExpertPlus.pages.userProfile = (() => {
               });
             } else if (scoresMap.has(type)) {
               const scores = scoresMap.get(type);
-              const byBeatmap = _buildScoresByBeatmapId(scores);
-              const usageCount = new Map();
-              // First pass: count already-matched rows so duplicate-beatmapId
-              // candidates are consumed in the correct order.
-              allEls.forEach((rowEl) => {
-                const already =
-                  rowEl.hasAttribute(SCORE_STATS_ATTR) &&
-                  rowEl.querySelector(".oep-score-stats");
-                if (!already) return;
-                const bmId = _beatmapIdFromRow(rowEl);
-                if (bmId) usageCount.set(bmId, (usageCount.get(bmId) ?? 0) + 1);
-              });
-              // Second pass: inject only rows that are missing stats.
-              allEls.forEach((rowEl) => {
-                const needsReinjection =
-                  !rowEl.hasAttribute(SCORE_STATS_ATTR) ||
-                  !rowEl.querySelector(".oep-score-stats");
-                if (!needsReinjection) return;
-                rowEl.removeAttribute(SCORE_STATS_ATTR);
-                const bmId = _beatmapIdFromRow(rowEl);
-                if (!bmId) return;
-                const candidates = byBeatmap.get(bmId);
-                if (!candidates) return;
-                const idx = usageCount.get(bmId) ?? 0;
-                const score = candidates[idx];
-                if (!score) return;
-                usageCount.set(bmId, idx + 1);
-                injectStatsRow(rowEl, score);
-              });
+              injectMissingStats(allEls, scores);
+              if (
+                type !== "most_watched" &&
+                allEls.length > scores.length &&
+                !statsFetchPending &&
+                !_scoreListComplete(userId, mode, type)
+              ) {
+                // "Show more" revealed rows past the pages fetched so far.
+                statsFetchPending = true;
+                fetchScores(userId, mode, type, allEls.length).then((more) => {
+                  statsFetchPending = false;
+                  scoresMap.set(type, more);
+                  injectMissingStats(
+                    Array.from(listEl.querySelectorAll(".play-detail")),
+                    more,
+                  );
+                  if (settings.isEnabled(SCORE_PP_DECIMALS_ID))
+                    applyPpDecimals(listEl);
+                });
+              }
             }
           }
 
@@ -2895,49 +3001,50 @@ OsuExpertPlus.pages.userProfile = (() => {
 
   /**
    * When score.beatmap lacks max_combo (typical for recent scores), fill the
-   * injected "(achieved / max)" from POST /beatmaps/{id}/attributes. One
-   * request per unique (beatmap, difficulty-affecting mods); shared cache
-   * with modded star rating.
+   * injected "(achieved / max)" from POST /beatmaps/{id}/attributes. Rows are
+   * only looked up once they come near the viewport (the list can hold 200
+   * rows); one request per unique (beatmap, difficulty-affecting mods), shared
+   * cache with modded star rating.
    * @param {HTMLElement[]} rows
    * @param {Object[]} scores  same length and order as rows
+   * @param {HTMLElement} listEl  owner of the observer; re-populating disconnects the previous one
    */
-  async function enrichPlayDetailRowsMaxComboFromAttributes(rows, scores) {
-    /** @type {Map<string, { beatmapId: string|number, diffMods: string[], ruleset: string, ranked?: number }>} */
-    const unique = new Map();
+  function enrichPlayDetailRowsMaxComboFromAttributes(rows, scores, listEl) {
+    listEl._oepMaxComboIo?.disconnect();
 
-    for (let i = 0; i < scores.length; i++) {
-      const score = scores[i];
-      if (_beatmapMaxComboFromScore(score) != null) continue;
-      const bmId = score?.beatmap?.id;
-      if (bmId == null) continue;
-      const diffMods = _diffMods(modsAcronymsFromApiMods(score.mods));
-      const ruleset = rulesetIdToMode(score.ruleset_id);
-      const key = _srCacheKey(bmId, diffMods, ruleset);
-      if (!unique.has(key)) {
-        const ranked = score?.beatmap?.ranked;
-        unique.set(key, { beatmapId: bmId, diffMods, ruleset, ranked });
-      }
-    }
-
-    await Promise.all(
-      [...unique.values()].map(({ beatmapId, diffMods, ruleset, ranked }) =>
-        _fetchBeatmapAttributesCached(beatmapId, diffMods, ruleset, {
-          ranked,
-        }),
-      ),
+    /** @type {Map<Element, Object>} */
+    const scoreByRow = new Map();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          io.unobserve(entry.target);
+          const rowEl = entry.target;
+          const score = scoreByRow.get(rowEl);
+          scoreByRow.delete(rowEl);
+          if (!score) continue;
+          _fetchBeatmapAttributesCached(
+            score.beatmap.id,
+            _diffMods(modsAcronymsFromApiMods(score.mods)),
+            rulesetIdToMode(score.ruleset_id),
+            { ranked: score.beatmap.ranked },
+          ).then(({ maxCombo }) => {
+            if (maxCombo != null && rowEl.isConnected) {
+              _applyApiMaxComboToComboInline(rowEl, maxCombo);
+            }
+          });
+        }
+      },
+      { rootMargin: "300px 0px" },
     );
+    listEl._oepMaxComboIo = io;
 
     for (let i = 0; i < rows.length; i++) {
       const score = scores[i];
       if (_beatmapMaxComboFromScore(score) != null) continue;
-      const bmId = score?.beatmap?.id;
-      if (bmId == null) continue;
-      const diffMods = _diffMods(modsAcronymsFromApiMods(score.mods));
-      const ruleset = rulesetIdToMode(score.ruleset_id);
-      const key = _srCacheKey(bmId, diffMods, ruleset);
-      const attrs = _getCachedAttrs(key);
-      const maxCombo = attrs?.maxCombo;
-      if (maxCombo != null) _applyApiMaxComboToComboInline(rows[i], maxCombo);
+      if (score?.beatmap?.id == null) continue;
+      scoreByRow.set(rows[i], score);
+      io.observe(rows[i]);
     }
   }
 
@@ -3382,10 +3489,10 @@ OsuExpertPlus.pages.userProfile = (() => {
     });
     q.append("include", "beatmap");
     q.append("include", "beatmapset");
-    const resp = await fetch(`/users/${userId}/scores/recent?${q}`, {
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
+    const resp = await OsuExpertPlus.api.siteFetch(
+      `/users/${userId}/scores/recent?${q}`,
+      { headers: { Accept: "application/json" } },
+    );
     if (!resp.ok) return [];
     let body;
     try {
@@ -3425,10 +3532,10 @@ OsuExpertPlus.pages.userProfile = (() => {
       q.append("include", "beatmapset");
       let resp;
       try {
-        resp = await fetch(`/users/${userId}/scores/recent?${q}`, {
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        });
+        resp = await OsuExpertPlus.api.siteFetch(
+          `/users/${userId}/scores/recent?${q}`,
+          { headers: { Accept: "application/json" } },
+        );
       } catch {
         break;
       }
@@ -3582,14 +3689,29 @@ OsuExpertPlus.pages.userProfile = (() => {
     }
   }
 
-  async function fetchRecentScoresIncludingFails(userId, mode) {
-    const [primary, extraPassed] = await Promise.all([
-      fetchRecentScoresPrimaryWithFails(userId, mode),
-      fetchWebsiteRecentScoresPassedOnly(userId, mode).catch(() => []),
-    ]);
-    return mergeRecentScoresWithExtendedPassed(primary, extraPassed).slice(
-      0,
-      RECENT_SCORES_MERGED_MAX,
+  /** Recent plays change quickly, so this cache only covers quick back-and-forth navigation. */
+  const RECENT_SCORES_CACHE_TTL_MS = 60 * 1000;
+  const _recentScoresCache = new Map();
+
+  function fetchRecentScoresIncludingFails(userId, mode) {
+    const ttl = Math.min(
+      _profileScoresCacheTtl(userId),
+      RECENT_SCORES_CACHE_TTL_MS,
+    );
+    return _sharedPromise(
+      _recentScoresCache,
+      `${userId}:${mode}`,
+      ttl,
+      async () => {
+        const [primary, extraPassed] = await Promise.all([
+          fetchRecentScoresPrimaryWithFails(userId, mode),
+          fetchWebsiteRecentScoresPassedOnly(userId, mode).catch(() => []),
+        ]);
+        return mergeRecentScoresWithExtendedPassed(primary, extraPassed).slice(
+          0,
+          RECENT_SCORES_MERGED_MAX,
+        );
+      },
     );
   }
 
@@ -3652,7 +3774,7 @@ OsuExpertPlus.pages.userProfile = (() => {
     }
     if (settings.isEnabled(SCORE_HIT_STATISTICS_ID)) {
       processElements(rows, scores);
-      enrichPlayDetailRowsMaxComboFromAttributes(rows, scores).catch(() => {});
+      enrichPlayDetailRowsMaxComboFromAttributes(rows, scores, innerList);
     }
     if (settings.isEnabled(IDS.MOD_ICONS_AS_ACRONYMS)) {
       injectModIconsAcronymStyles();

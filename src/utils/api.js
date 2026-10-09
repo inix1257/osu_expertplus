@@ -8,6 +8,164 @@ OsuExpertPlus.api = (() => {
   const SITE_ORIGIN = "https://osu.ppy.sh";
 
   /**
+   * Global limiter for every request Expert+ sends to osu.ppy.sh (API v2 and
+   * site JSON routes). osu! rate-limits per user, and the site's own requests
+   * share that budget, so all of ours go through one queue instead of each
+   * feature bursting independently.
+   *
+   * On top of pacing (concurrency + start gap), each route family has a rolling
+   * one-minute budget:
+   * - `/api/v2`: osu-web throttles at 1200 cost units/minute per token (or per
+   *   user/IP for session auth), and some routes cost more than 1 (GET /users
+   *   costs one unit per id). We use half of that, leaving room for other tabs
+   *   and tools sharing the same token.
+   * - Site routes (`/users/{id}/scores/…`, `/beatmaps/{id}/scores`, …): osu-web
+   *   has no app-level throttle there; limits are enforced in front of it and are
+   *   not published, so stay near the API docs' 60 requests/minute guideline.
+   *   The site's own requests are not counted here.
+   */
+  const SITE_MAX_CONCURRENT = 2;
+  const SITE_MIN_START_GAP_MS = 250;
+  const BUDGET_WINDOW_MS = 60 * 1000;
+  const API_BUDGET_PER_WINDOW = 600;
+  const WEB_BUDGET_PER_WINDOW = 60;
+
+  /** @type {Record<"api"|"web", { limit: number, log: { t: number, cost: number }[] }>} */
+  const _budgets = {
+    api: { limit: API_BUDGET_PER_WINDOW, log: [] },
+    web: { limit: WEB_BUDGET_PER_WINDOW, log: [] },
+  };
+
+  /**
+   * Milliseconds until `cost` fits in the bucket's rolling window (0 = now).
+   * @param {{ limit: number, log: { t: number, cost: number }[] }} bucket
+   */
+  function _budgetWaitMs(bucket, cost, now) {
+    while (bucket.log.length && now - bucket.log[0].t >= BUDGET_WINDOW_MS) {
+      bucket.log.shift();
+    }
+    let used = bucket.log.reduce((sum, e) => sum + e.cost, 0);
+    if (used + cost <= bucket.limit) return 0;
+    for (const e of bucket.log) {
+      used -= e.cost;
+      if (used + cost <= bucket.limit) return e.t + BUDGET_WINDOW_MS - now;
+    }
+    return 0;
+  }
+
+  /** @param {string} url */
+  function _requestBucketAndCost(url) {
+    const u = new URL(url, SITE_ORIGIN);
+    if (!u.pathname.startsWith("/api/")) return { bucket: "web", cost: 1 };
+    // Mirrors osu-web's RequestCost for the routes we call.
+    if (u.pathname === "/api/v2/users") {
+      return {
+        bucket: "api",
+        cost: Math.max(1, u.searchParams.getAll("ids[]").length),
+      };
+    }
+    return { bucket: "api", cost: 1 };
+  }
+
+  let _siteRunning = 0;
+  /** @type {number}  Earliest time the next request may start (performance.now()). */
+  let _siteNextStartMs = 0;
+  let _sitePumpTimer = 0;
+  /** @typedef {{ run: () => Promise<Response>, resolve: (r: Response) => void, reject: (e: unknown) => void, signal?: AbortSignal|null, bucket: "api"|"web", cost: number }} SiteQueueItem */
+  /** @type {SiteQueueItem[]}  User-visible data (score lists, leaderboards, lookups). */
+  const _siteQueueHigh = [];
+  /** @type {SiteQueueItem[]}  Background enrichment (beatmap attributes, max combo). */
+  const _siteQueueLow = [];
+
+  function _abortError() {
+    return new DOMException("The operation was aborted.", "AbortError");
+  }
+
+  /**
+   * Take the first queued item (high priority first) whose bucket has budget.
+   * @returns {{ item: SiteQueueItem|null, waitMs: number }}
+   */
+  function _nextSiteItem(now) {
+    let waitMs = Infinity;
+    for (const q of [_siteQueueHigh, _siteQueueLow]) {
+      for (let i = 0; i < q.length; i++) {
+        const item = q[i];
+        if (item.signal?.aborted) {
+          q.splice(i--, 1);
+          item.reject(_abortError());
+          continue;
+        }
+        const wait = _budgetWaitMs(_budgets[item.bucket], item.cost, now);
+        if (wait === 0) {
+          q.splice(i, 1);
+          return { item, waitMs: 0 };
+        }
+        waitMs = Math.min(waitMs, wait);
+      }
+    }
+    return { item: null, waitMs };
+  }
+
+  function _schedulePump(delayMs) {
+    if (_sitePumpTimer) return;
+    _sitePumpTimer = setTimeout(() => {
+      _sitePumpTimer = 0;
+      _pumpSiteQueue();
+    }, Math.ceil(delayMs));
+  }
+
+  function _pumpSiteQueue() {
+    while (_siteRunning < SITE_MAX_CONCURRENT) {
+      if (!_siteQueueHigh.length && !_siteQueueLow.length) return;
+      const now = performance.now();
+      if (now < _siteNextStartMs) {
+        _schedulePump(_siteNextStartMs - now);
+        return;
+      }
+      const { item, waitMs } = _nextSiteItem(now);
+      if (!item) {
+        if (Number.isFinite(waitMs)) _schedulePump(waitMs);
+        return;
+      }
+      _budgets[item.bucket].log.push({ t: now, cost: item.cost });
+      _siteNextStartMs = now + SITE_MIN_START_GAP_MS;
+      _siteRunning++;
+      Promise.resolve()
+        .then(() => item.run())
+        .then(item.resolve, item.reject)
+        .finally(() => {
+          _siteRunning--;
+          _pumpSiteQueue();
+        });
+    }
+  }
+
+  /**
+   * `fetch` for osu.ppy.sh routes, scheduled through the global limiter.
+   * @param {string} url
+   * @param {RequestInit} [init]
+   * @param {{ priority?: "high"|"low" }} [options]
+   * @returns {Promise<Response>}
+   */
+  function siteFetch(url, init = {}, options = {}) {
+    const signal = init.signal || null;
+    if (signal?.aborted) return Promise.reject(_abortError());
+    const { bucket, cost } = _requestBucketAndCost(url);
+    return new Promise((resolve, reject) => {
+      const queue = options.priority === "low" ? _siteQueueLow : _siteQueueHigh;
+      queue.push({
+        run: () => fetch(url, { credentials: "include", ...init }),
+        resolve,
+        reject,
+        signal,
+        bucket,
+        cost,
+      });
+      _pumpSiteQueue();
+    });
+  }
+
+  /**
    * Build fetch headers, injecting a Bearer token when available.
    * @returns {Promise<HeadersInit>}
    */
@@ -25,10 +183,11 @@ OsuExpertPlus.api = (() => {
    * Automatically attaches the Bearer token when credentials are configured.
    * @param {string} url
    * @param {Object} [params={}]  Query-string parameters.
-   * @param {{ sessionOnly?: boolean }} [options={}]
+   * @param {{ sessionOnly?: boolean, priority?: "high"|"low" }} [options={}]
    *        When `sessionOnly` is true, skips the OAuth Bearer header so the
    *        browser session cookie is used (needed for `/friends` with
    *        `friends.read`, which client-credentials tokens do not have).
+   *        `priority` selects the limiter queue (see `siteFetch`).
    * @returns {Promise<any>}
    */
   async function get(url, params = {}, options = {}) {
@@ -51,7 +210,11 @@ OsuExpertPlus.api = (() => {
       if (authHeader) headers["Authorization"] = authHeader;
     }
 
-    const resp = await fetch(fullUrl, { headers, credentials: "include" });
+    const resp = await siteFetch(
+      fullUrl,
+      { headers },
+      { priority: options.priority },
+    );
 
     if (!resp.ok) {
       throw new Error(`[osu! Expert+] API ${resp.status}: ${fullUrl}`);
@@ -87,9 +250,12 @@ OsuExpertPlus.api = (() => {
     return get(`${BASE}/beatmapsets/${id}`, params);
   }
 
-  /** Fetch a single beatmap by id. */
-  function getBeatmap(beatmapId) {
-    return get(`${BASE}/beatmaps/${beatmapId}`);
+  /**
+   * Fetch a single beatmap by id.
+   * @param {{ priority?: "high"|"low" }} [options]
+   */
+  function getBeatmap(beatmapId, options = {}) {
+    return get(`${BASE}/beatmaps/${beatmapId}`, {}, options);
   }
 
   /** Fetch user profile by id or username. */
@@ -218,9 +384,10 @@ OsuExpertPlus.api = (() => {
    * @param {{ mode?: string, mods?: string[], legacy_only?: number, type?: "global"|"country"|"friend"|"team", limit?: number }} [query]
    *        `type` matches osu-web scoreboard tabs; `country` uses the logged-in
    *        user’s country (same as the site). Requires `credentials: "include"`.
+   * @param {{ signal?: AbortSignal }} [options]  Aborting drops the request if it is still queued.
    * @returns {Promise<{ scores: object[] }>}
    */
-  async function getBeatmapScoresWebsite(beatmapId, query) {
+  async function getBeatmapScoresWebsite(beatmapId, query, options = {}) {
     /** @type {Record<string, string|number|string[]>} */
     const params = {};
     if (query && typeof query === "object") {
@@ -250,7 +417,7 @@ OsuExpertPlus.api = (() => {
       .catch(() => null);
     if (authHeader) headers["Authorization"] = authHeader;
 
-    const resp = await fetch(fullUrl, { headers, credentials: "include" });
+    const resp = await siteFetch(fullUrl, { headers, signal: options.signal });
     if (!resp.ok) {
       throw new Error(`[osu! Expert+] ${resp.status}: ${fullUrl}`);
     }
@@ -264,40 +431,12 @@ OsuExpertPlus.api = (() => {
   /**
    * Batch-fetch users by id ([Get Users](https://osu.ppy.sh/docs/#get-users)); each result
    * includes `statistics_rulesets.{osu,taiko,fruits,mania}.global_rank`. The endpoint caps
-   * out at 50 ids per request, so larger lists are split into sequential batches with a
-   * short delay between each (see `_pumpUsersQueue`) to stay well under the API rate limit.
+   * out at 50 ids per request, so larger lists are split into batches (paced by `siteFetch`).
    */
   const USERS_BATCH_SIZE = 50;
-  const USERS_MIN_START_GAP_MS = 250;
-
-  let _usersRunning = false;
-  /** @type {number}  Earliest time the next batch may start (performance.now()). */
-  let _usersNextStartMs = 0;
-  /** @type {{ run: () => Promise<unknown>, resolve: (v: unknown) => void, reject: (e: unknown) => void }[]} */
-  const _usersQueue = [];
-
-  function _pumpUsersQueue() {
-    if (_usersRunning || !_usersQueue.length) return;
-    const now = performance.now();
-    if (now < _usersNextStartMs) {
-      setTimeout(_pumpUsersQueue, Math.ceil(_usersNextStartMs - now));
-      return;
-    }
-    _usersNextStartMs = now + USERS_MIN_START_GAP_MS;
-    const item = _usersQueue.shift();
-    if (!item) return;
-    _usersRunning = true;
-    Promise.resolve()
-      .then(() => item.run())
-      .then(item.resolve, item.reject)
-      .finally(() => {
-        _usersRunning = false;
-        _pumpUsersQueue();
-      });
-  }
 
   /**
-   * GET /users?ids[]=… — up to 50 users per request, batched/throttled automatically
+   * GET /users?ids[]=… — up to 50 users per request, batched automatically
    * for larger id lists.
    * @param {(string|number)[]|string|number} ids
    * @returns {Promise<object[]>}
@@ -317,69 +456,17 @@ OsuExpertPlus.api = (() => {
       batches.push(unique.slice(i, i + USERS_BATCH_SIZE));
     }
 
+    // Response is `{ users: [...] }`, not a bare array.
     const fetchBatch = (batchIds) =>
-      new Promise((resolve, reject) => {
-        _usersQueue.push({
-          // Response is `{ users: [...] }`, not a bare array.
-          run: () =>
-            get(`${BASE}/users`, { "ids[]": batchIds }).then(
-              (data) => (Array.isArray(data?.users) ? data.users : []),
-            ),
-          resolve,
-          reject,
-        });
-        _pumpUsersQueue();
-      });
+      get(`${BASE}/users`, { "ids[]": batchIds }).then((data) =>
+        Array.isArray(data?.users) ? data.users : [],
+      );
 
     return Promise.all(batches.map(fetchBatch)).then((results) =>
       results.flat(),
     );
   }
 
-  /** Throttle concurrent beatmap attributes calls (profile SR badges, etc.). */
-  const BEATMAP_ATTRS_MAX_CONCURRENT = 2;
-  const BEATMAP_ATTRS_MIN_START_GAP_MS = 120;
-
-  let _beatmapAttrsRunning = 0;
-  /** @type {number}  Earliest time the next request may start (performance.now()). */
-  let _beatmapAttrsNextStartMs = 0;
-  /** @type {{ run: () => Promise<unknown>, resolve: (v: unknown) => void, reject: (e: unknown) => void }[]} */
-  const _beatmapAttrsQueue = [];
-
-  function _pumpBeatmapAttributesQueue() {
-    while (_beatmapAttrsRunning < BEATMAP_ATTRS_MAX_CONCURRENT) {
-      if (!_beatmapAttrsQueue.length) return;
-      const now = performance.now();
-      if (now < _beatmapAttrsNextStartMs) {
-        setTimeout(
-          _pumpBeatmapAttributesQueue,
-          Math.ceil(_beatmapAttrsNextStartMs - now),
-        );
-        return;
-      }
-      _beatmapAttrsNextStartMs = now + BEATMAP_ATTRS_MIN_START_GAP_MS;
-      const item = _beatmapAttrsQueue.shift();
-      if (!item) return;
-      _beatmapAttrsRunning++;
-      Promise.resolve()
-        .then(() => item.run())
-        .then(item.resolve, item.reject)
-        .finally(() => {
-          _beatmapAttrsRunning--;
-          _pumpBeatmapAttributesQueue();
-        });
-    }
-  }
-
-  /**
-   * POST /beatmaps/{beatmap}/attributes — returns difficulty attributes with
-   * the given mods applied, including the modded star_rating.
-   *
-   * @param {string|number} beatmapId
-   * @param {string[]}      mods     Array of mod acronyms, e.g. ['DT', 'HR']
-   * @param {string}        ruleset  'osu' | 'taiko' | 'fruits' | 'mania'
-   * @returns {Promise<{attributes: {star_rating: number, max_combo: number, ...}}>}
-   */
   const KIRINO_INSPECTOR_PROFILE =
     "https://api.kirino.sh/inspector/extension/profile";
 
@@ -427,36 +514,41 @@ OsuExpertPlus.api = (() => {
     return typeof n === "number" ? n : 0;
   }
 
-  function postBeatmapAttributes(beatmapId, mods, ruleset = "osu") {
-    return new Promise((resolve, reject) => {
-      _beatmapAttrsQueue.push({
-        run: async () => {
-          const url = `${BASE}/beatmaps/${beatmapId}/attributes`;
-          const headers = await buildHeaders();
-          headers["Content-Type"] = "application/json";
+  /**
+   * POST /beatmaps/{beatmap}/attributes — returns difficulty attributes with
+   * the given mods applied, including the modded star_rating. Background
+   * enrichment, so it is queued behind user-visible requests in `siteFetch`.
+   *
+   * @param {string|number} beatmapId
+   * @param {string[]}      mods     Array of mod acronyms, e.g. ['DT', 'HR']
+   * @param {string}        ruleset  'osu' | 'taiko' | 'fruits' | 'mania'
+   * @returns {Promise<{attributes: {star_rating: number, max_combo: number, ...}}>}
+   */
+  async function postBeatmapAttributes(beatmapId, mods, ruleset = "osu") {
+    const url = `${BASE}/beatmaps/${beatmapId}/attributes`;
+    const headers = await buildHeaders();
+    headers["Content-Type"] = "application/json";
 
-          const resp = await fetch(url, {
-            method: "POST",
-            headers,
-            credentials: "include",
-            body: JSON.stringify({ mods, ruleset }),
-          });
+    const resp = await siteFetch(
+      url,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ mods, ruleset }),
+      },
+      { priority: "low" },
+    );
 
-          if (!resp.ok) {
-            throw new Error(
-              `[osu! Expert+] API ${resp.status}: beatmap attributes ${beatmapId}`,
-            );
-          }
-          return resp.json();
-        },
-        resolve,
-        reject,
-      });
-      _pumpBeatmapAttributesQueue();
-    });
+    if (!resp.ok) {
+      throw new Error(
+        `[osu! Expert+] API ${resp.status}: beatmap attributes ${beatmapId}`,
+      );
+    }
+    return resp.json();
   }
 
   return {
+    siteFetch,
     get,
     getFriends,
     getBeatmapsetDiscussions,

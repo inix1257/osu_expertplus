@@ -492,6 +492,8 @@ OsuExpertPlus.beatmapCardExtra = (() => {
 
   /** One-shot same-origin prefetch if hooks missed the site’s first request (script load timing). */
   let profileExtraPrefetchStarted = false;
+  /** @type {(() => boolean)|null}  Set by `start()`; the prefetch only runs when a card needs it. */
+  let profileExtraPrefetchWantIngest = null;
 
   /**
    * On SPA navigation to /beatmapsets, osu-web fires the initial search fetch before `pushState`,
@@ -501,6 +503,8 @@ OsuExpertPlus.beatmapCardExtra = (() => {
 
   /** ms to wait for site JSON/fetch to populate `cache` after panels appear. */
   const PROFILE_EXTRA_CACHE_WAIT_MS = 2000;
+  /** How long a profile card waits for the hooked site response before we fetch it ourselves. */
+  const PROFILE_EXTRA_HOOK_GRACE_MS = 1000;
   const LISTING_CACHE_WAIT_MS = 1500;
   const CACHE_POLL_MS = 40;
 
@@ -847,11 +851,28 @@ OsuExpertPlus.beatmapCardExtra = (() => {
     panel.setAttribute(PANEL_STATE_ATTR, "loading");
 
     let data = cache.get(id);
-    if (!data) {
-      const maxMs = profileExtraState.waitForExtraPages
-        ? PROFILE_EXTRA_CACHE_WAIT_MS
-        : LISTING_CACHE_WAIT_MS;
-      data = await waitForCachedBeatmapset(id, maxMs, CACHE_POLL_MS);
+    if (!data && profileExtraState.waitForExtraPages) {
+      // Profile cards are rendered from the site's own extra-pages response, which the
+      // hooks normally ingest; only fetch it ourselves if that response was missed.
+      data = await waitForCachedBeatmapset(
+        id,
+        PROFILE_EXTRA_HOOK_GRACE_MS,
+        CACHE_POLL_MS,
+      );
+      if (!data) {
+        startProfileExtraPagesPrefetchIfNeeded();
+        data = await waitForCachedBeatmapset(
+          id,
+          PROFILE_EXTRA_CACHE_WAIT_MS,
+          CACHE_POLL_MS,
+        );
+      }
+    } else if (!data) {
+      data = await waitForCachedBeatmapset(
+        id,
+        LISTING_CACHE_WAIT_MS,
+        CACHE_POLL_MS,
+      );
     }
 
     if (!data) {
@@ -1011,29 +1032,26 @@ OsuExpertPlus.beatmapCardExtra = (() => {
 
   /**
    * If the site already finished `extra-pages/beatmaps` before our hooks ran, load once with the
-   * session cookie (same URL osu uses; not per-card API).
+   * session cookie (same URL osu uses; not per-card API). Called lazily from `processPanel`.
    */
-  function startProfileExtraPagesPrefetchIfNeeded(wantIngest, nativeFetch) {
+  function startProfileExtraPagesPrefetchIfNeeded() {
+    const wantIngest = profileExtraPrefetchWantIngest;
+    if (!wantIngest || !wantIngest()) return;
     if (!profileExtraState.waitForExtraPages) return;
     if (cache.size > 0) return;
     if (profileExtraPrefetchStarted) return;
-    const m = location.pathname.match(/^\/users\/(\d+)/i);
+    const m = location.pathname.match(
+      /^\/users\/(\d+)(?:\/(osu|taiko|fruits|mania))?\/?$/i,
+    );
     if (!m) return;
-    const pw = pageWin();
-    const doFetch =
-      nativeFetch ||
-      (typeof pw.fetch === "function" ? pw.fetch.bind(pw) : null);
-    if (!doFetch) {
-      return;
-    }
     profileExtraPrefetchStarted = true;
     const userId = m[1];
-    const mode = new URLSearchParams(location.search).get("mode") || "osu";
+    const mode =
+      m[2] || new URLSearchParams(location.search).get("mode") || "osu";
     const url = `/users/${userId}/extra-pages/beatmaps?mode=${encodeURIComponent(mode)}`;
     void (async () => {
       try {
-        const r = await doFetch(url, {
-          credentials: "include",
+        const r = await OsuExpertPlus.api.siteFetch(url, {
           headers: { Accept: "application/json" },
         });
         if (!wantIngest()) return;
@@ -1209,7 +1227,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       clearAll(document, settings);
       if (on) {
         ingestFromJsonBeatmapsScript();
-        startProfileExtraPagesPrefetchIfNeeded(wantIngest, origFetch);
+        profileExtraPrefetchWantIngest = wantIngest;
         startListingSearchPrefetchIfNeeded(wantIngest, origFetch);
         connectJsonBeatmapsObserver();
         scheduleAllPanels(document, settings);
@@ -1405,6 +1423,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       mo.disconnect();
       profileExtraState.waitForExtraPages = false;
       profileExtraPrefetchStarted = false;
+      profileExtraPrefetchWantIngest = null;
       listingSearchPrefetchStarted = false;
       scheduleAfterIngest = () => {};
       detachBeatmapsetsListingItemsRo();
