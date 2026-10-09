@@ -27,7 +27,7 @@ export function buildPlayDetailRowFromApiScore(score, modTemplateEl = null) {
   const bn = "play-detail";
   const bms = score.beatmapset || {};
   const bm = score.beatmap || {};
-  const rank = scoreGrade(score);
+  const rank = scoreGrade(score, { sanitize: true });
   const rankClass = `score-rank score-rank--full score-rank--${rank}`;
 
   const titleText = bms.title || "Unknown beatmap";
