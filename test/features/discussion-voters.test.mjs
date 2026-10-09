@@ -64,7 +64,7 @@ const QTIP = `
     </div>
   </div>`;
 
-const flush = () => new Promise((r) => setTimeout(r, 60));
+const flush = () => new Promise((r) => setTimeout(r, 150));
 /** MutationObserver callbacks run as a microtask after the insert. */
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const names = (doc) =>

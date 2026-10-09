@@ -53,7 +53,7 @@ const REPLY = `
   </div>`;
 
 /** Past the preview manager's 80 ms debounce. */
-const settle = () => new Promise((r) => setTimeout(r, 150));
+const settle = () => new Promise((r) => setTimeout(r, 300));
 
 function type(window, textarea, value) {
   textarea.value = value;
