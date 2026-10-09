@@ -11,16 +11,14 @@ export const PICKER_SEL = ".beatmapset-beatmap-picker";
 export const PICKER_LINK_SEL = "a.beatmapset-beatmap-picker__beatmap";
 
 /**
- * @param {Element|null|undefined} a  picker link
+ * @param {Element|null|undefined} a  picker link (`#<ruleset>/<id>`)
  * @param {{ pathFallback?: boolean }} [options]  also read `/beatmaps/<id>` hrefs
  * @returns {number|null}
  */
 export function pickerLinkBeatmapId(a, { pathFallback = false } = {}) {
   if (!(a instanceof HTMLAnchorElement)) return null;
-  const parsed = parsePickerHref(a.getAttribute("href"), {
-    match: "any-end",
-    pathFallback,
-  });
+  // Only osu/taiko/fruits/mania hashes (D10-9).
+  const parsed = parsePickerHref(a.getAttribute("href"), { pathFallback });
   return parsed ? parsed.beatmapId : null;
 }
 
