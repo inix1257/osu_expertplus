@@ -7,7 +7,7 @@ import { listen } from "../../core/lifecycle.js";
 import { el } from "../../features/legacy.js";
 import { safeHttpUrl } from "../sanitize.js";
 import { replaceRange } from "../textarea.js";
-import { BBHELP_BTN_CLASS, BBHELP_MODAL_CLASS } from "./constants.js";
+import { BBHELP_MODAL_CLASS } from "./constants.js";
 import {
   clampImapRect,
   computeResizeRect,
@@ -19,6 +19,7 @@ import {
   pctRawFromEvent,
   selectionRectFromDragPct,
 } from "./imagemap-model.js";
+import { createBbcodeModal, modalButton, modalTitle } from "./modal.js";
 
 /**
  * Open the ImageMap helper for `textarea`.
@@ -50,41 +51,24 @@ export function openImagemapHelper(textarea, signal) {
   let modifyState = null;
   const IMAP_DRAG_THRESHOLD_PX = 5;
 
-  const overlay = el("div", { class: BBHELP_MODAL_CLASS });
-  const card = el("div", {
-    class: `${BBHELP_MODAL_CLASS}__card`,
-    style:
+  const shell = createBbcodeModal({
+    cardStyle:
       "width:min(700px,96vw);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px;",
   });
+  const { overlay, card } = shell;
 
   const titleRow = el("div", {
     style:
       "display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;",
   });
-  const titleEl = el(
-    "h4",
-    { class: `${BBHELP_MODAL_CLASS}__title`, style: "margin:0;" },
-    "ImageMap Helper",
-  );
-  const importFromEditorBtn = el(
-    "button",
-    {
-      type: "button",
-      class: BBHELP_BTN_CLASS,
-      title:
-        "Auto: replace state from an [imagemap] block in the BBCode editor (uses selection if any, otherwise full text)",
-    },
-    "Import from editor",
-  );
-  const importManualBtn = el(
-    "button",
-    {
-      type: "button",
-      class: BBHELP_BTN_CLASS,
-      title: "Show a field to paste [imagemap] BBCode manually",
-    },
-    "Manual import",
-  );
+  const titleEl = modalTitle("ImageMap Helper", { style: "margin:0;" });
+  const importFromEditorBtn = modalButton("Import from editor", {
+    title:
+      "Auto: replace state from an [imagemap] block in the BBCode editor (uses selection if any, otherwise full text)",
+  });
+  const importManualBtn = modalButton("Manual import", {
+    title: "Show a field to paste [imagemap] BBCode manually",
+  });
   const importBtnsWrap = el(
     "div",
     {
@@ -116,16 +100,8 @@ export function openImagemapHelper(textarea, signal) {
   const manualImportActions = el("div", {
     style: "display:flex;flex-wrap:wrap;gap:8px;align-items:center;",
   });
-  const manualImportApplyBtn = el(
-    "button",
-    { type: "button", class: BBHELP_BTN_CLASS },
-    "Apply pasted import",
-  );
-  const manualImportCloseBtn = el(
-    "button",
-    { type: "button", class: BBHELP_BTN_CLASS },
-    "Close",
-  );
+  const manualImportApplyBtn = modalButton("Apply pasted import");
+  const manualImportCloseBtn = modalButton("Close");
   manualImportActions.appendChild(manualImportApplyBtn);
   manualImportActions.appendChild(manualImportCloseBtn);
   manualImportPanel.appendChild(manualImportHint);
@@ -139,11 +115,7 @@ export function openImagemapHelper(textarea, signal) {
     style: "flex:1;min-width:0;",
     "aria-label": "Base image URL",
   });
-  const loadBtn = el(
-    "button",
-    { type: "button", class: BBHELP_BTN_CLASS },
-    "Load",
-  );
+  const loadBtn = modalButton("Load");
   const urlRow = el(
     "div",
     { style: "display:flex;gap:6px;" },
@@ -207,16 +179,10 @@ export function openImagemapHelper(textarea, signal) {
     style:
       "flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;white-space:nowrap;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:8px 10px;font-size:11px;font-family:ui-monospace,Menlo,Monaco,Consolas,monospace;color:rgba(255,255,255,0.9);text-align:left;",
   });
-  const copyCodeBtn = el(
-    "button",
-    {
-      type: "button",
-      class: BBHELP_BTN_CLASS,
-      title: "Copy full BBCode (with line breaks) to clipboard",
-      style: "flex-shrink:0;align-self:stretch;",
-    },
-    "Copy",
-  );
+  const copyCodeBtn = modalButton("Copy", {
+    title: "Copy full BBCode (with line breaks) to clipboard",
+    style: "flex-shrink:0;align-self:stretch;",
+  });
   const codeRow = el(
     "div",
     {
@@ -226,16 +192,8 @@ export function openImagemapHelper(textarea, signal) {
     copyCodeBtn,
   );
 
-  const cancelBtn = el(
-    "button",
-    { type: "button", class: BBHELP_BTN_CLASS },
-    "Cancel",
-  );
-  const insertBtn = el(
-    "button",
-    { type: "button", class: BBHELP_BTN_CLASS },
-    "Insert into editor",
-  );
+  const cancelBtn = modalButton("Cancel");
+  const insertBtn = modalButton("Insert into editor");
   const actionsWarn = el("div", {
     class: `${BBHELP_MODAL_CLASS}__actions-warn`,
     role: "status",
@@ -535,16 +493,10 @@ export function openImagemapHelper(textarea, signal) {
       refreshCode();
     });
     titleIn.addEventListener("focus", () => setSelectedIndex(index));
-    const removeBtn = el(
-      "button",
-      {
-        type: "button",
-        class: BBHELP_BTN_CLASS,
-        title: "Remove area",
-        style: "padding:4px 7px;flex-shrink:0;",
-      },
-      "✕",
-    );
+    const removeBtn = modalButton("✕", {
+      title: "Remove area",
+      style: "padding:4px 7px;flex-shrink:0;",
+    });
     removeBtn.addEventListener("click", () => {
       const i = hotspots.indexOf(hs);
       if (i !== -1) hotspots.splice(i, 1);
@@ -780,7 +732,7 @@ export function openImagemapHelper(textarea, signal) {
 
   const close = () => {
     modal.abort();
-    overlay.remove();
+    shell.close();
   };
   // The helper run ends (page change) while the modal is open.
   if (signal) listen(signal, "abort", close, modal.signal);
@@ -812,8 +764,7 @@ export function openImagemapHelper(textarea, signal) {
   card.appendChild(hotspotListEl);
   card.appendChild(codeRow);
   card.appendChild(actions);
-  overlay.appendChild(card);
-  document.body.appendChild(overlay);
+  shell.show();
 
   rebuildHotspotList();
   refreshCode();

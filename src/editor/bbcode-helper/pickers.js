@@ -4,16 +4,18 @@
 
 import { el } from "../../features/legacy.js";
 import { toggleWrap } from "../textarea.js";
-import { BBHELP_BTN_CLASS, BBHELP_MODAL_CLASS } from "./constants.js";
+import { BBHELP_MODAL_CLASS } from "./constants.js";
+import {
+  bindPickerKeys,
+  createBbcodeModal,
+  modalButton,
+  modalTitle,
+} from "./modal.js";
 
 export function openColorPicker(textarea) {
-  const overlay = el("div", { class: BBHELP_MODAL_CLASS });
-  const card = el("div", { class: `${BBHELP_MODAL_CLASS}__card` });
-  const title = el(
-    "h4",
-    { class: `${BBHELP_MODAL_CLASS}__title` },
-    "Font color",
-  );
+  const modal = createBbcodeModal();
+  const { overlay, card } = modal;
+  const title = modalTitle("Font color");
 
   const colorInput = el("input", {
     type: "color",
@@ -40,16 +42,8 @@ export function openColorPicker(textarea) {
   );
 
   const actions = el("div", { class: `${BBHELP_MODAL_CLASS}__actions` });
-  const cancelBtn = el(
-    "button",
-    { type: "button", class: BBHELP_BTN_CLASS },
-    "Cancel",
-  );
-  const applyBtn = el(
-    "button",
-    { type: "button", class: BBHELP_BTN_CLASS },
-    "Apply",
-  );
+  const cancelBtn = modalButton("Cancel");
+  const applyBtn = modalButton("Apply");
   actions.appendChild(cancelBtn);
   actions.appendChild(applyBtn);
 
@@ -57,7 +51,7 @@ export function openColorPicker(textarea) {
     const v = String(textInput.value || "").trim();
     swatch.style.background = v || "#ff66aa";
   };
-  const close = () => overlay.remove();
+  const close = modal.close;
   const apply = () => {
     const value = String(textInput.value || "").trim();
     if (!value) return;
@@ -72,21 +66,14 @@ export function openColorPicker(textarea) {
   textInput.addEventListener("input", updateSwatch);
   cancelBtn.addEventListener("click", close);
   applyBtn.addEventListener("click", apply);
-  overlay.addEventListener("click", (ev) => {
-    if (ev.target === overlay) close();
-  });
-  overlay.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") close();
-    if (ev.key === "Enter") apply();
-  });
+  bindPickerKeys(overlay, { apply, close });
 
   card.appendChild(title);
   card.appendChild(colorGrid);
   card.appendChild(swatch);
   card.appendChild(hint);
   card.appendChild(actions);
-  overlay.appendChild(card);
-  document.body.appendChild(overlay);
+  modal.show();
   textInput.focus();
   textInput.select();
   updateSwatch();
@@ -98,13 +85,9 @@ export function openSizePicker(textarea) {
   const modePresetId = `oep-size-mode-preset-${uid}`;
   const modeManualId = `oep-size-mode-manual-${uid}`;
 
-  const overlay = el("div", { class: BBHELP_MODAL_CLASS });
-  const card = el("div", { class: `${BBHELP_MODAL_CLASS}__card` });
-  const title = el(
-    "h4",
-    { class: `${BBHELP_MODAL_CLASS}__title` },
-    "Font size",
-  );
+  const modal = createBbcodeModal();
+  const { overlay, card } = modal;
+  const title = modalTitle("Font size");
   const modeWrap = el("div", { class: `${BBHELP_MODAL_CLASS}__modes` });
 
   const presetRadio = el("input", {
@@ -161,20 +144,12 @@ export function openSizePicker(textarea) {
   );
 
   const actions = el("div", { class: `${BBHELP_MODAL_CLASS}__actions` });
-  const cancelBtn = el(
-    "button",
-    { type: "button", class: BBHELP_BTN_CLASS },
-    "Cancel",
-  );
-  const applyBtn = el(
-    "button",
-    { type: "button", class: BBHELP_BTN_CLASS },
-    "Apply",
-  );
+  const cancelBtn = modalButton("Cancel");
+  const applyBtn = modalButton("Apply");
   actions.appendChild(cancelBtn);
   actions.appendChild(applyBtn);
 
-  const close = () => overlay.remove();
+  const close = modal.close;
   const syncMode = () => {
     const isPreset = presetRadio.checked;
     presetField.style.display = isPreset ? "" : "none";
@@ -200,20 +175,13 @@ export function openSizePicker(textarea) {
   manualRadio.addEventListener("change", syncMode);
   cancelBtn.addEventListener("click", close);
   applyBtn.addEventListener("click", apply);
-  overlay.addEventListener("click", (ev) => {
-    if (ev.target === overlay) close();
-  });
-  overlay.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") close();
-    if (ev.key === "Enter") apply();
-  });
+  bindPickerKeys(overlay, { apply, close });
 
   card.appendChild(title);
   card.appendChild(modeWrap);
   card.appendChild(presetField);
   card.appendChild(manualField);
   card.appendChild(actions);
-  overlay.appendChild(card);
-  document.body.appendChild(overlay);
+  modal.show();
   syncMode();
 }
