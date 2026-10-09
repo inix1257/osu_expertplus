@@ -5962,7 +5962,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
   const EXTENDED_SCORE_ROW_ATTR = "data-oep-api-extended-score";
   const EXTENDED_LB_LIMIT = 100;
-  const SCORES_LIMIT_PATCH_FLAG = "__oepBeatmapScoresLimitPatched";
+  let scoresLimitRewriterInstalled = false;
   /** osu-web uses `.beatmap-scoreboard-table` on the wrapper `div`; the real `<table>` is `__table`. */
   const SCOREBOARD_HTML_TABLE_SEL = "table.beatmap-scoreboard-table__table";
   /** Same tokens as user-profile score stats (`.oep-score-stats__val--*`) + mode extras. */
@@ -6008,45 +6008,15 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     }
   }
 
+  /**
+   * Adds `limit=100` to osu-web's own `/beatmaps/{id}/scores` requests (page
+   * XHR/fetch) while the extended leaderboard setting is on. Installed once
+   * for the session; `withBeatmapScoresLimit` checks the setting per request.
+   */
   function installBeatmapScoresLimitPatch() {
-    if (window[SCORES_LIMIT_PATCH_FLAG]) return;
-    window[SCORES_LIMIT_PATCH_FLAG] = true;
-
-    const nativeFetch = window.fetch.bind(window);
-    window.fetch = function patchedFetch(input, init) {
-      try {
-        if (typeof input === "string") {
-          return nativeFetch(withBeatmapScoresLimit(input), init);
-        }
-        if (input instanceof URL) {
-          return nativeFetch(withBeatmapScoresLimit(input.toString()), init);
-        }
-        if (input instanceof Request) {
-          const patchedUrl = withBeatmapScoresLimit(input.url);
-          if (patchedUrl !== input.url) {
-            return nativeFetch(new Request(patchedUrl, input), init);
-          }
-        }
-      } catch (_) {
-        void 0;
-      }
-      return nativeFetch(input, init);
-    };
-
-    const nativeXhrOpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function patchedXhrOpen(
-      method,
-      url,
-      ...rest
-    ) {
-      const raw = typeof url === "string" ? url : String(url ?? "");
-      return nativeXhrOpen.call(
-        this,
-        method,
-        withBeatmapScoresLimit(raw),
-        ...rest,
-      );
-    };
+    if (scoresLimitRewriterInstalled) return;
+    scoresLimitRewriterInstalled = true;
+    OsuExpertPlus.core.pageHooks.addRequestRewriter(withBeatmapScoresLimit);
   }
 
   /**

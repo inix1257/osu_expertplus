@@ -5,11 +5,9 @@
  * (same for `/api/v2/users/{id}/beatmapsets/{type}`). osu-web `UsersController::beatmapsets` types:
  * `favourite`, `ranked`, `loved`, `guest`, `nominated`, `graveyard`, `pending`, `most_played`, plus
  * deprecated `ranked_and_approved` → ranked and `unranked` → pending. Response is a JSON array
- * (beatmapsets, or playcounts for `most_played`) — hooked via fetch/XHR on the **page** window
- * (`unsafeWindow` under Tampermonkey); sandbox `window` XHR/fetch does not see osu’s jQuery.ajax.
+ * (beatmapsets, or playcounts for `most_played`) — read from the **page** window's fetch/XHR
+ * through `OsuExpertPlus.core.pageHooks` (osu-web's jQuery.ajax uses the page XHR).
  */
-
-/* global unsafeWindow */
 
 "use strict";
 
@@ -17,21 +15,7 @@ window.OsuExpertPlus = window.OsuExpertPlus || {};
 
 OsuExpertPlus.beatmapCardExtra = (() => {
   const { el, manageStyle } = OsuExpertPlus.dom;
-
-  /**
-   * Tampermonkey isolates userscripts; osu-web’s `$.ajax` uses the page’s XMLHttpRequest.
-   * @returns {Window & typeof globalThis}
-   */
-  function pageWin() {
-    try {
-      if (typeof unsafeWindow !== "undefined" && unsafeWindow) {
-        return unsafeWindow;
-      }
-    } catch (_) {
-      void 0;
-    }
-    return window;
-  }
+  const { pageHooks } = OsuExpertPlus.core;
 
   const STYLE_ID = "osu-expertplus-beatmap-card-extra-css";
   const BLOCK_CLASS = "oep-beatmap-card-extra";
@@ -448,16 +432,6 @@ OsuExpertPlus.beatmapCardExtra = (() => {
     } catch (_) {
       return false;
     }
-  }
-
-  /**
-   * @param {Request|string} input
-   */
-  function fetchInputUrl(input) {
-    if (typeof input === "string") return input;
-    if (input && typeof input === "object" && "url" in input)
-      return String(/** @type {Request} */ (input).url);
-    return "";
   }
 
   /**
@@ -939,87 +913,22 @@ OsuExpertPlus.beatmapCardExtra = (() => {
   }
 
   /**
-   * @param {string} url
-   * @param {number} status
-   * @param {string} responseText
+   * Picks the ingest function for a page JSON response URL (search, user
+   * beatmapsets, profile extra pages), or null.
+   * @param {string} url  absolute URL
+   * @returns {((json: any) => void) | null}
    */
-  function tryIngestFromNetworkJson(url, status, responseText) {
-    if (status < 200 || status >= 300) return;
-    let resolved;
-    try {
-      resolved = url.startsWith("http")
-        ? url
-        : new URL(url, location.origin).href;
-    } catch (_) {
-      return;
-    }
-    if (isUsersExtraPagesBeatmapsUrl(resolved)) {
-      try {
-        ingestExtraPagesBeatmapsPayload(JSON.parse(responseText));
-      } catch (_) {
-        void 0;
-      }
-    } else if (
-      isUsersWebBeatmapsetsTypeUrl(resolved) ||
-      isApiV2UsersBeatmapsetsTypeUrl(resolved)
-    ) {
-      try {
-        ingestUserBeatmapsetsPaginatedPayload(JSON.parse(responseText));
-      } catch (_) {
-        void 0;
-      }
-    } else if (
-      isBeatmapsetsSearchUrl(resolved) ||
-      isApiV2BeatmapsetsSearchUrl(resolved)
-    ) {
-      try {
-        ingestBeatmapsetsSearchPayload(JSON.parse(responseText));
-      } catch (_) {
-        void 0;
-      }
-    }
-  }
-
-  /**
-   * osu-web often uses XMLHttpRequest for JSON; complements the `fetch` hook.
-   * @param {() => boolean} wantIngest
-   * @returns {() => void}
-   */
-  function installXhrHook(wantIngest) {
-    const w = pageWin();
-    const Native = w.XMLHttpRequest;
-    if (!Native) return () => {};
-
-    function Patched() {
-      const xhr = new Native();
-      let reqUrl = "";
-      const origOpen = xhr.open;
-      xhr.open = function () {
-        const u = arguments[1];
-        reqUrl = typeof u === "string" ? u : String(u);
-        return origOpen.apply(this, arguments);
-      };
-      xhr.addEventListener("load", function () {
-        if (!wantIngest()) return;
-        tryIngestFromNetworkJson(reqUrl, xhr.status, xhr.responseText);
-      });
-      return xhr;
-    }
-
-    Patched.prototype = Native.prototype;
-    for (const k of [
-      "UNSENT",
-      "OPENED",
-      "HEADERS_RECEIVED",
-      "LOADING",
-      "DONE",
-    ]) {
-      if (k in Native) Patched[k] = Native[k];
-    }
-    w.XMLHttpRequest = Patched;
-    return () => {
-      w.XMLHttpRequest = Native;
-    };
+  function ingestorForUrl(url) {
+    if (isUsersExtraPagesBeatmapsUrl(url))
+      return ingestExtraPagesBeatmapsPayload;
+    if (
+      isUsersWebBeatmapsetsTypeUrl(url) ||
+      isApiV2UsersBeatmapsetsTypeUrl(url)
+    )
+      return ingestUserBeatmapsetsPaginatedPayload;
+    if (isBeatmapsetsSearchUrl(url) || isApiV2BeatmapsetsSearchUrl(url))
+      return ingestBeatmapsetsSearchPayload;
+    return null;
   }
 
   /**
@@ -1071,10 +980,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
     // If #json-beatmaps has content the page was SSR-rendered; first-page data is already ingested.
     const n = document.getElementById("json-beatmaps");
     if (n?.textContent?.trim()) return;
-    const pw = pageWin();
-    const doFetch =
-      nativeFetch ||
-      (typeof pw.fetch === "function" ? pw.fetch.bind(pw) : null);
+    const doFetch = nativeFetch;
     if (!doFetch) return;
     listingSearchPrefetchStarted = true;
     const params = new URLSearchParams(location.search);
@@ -1165,52 +1071,10 @@ OsuExpertPlus.beatmapCardExtra = (() => {
     profileExtraPrefetchStarted = false;
     listingSearchPrefetchStarted = false;
 
-    /** @type {typeof window.fetch | null} */
-    let origFetch = null;
-    const uninstallXhrHook = installXhrHook(wantIngest);
-    const pageContext = pageWin();
-
-    if (typeof pageContext.fetch === "function") {
-      origFetch = pageContext.fetch.bind(pageContext);
-      pageContext.fetch = async function oepPatchedFetch(input, init) {
-        const res = await origFetch(input, init);
-        if (!wantIngest()) return res;
-        try {
-          const url = fetchInputUrl(input);
-          if (!url || !res.ok) {
-            return res;
-          }
-          if (isUsersExtraPagesBeatmapsUrl(url)) {
-            void res
-              .clone()
-              .json()
-              .then(ingestExtraPagesBeatmapsPayload)
-              .catch(() => {});
-          } else if (
-            isUsersWebBeatmapsetsTypeUrl(url) ||
-            isApiV2UsersBeatmapsetsTypeUrl(url)
-          ) {
-            void res
-              .clone()
-              .json()
-              .then(ingestUserBeatmapsetsPaginatedPayload)
-              .catch(() => {});
-          } else if (
-            isBeatmapsetsSearchUrl(url) ||
-            isApiV2BeatmapsetsSearchUrl(url)
-          ) {
-            void res
-              .clone()
-              .json()
-              .then(ingestBeatmapsetsSearchPayload)
-              .catch(() => {});
-          }
-        } catch (_) {
-          void 0;
-        }
-        return res;
-      };
-    }
+    const removeJsonListener = pageHooks.addJsonResponseListener({
+      match: (url) => wantIngest() && ingestorForUrl(url) !== null,
+      onJson: (url, json) => ingestorForUrl(url)?.(json),
+    });
 
     const run = () => {
       const on = wantIngest();
@@ -1220,7 +1084,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       if (on) {
         ingestFromJsonBeatmapsScript();
         profileExtraPrefetchWantIngest = wantIngest;
-        startListingSearchPrefetchIfNeeded(wantIngest, origFetch);
+        startListingSearchPrefetchIfNeeded(wantIngest, pageHooks.nativeFetch());
         connectJsonBeatmapsObserver();
         scheduleAllPanels(document, settings);
       } else {
@@ -1423,8 +1287,7 @@ OsuExpertPlus.beatmapCardExtra = (() => {
       listingSearchPrefetchStarted = false;
       scheduleAfterIngest = () => {};
       detachBeatmapsetsListingItemsRo();
-      uninstallXhrHook();
-      if (origFetch) pageContext.fetch = origFetch;
+      removeJsonListener();
       style.remove();
       document.querySelectorAll(".beatmapset-panel").forEach((panel) => {
         stripInjections(panel);

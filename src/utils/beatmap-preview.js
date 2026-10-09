@@ -1,5 +1,5 @@
 /** Lazy ESM load osu-beatmap-renderer + Pixi; gameplay preview on beatmapset pages. */
-/* global unsafeWindow, GM_getValue, GM_xmlhttpRequest */
+/* global GM_getValue, GM_xmlhttpRequest */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
@@ -14,27 +14,7 @@ OsuExpertPlus.beatmapPreview = (() => {
   const RENDERER_ESM_URL =
     "https://cdn.jsdelivr.net/npm/osu-beatmap-renderer@0.1.2/dist/osu-beatmap-renderer.js";
 
-  /** Page window (unsafeWindow under TM). */
-  function pageWindow() {
-    try {
-      if (typeof unsafeWindow !== "undefined" && unsafeWindow) {
-        return unsafeWindow;
-      }
-    } catch (_) {
-      void 0;
-    }
-    return window;
-  }
-
-  /** Page-origin `localStorage` (osu.ppy.sh), or null if unavailable. */
-  function pageLocalStorage() {
-    try {
-      const pw = pageWindow();
-      return pw?.localStorage ?? null;
-    } catch (_) {
-      return null;
-    }
-  }
+  const { pageWindow, pageLocalStorage } = OsuExpertPlus.core.pageWindow;
 
   /**
    * Reads osu! web `localStorage.userPreferences` JSON and returns `audio_volume` if valid (0–1).
