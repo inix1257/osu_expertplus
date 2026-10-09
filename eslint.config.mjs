@@ -62,6 +62,7 @@ export default [
       "src/features/**/*.js",
       "src/pages/beatmap-discussion.js",
       "src/pages/beatmap-detail.js",
+      "src/pages/user-profile.js",
     ],
     languageOptions: { sourceType: "module" },
   },

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { replaceRange, toggleWrap } from "../../src/editor/textarea.js";
-import { USER_PROFILE, legacyFn } from "../osu/legacy.mjs";
+import { LEGACY_BBCODE, legacyFn } from "../osu/legacy.mjs";
 import { setupWindow } from "./helpers.mjs";
 
 const { window, document } = setupWindow();
@@ -131,11 +131,11 @@ test("toggleWrap: discussion options (placeholder, matchInside: false)", () => {
 });
 
 test("toggleWrap matches user-profile _toggleBbcodeWrap", () => {
-  const legacyReplace = legacyFn(USER_PROFILE, "_replaceTextareaRange", {
+  const legacyReplace = legacyFn(LEGACY_BBCODE, "_replaceTextareaRange", {
     document,
     Event: window.Event,
   });
-  const legacyToggle = legacyFn(USER_PROFILE, "_toggleBbcodeWrap", {
+  const legacyToggle = legacyFn(LEGACY_BBCODE, "_toggleBbcodeWrap", {
     _replaceTextareaRange: legacyReplace,
   });
   const values = [

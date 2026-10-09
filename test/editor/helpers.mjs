@@ -6,7 +6,7 @@
 import { loadScripts } from "../helpers/load-script.mjs";
 import {
   LEGACY_DISCUSSION,
-  USER_PROFILE,
+  LEGACY_BBCODE,
   legacySource,
 } from "../osu/legacy.mjs";
 
@@ -57,7 +57,7 @@ const OLD_BBCODE_FUNCTIONS = [
  */
 export function oldBbcodeRenderer(window) {
   return legacyGroup(
-    USER_PROFILE,
+    LEGACY_BBCODE,
     OLD_BBCODE_FUNCTIONS,
     "_renderSimpleBbcodePreviewHtml",
     {

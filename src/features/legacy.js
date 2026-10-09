@@ -48,3 +48,8 @@ export function qsa(...args) {
 export function omdb() {
   return OsuExpertPlus.omdb;
 }
+
+/** `OsuExpertPlus.dom.manageStyle` */
+export function manageStyle(...args) {
+  return OsuExpertPlus.dom.manageStyle(...args);
+}

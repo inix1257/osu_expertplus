@@ -5,12 +5,12 @@ import {
   placeBbcodePreviewToggle,
   placeDiscussionPreviewToggle,
 } from "../../src/editor/preview-toggle.js";
-import { LEGACY_DISCUSSION, USER_PROFILE, legacyFn } from "../osu/legacy.mjs";
+import { LEGACY_BBCODE, LEGACY_DISCUSSION, legacyFn } from "../osu/legacy.mjs";
 import { setupWindow } from "./helpers.mjs";
 
 const { window, document } = setupWindow();
 
-const oldFindCancel = legacyFn(USER_PROFILE, "_findCancelActionNode", {
+const oldFindCancel = legacyFn(LEGACY_BBCODE, "_findCancelActionNode", {
   HTMLElement: window.HTMLElement,
 });
 const oldPlaceDiscussion = legacyFn(

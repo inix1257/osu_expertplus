@@ -57,13 +57,15 @@ export function legacyFn(file, name, deps = {}) {
 }
 
 export const USER_PROFILE = "src/pages/user-profile.js";
-/** Discussion helpers removed from beatmap-detail by WS-30 (frozen copy). */
 /** Scoreboard helpers moved out of beatmap-detail by WS-31 (frozen copy). */
 export const LEGACY_SCOREBOARD =
   "test/fixtures/legacy/beatmap-detail-scoreboard.js";
 /** Beatmapset page helpers moved out of beatmap-detail by WS-33 (frozen copy). */
 export const LEGACY_BEATMAPSET =
   "test/fixtures/legacy/beatmap-detail-beatmapset.js";
+/** BBCode helper moved out of user-profile by WS-40 (frozen copy). */
+export const LEGACY_BBCODE = "test/fixtures/legacy/user-profile-bbcode.js";
+/** Discussion helpers removed from beatmap-detail by WS-30 (frozen copy). */
 export const LEGACY_DISCUSSION =
   "test/fixtures/legacy/beatmap-detail-discussion.js";
 export const CARD_EXTRA = "src/utils/beatmap-card-extra.js";

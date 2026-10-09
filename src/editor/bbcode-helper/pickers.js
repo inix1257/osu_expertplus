@@ -1,0 +1,219 @@
+/**
+ * Font colour and size picker modals (WS-40).
+ */
+
+import { el } from "../../features/legacy.js";
+import { BBHELP_BTN_CLASS, BBHELP_MODAL_CLASS } from "./constants.js";
+import { _toggleBbcodeWrap } from "./toolbar.js";
+
+export function _openColorPicker(textarea) {
+  const overlay = el("div", { class: BBHELP_MODAL_CLASS });
+  const card = el("div", { class: `${BBHELP_MODAL_CLASS}__card` });
+  const title = el(
+    "h4",
+    { class: `${BBHELP_MODAL_CLASS}__title` },
+    "Font color",
+  );
+
+  const colorInput = el("input", {
+    type: "color",
+    value: "#ff66aa",
+    "aria-label": "Pick a color",
+  });
+  const textInput = el("input", {
+    type: "text",
+    value: "#ff66aa",
+    placeholder: "#RRGGBB or color name",
+    "aria-label": "Color value",
+  });
+  const swatch = el("div", { class: `${BBHELP_MODAL_CLASS}__swatch` });
+  const colorGrid = el(
+    "div",
+    { class: `${BBHELP_MODAL_CLASS}__color-grid` },
+    colorInput,
+    textInput,
+  );
+  const hint = el(
+    "div",
+    { class: `${BBHELP_MODAL_CLASS}__hint` },
+    "Use picker for hex color, or type a color name (e.g. red).",
+  );
+
+  const actions = el("div", { class: `${BBHELP_MODAL_CLASS}__actions` });
+  const cancelBtn = el(
+    "button",
+    { type: "button", class: BBHELP_BTN_CLASS },
+    "Cancel",
+  );
+  const applyBtn = el(
+    "button",
+    { type: "button", class: BBHELP_BTN_CLASS },
+    "Apply",
+  );
+  actions.appendChild(cancelBtn);
+  actions.appendChild(applyBtn);
+
+  const updateSwatch = () => {
+    const v = String(textInput.value || "").trim();
+    swatch.style.background = v || "#ff66aa";
+  };
+  const close = () => overlay.remove();
+  const apply = () => {
+    const value = String(textInput.value || "").trim();
+    if (!value) return;
+    _toggleBbcodeWrap(textarea, `[color=${value}]`, "[/color]");
+    close();
+  };
+
+  colorInput.addEventListener("input", () => {
+    textInput.value = colorInput.value;
+    updateSwatch();
+  });
+  textInput.addEventListener("input", updateSwatch);
+  cancelBtn.addEventListener("click", close);
+  applyBtn.addEventListener("click", apply);
+  overlay.addEventListener("click", (ev) => {
+    if (ev.target === overlay) close();
+  });
+  overlay.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") close();
+    if (ev.key === "Enter") apply();
+  });
+
+  card.appendChild(title);
+  card.appendChild(colorGrid);
+  card.appendChild(swatch);
+  card.appendChild(hint);
+  card.appendChild(actions);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  textInput.focus();
+  textInput.select();
+  updateSwatch();
+}
+
+export function _openSizePicker(textarea) {
+  const uid = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const modeName = `oep-size-mode-${uid}`;
+  const modePresetId = `oep-size-mode-preset-${uid}`;
+  const modeManualId = `oep-size-mode-manual-${uid}`;
+
+  const overlay = el("div", { class: BBHELP_MODAL_CLASS });
+  const card = el("div", { class: `${BBHELP_MODAL_CLASS}__card` });
+  const title = el(
+    "h4",
+    { class: `${BBHELP_MODAL_CLASS}__title` },
+    "Font size",
+  );
+  const modeWrap = el("div", { class: `${BBHELP_MODAL_CLASS}__modes` });
+
+  const presetRadio = el("input", {
+    type: "radio",
+    name: modeName,
+    id: modePresetId,
+    value: "preset",
+    checked: "checked",
+  });
+  const manualRadio = el("input", {
+    type: "radio",
+    name: modeName,
+    id: modeManualId,
+    value: "manual",
+  });
+  modeWrap.appendChild(
+    el(
+      "label",
+      { for: modePresetId },
+      presetRadio,
+      " Preset (tiny/small/normal/large)",
+    ),
+  );
+  modeWrap.appendChild(
+    el("label", { for: modeManualId }, manualRadio, " Manual number"),
+  );
+
+  const presetField = el("div", { class: `${BBHELP_MODAL_CLASS}__field` });
+  const presetSelect = el(
+    "select",
+    {},
+    el("option", { value: "tiny" }, "tiny"),
+    el("option", { value: "small" }, "small"),
+    el("option", { value: "normal", selected: "selected" }, "normal"),
+    el("option", { value: "large" }, "large"),
+  );
+  presetField.appendChild(presetSelect);
+
+  const manualField = el("div", {
+    class: `${BBHELP_MODAL_CLASS}__field`,
+    style: "display:none;",
+  });
+  const manualInput = el("input", {
+    type: "number",
+    min: "30",
+    max: "200",
+    step: "1",
+    value: "100",
+    placeholder: "30 - 200",
+  });
+  manualField.appendChild(manualInput);
+  manualField.appendChild(
+    el("div", { class: `${BBHELP_MODAL_CLASS}__hint` }, "Range: 30-200"),
+  );
+
+  const actions = el("div", { class: `${BBHELP_MODAL_CLASS}__actions` });
+  const cancelBtn = el(
+    "button",
+    { type: "button", class: BBHELP_BTN_CLASS },
+    "Cancel",
+  );
+  const applyBtn = el(
+    "button",
+    { type: "button", class: BBHELP_BTN_CLASS },
+    "Apply",
+  );
+  actions.appendChild(cancelBtn);
+  actions.appendChild(applyBtn);
+
+  const close = () => overlay.remove();
+  const syncMode = () => {
+    const isPreset = presetRadio.checked;
+    presetField.style.display = isPreset ? "" : "none";
+    manualField.style.display = isPreset ? "none" : "";
+    if (isPreset) presetSelect.focus();
+    else manualInput.focus();
+  };
+  const apply = () => {
+    const sizeValue = presetRadio.checked
+      ? String(presetSelect.value || "").trim()
+      : String(
+          Math.max(
+            30,
+            Math.min(200, Math.round(Number(manualInput.value) || 0)),
+          ),
+        );
+    if (!sizeValue || sizeValue === "0") return;
+    _toggleBbcodeWrap(textarea, `[size=${sizeValue}]`, "[/size]");
+    close();
+  };
+
+  presetRadio.addEventListener("change", syncMode);
+  manualRadio.addEventListener("change", syncMode);
+  cancelBtn.addEventListener("click", close);
+  applyBtn.addEventListener("click", apply);
+  overlay.addEventListener("click", (ev) => {
+    if (ev.target === overlay) close();
+  });
+  overlay.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") close();
+    if (ev.key === "Enter") apply();
+  });
+
+  card.appendChild(title);
+  card.appendChild(modeWrap);
+  card.appendChild(presetField);
+  card.appendChild(manualField);
+  card.appendChild(actions);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  syncMode();
+}
