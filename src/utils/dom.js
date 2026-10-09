@@ -1,4 +1,4 @@
-/** DOM helpers: qs/qsa/el, wait*, manageStyle, createCleanupBag */
+/** DOM helpers: qs/qsa/el, wait*, manageStyle, createCleanupBag, set*IfChanged */
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
@@ -159,6 +159,30 @@ OsuExpertPlus.dom = (() => {
   }
 
   /**
+   * Assign textContent only when it differs. Assigning the same text still
+   * replaces the child Text node and fires a childList mutation, which can
+   * re-trigger document-wide MutationObservers in a loop.
+   * @param {Node|null|undefined} node
+   * @param {string} text
+   */
+  function setTextIfChanged(node, text) {
+    if (!node) return;
+    if (node.textContent !== text) node.textContent = text;
+  }
+
+  /**
+   * Assign `hidden` only when it differs. Setting `hidden = true` on an
+   * already-hidden element still fires an attribute mutation.
+   * @param {HTMLElement|null|undefined} node
+   * @param {boolean} hidden
+   */
+  function setHiddenIfChanged(node, hidden) {
+    if (!node) return;
+    const next = !!hidden;
+    if (node.hidden !== next) node.hidden = next;
+  }
+
+  /**
    * Parse a locale-formatted number string (handles period or comma as
    * decimal separator and spaces/commas/periods as group separators).
    * @param {string} str
@@ -227,6 +251,8 @@ OsuExpertPlus.dom = (() => {
     waitForStaleElementToLeave,
     manageStyle,
     createCleanupBag,
+    setTextIfChanged,
+    setHiddenIfChanged,
     parseLocaleNumber,
     formatDecimalPp,
   };

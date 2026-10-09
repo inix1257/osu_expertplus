@@ -15,6 +15,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     qsa,
     manageStyle,
     createCleanupBag,
+    setTextIfChanged,
+    setHiddenIfChanged,
     parseLocaleNumber,
     formatDecimalPp,
   } = OsuExpertPlus.dom;
