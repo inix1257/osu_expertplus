@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.2.24
+// @version      0.2.25
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -4956,17 +4956,12 @@ OsuExpertPlus.modIconsAsAcronyms = (() => {
   /** Real text node — osu-web uses ::after for both letters and masked SVGs; those rules tie our specificity. */
   const MOD_ICONS_ACRONYM_LABEL_CLASS = "oep-mod-acronym-label";
 
-  /** Fallback when parent `.mod` has no type (e.g. odd markup); mirrors osu difficulty reduction set. */
-  const MOD_ACRONYM_REDUCTION = new Set([
-    "EZ",
-    "NF",
-    "HT",
-    "DC",
-    "NR",
-    "SO",
-    "MU",
-  ]);
-  /** Fallback for difficulty-increasing–style mods (excl. automation / keys → white). */
+  /**
+   * Mod type per osu!lazer (matches the `mod--type-*` class osu-web renders on `.mod`).
+   * Used when building mod chips from API data and as a fallback when the parent
+   * `.mod` carries no type. Anything unlisted is `Fun`.
+   */
+  const MOD_ACRONYM_REDUCTION = new Set(["EZ", "NF", "HT", "DC", "NR"]);
   const MOD_ACRONYM_INCREASE = new Set([
     "HR",
     "SD",
@@ -4976,46 +4971,28 @@ OsuExpertPlus.modIconsAsAcronyms = (() => {
     "HD",
     "FL",
     "FI",
-    "BL",
-    "DA",
-    "AC",
-    "WU",
-    "WD",
-    "DF",
-    "TC",
-    "SV2",
-    "NS",
-    "TP",
-    "MF",
-    "MG",
-    "AD",
-    "AS",
-    "CS",
-    "DS",
-    "RD",
-    "SI",
-    "ST",
-    "SY",
-    "TD",
-    "BM",
     "CO",
-    "DP",
-    "FR",
-    "GR",
-    "IN",
-    "MR",
-    "RP",
-    "SW",
-    "TR",
-    "WG",
-    "BR",
-    "BU",
+    "BL",
+    "AC",
+    "ST",
   ]);
   /**
    * osu-web `mod.less`: `.mod-type(Conversion, @osu-colour-purple-1)` — blue-purple
-   * chip (e.g. Classic / CL). Not DifficultyIncrease/Reduction/Fun.
+   * chip (e.g. Classic / CL, Difficulty Adjust, Mirror).
    */
-  const MOD_ACRONYM_CONVERSION = new Set(["CL"]);
+  const MOD_ACRONYM_CONVERSION = new Set([
+    "CL",
+    "DA",
+    "MR",
+    "RD",
+    "DS",
+    "IN",
+    "CS",
+    "HO",
+    "TP",
+  ]);
+  const MOD_ACRONYM_AUTOMATION = new Set(["AT", "CN", "RX", "AP", "SO"]);
+  const MOD_ACRONYM_SYSTEM = new Set(["TD", "SV2"]);
 
   const MOD_ICONS_ACRONYM_CSS = `
     .${MOD_ICONS_ACRONYM_CLASS}.mod__icon {
@@ -5138,7 +5115,11 @@ OsuExpertPlus.modIconsAsAcronyms = (() => {
     const u = String(acronym).trim().toUpperCase();
     if (MOD_ACRONYM_REDUCTION.has(u)) return "mod--type-DifficultyReduction";
     if (MOD_ACRONYM_INCREASE.has(u)) return "mod--type-DifficultyIncrease";
-    if (MOD_ACRONYM_CONVERSION.has(u)) return "mod--type-Conversion";
+    if (MOD_ACRONYM_CONVERSION.has(u) || /^\d+K$/.test(u)) {
+      return "mod--type-Conversion";
+    }
+    if (MOD_ACRONYM_AUTOMATION.has(u)) return "mod--type-Automation";
+    if (MOD_ACRONYM_SYSTEM.has(u)) return "mod--type-System";
     return "mod--type-Fun";
   }
 
@@ -9549,8 +9530,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
-   * Turn scoreboard cell `<a>` wrappers into `<span>` so the row is not navigable,
-   * except `a.beatmap-scoreboard-table__user-link` (profile URL).
+   * Turn scoreboard cell `<a>` wrappers into `<span>` so stale template links are
+   * not navigable, except `a.beatmap-scoreboard-table__user-link` (profile URL)
+   * and links already pointing at the row's own `/scores/{id}` page.
    * @param {HTMLTableRowElement} tr
    */
   function demoteBeatmapUserSearchResultRowLinks(tr) {
@@ -9558,6 +9540,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     for (const a of tr.querySelectorAll("a")) {
       if (!(a instanceof HTMLAnchorElement)) continue;
       if (a.classList.contains("beatmap-scoreboard-table__user-link")) continue;
+      if (/\/scores\/(?:[a-z]+\/)?\d+(?:[/?#]|$)/i.test(a.getAttribute("href") || "")) {
+        continue;
+      }
       const href = a.getAttribute("href") || "";
       if (
         /\/rankings\/[^/]+\/performance\?country=/i.test(href) &&
@@ -14154,6 +14139,26 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
     if (colMap.mods != null && tds[colMap.mods]) {
       applyScoreboardModsCell(tds[colMap.mods], score, modTemplateBtn);
+    }
+
+    pointScoreboardRowLinksAtScore(tr, score);
+  }
+
+  /**
+   * Row cells are cloned from a native row, so their `/scores/{id}` links still
+   * target that row's score. Re-point them at this score (like osu-web rows),
+   * or drop the link when the score has no id.
+   * @param {HTMLTableRowElement} tr
+   * @param {object} score
+   */
+  function pointScoreboardRowLinksAtScore(tr, score) {
+    const scoreId = leaderboardScoreId(score);
+    const scoreHrefRe = /\/scores\/(?:[a-z]+\/)?\d+(?:[/?#]|$)/i;
+    for (const a of tr.querySelectorAll("a[href]")) {
+      if (!(a instanceof HTMLAnchorElement)) continue;
+      if (!scoreHrefRe.test(a.getAttribute("href") || "")) continue;
+      if (scoreId) a.href = `https://osu.ppy.sh/scores/${scoreId}`;
+      else a.removeAttribute("href");
     }
   }
 
@@ -19116,12 +19121,66 @@ OsuExpertPlus.pages.userProfile = (() => {
     return data?.user?.id != null ? String(data.user.id) : null;
   }
 
-  function getCurrentMode() {
-    const data = parseProfileInitialData();
-    if (data?.current_mode) return data.current_mode;
+  const PROFILE_MODES = ["osu", "taiko", "fruits", "mania"];
 
-    const m = location.search.match(/[?&]mode=([^&]+)/);
-    return m ? m[1] : "osu";
+  /** Ruleset named in the URL (`/users/1/taiko` or `?mode=taiko`), if any. */
+  function getModeFromUrl() {
+    const seg = location.pathname.match(/^\/users\/[^/]+\/([^/]+)\/?$/);
+    if (seg && PROFILE_MODES.includes(seg[1])) return seg[1];
+    const q = location.search.match(/[?&]mode=([^&]+)/);
+    return q && PROFILE_MODES.includes(q[1]) ? q[1] : null;
+  }
+
+  /**
+   * Whether the profile initial data in the DOM belongs to the profile in the URL.
+   * The router runs on pushState, i.e. before the new page is rendered, so the DOM
+   * can still hold the previous profile (and its default ruleset).
+   * @param {Object|null} data
+   */
+  function profileDataMatchesUrl(data) {
+    if (!data?.user) return false;
+    const m = location.pathname.match(/^\/users\/([^/]+)/);
+    if (!m) return true;
+    const seg = decodeURIComponent(m[1]);
+    if (/^\d+$/.test(seg)) return String(data.user.id) === seg;
+    const norm = (s) => String(s).toLowerCase().replace(/[\s_]+/g, "_");
+    return norm(data.user.username ?? "") === norm(seg);
+  }
+
+  function getCurrentMode() {
+    const fromUrl = getModeFromUrl();
+    if (fromUrl) return fromUrl;
+
+    const data = parseProfileInitialData();
+    if (data?.current_mode && profileDataMatchesUrl(data)) {
+      return data.current_mode;
+    }
+    return "osu";
+  }
+
+  /**
+   * Resolve the profile user + ruleset for the page in the URL, waiting for the
+   * new page's data when the DOM still holds the previous profile.
+   * @param {number} [timeoutMs]
+   * @returns {Promise<{ userId: string, mode: string } | null>}
+   */
+  async function resolveProfileTarget(timeoutMs = 8000) {
+    const start = Date.now();
+    const urlId = getUserIdFromUrl();
+    const urlMode = getModeFromUrl();
+    if (urlId && urlMode) return { userId: urlId, mode: urlMode };
+
+    for (;;) {
+      const data = parseProfileInitialData();
+      if (data && profileDataMatchesUrl(data)) {
+        return {
+          userId: String(data.user.id),
+          mode: urlMode ?? data.current_mode ?? "osu",
+        };
+      }
+      if (Date.now() - start >= timeoutMs) return null;
+      await new Promise((r) => setTimeout(r, 100));
+    }
   }
 
   function getCurrentUserIdFromHeader() {
@@ -19951,27 +20010,55 @@ OsuExpertPlus.pages.userProfile = (() => {
     for (const mod of modsList || []) {
       const ac = typeof mod === "string" ? mod : mod?.acronym;
       if (!ac) continue;
+      let chip;
       if (templateModEl instanceof HTMLElement) {
-        const cloned = /** @type {HTMLElement} */ (
-          templateModEl.cloneNode(true)
-        );
-        patchClonedModForAcronym(cloned, ac);
-        modsInner.appendChild(cloned);
+        chip = /** @type {HTMLElement} */ (templateModEl.cloneNode(true));
+        patchClonedModForAcronym(chip, ac);
       } else {
         const safe = String(ac).replace(/[^A-Za-z0-9]/g, "") || "X";
-        modsInner.appendChild(
-          el(
-            "div",
-            { class: `mod ${modTypeClassForAcronym(ac)}` },
-            el("div", {
-              class: `mod__icon mod__icon--${safe}`,
-              "data-acronym": ac,
-            }),
-          ),
+        chip = el(
+          "div",
+          { class: `mod ${modTypeClassForAcronym(ac)}` },
+          el("div", {
+            class: `mod__icon mod__icon--${safe}`,
+            "data-acronym": ac,
+          }),
         );
       }
+      applyModCustomisation(chip, mod);
+      modsInner.appendChild(chip);
     }
     return modsInner;
+  }
+
+  /**
+   * Show a custom rate (DT/NC/HT/DC `speed_change`) the way osu-web does: a
+   * `.mod__extender` with "1.30×" plus the customised-cog badge when settings differ.
+   * @param {HTMLElement} chip  `.mod` element
+   * @param {unknown} mod  API mod object (strings carry no settings)
+   */
+  function applyModCustomisation(chip, mod) {
+    const settings = mod && typeof mod === "object" ? mod.settings : null;
+    if (!settings || typeof settings !== "object") return;
+    if (!Object.keys(settings).length) return;
+
+    const rate = Number(settings.speed_change);
+    if (Number.isFinite(rate) && rate > 0) {
+      const label = `${rate.toFixed(2)}×`;
+      chip.querySelector(".mod__extender")?.remove();
+      chip.appendChild(el("div", { class: "mod__extender" }, el("span", {}, label)));
+      chip.setAttribute("title", `${mod.acronym} (${label})`);
+    }
+
+    // The badge is an inline <use> sprite with a hashed URL; borrow osu's own copy.
+    const badge = document.querySelector(
+      ".mod__customised-indicator:not(.oep-mod-badge-clone)",
+    );
+    if (badge instanceof HTMLElement && !chip.querySelector(".mod__customised-indicator")) {
+      const copy = /** @type {HTMLElement} */ (badge.cloneNode(true));
+      copy.classList.add("oep-mod-badge-clone");
+      chip.appendChild(copy);
+    }
   }
 
   /**
@@ -20155,6 +20242,22 @@ OsuExpertPlus.pages.userProfile = (() => {
     );
     viewLink.addEventListener("click", () => menu.removeAttribute("data-open"));
     menu.appendChild(viewLink);
+
+    if (score.has_replay) {
+      const replayLink = el(
+        "a",
+        {
+          class: SCORE_OPTIONS_ITEM_CLASS,
+          href: `https://osu.ppy.sh/scores/${scoreId}/download`,
+          rel: "noopener noreferrer",
+        },
+        "Download replay",
+      );
+      replayLink.addEventListener("click", () =>
+        menu.removeAttribute("data-open"),
+      );
+      menu.appendChild(replayLink);
+    }
 
     const isOwnProfile =
       getProfileUserId() != null &&
@@ -20442,6 +20545,14 @@ OsuExpertPlus.pages.userProfile = (() => {
   }
 
   async function fetchRecentScoresPrimaryWithFails(userId, mode) {
+    // Prefer the site endpoint: it returns lazer-shaped scores (mod objects with
+    // settings, Classic/DA/FF/AD, custom rates). API v2 is only a fallback since
+    // its score shape depends on the request's `x-api-version`.
+    const site = await fetchRecentScoresPaginatedHtmlWithFails(
+      userId,
+      mode,
+    ).catch(() => []);
+    if (site.length) return site;
     try {
       const data = await OsuExpertPlus.api.getUserRecentScores(
         userId,
@@ -20452,7 +20563,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       );
       return Array.isArray(data) ? data : [];
     } catch {
-      return fetchRecentScoresPaginatedHtmlWithFails(userId, mode);
+      return [];
     }
   }
 
@@ -26451,20 +26562,24 @@ OsuExpertPlus.pages.userProfile = (() => {
       cleanups.push(startContentsReorderManager());
     }
 
-    const needsScoreFeatures = true;
+    let disposed = false;
 
-    if (needsScoreFeatures) {
-      const userId = profileUserId;
-      const mode = getCurrentMode();
-      if (userId) {
-        initScoreFeatures(userId, mode).then((cleanup) => {
-          _scoreCleanup = cleanup;
-        });
+    // The router fires on pushState, before the new profile is rendered: wait for
+    // the page's own data so scores are never fetched for the previous ruleset.
+    resolveProfileTarget()
+      .then((target) => {
+        if (disposed || !target) return;
+        const { userId, mode } = target;
         _recentFailsCleanup = startRecentScoresWithFailsObserver(userId, mode);
-      }
-    }
+        return initScoreFeatures(userId, mode).then((cleanup) => {
+          if (disposed) cleanup?.();
+          else _scoreCleanup = cleanup;
+        });
+      })
+      .catch(() => {});
 
     return () => {
+      disposed = true;
       cleanups.forEach((fn) => {
         try {
           fn();
