@@ -206,3 +206,54 @@ test("an editor that goes away loses its toolbar; showing it again re-adds one",
     stop();
   }
 });
+
+/** Counts the document's live mousemove/mouseup listeners. */
+function trackDocumentListeners(doc) {
+  const live = new Set();
+  const add = doc.addEventListener.bind(doc);
+  const remove = doc.removeEventListener.bind(doc);
+  doc.addEventListener = (type, fn, opts) => {
+    if (type === "mousemove" || type === "mouseup") live.add(`${type}`);
+    add(type, fn, opts);
+  };
+  doc.removeEventListener = (type, fn, opts) => {
+    if (type === "mousemove" || type === "mouseup") live.delete(`${type}`);
+    remove(type, fn, opts);
+  };
+  return live;
+}
+
+function openImagemap(doc) {
+  const button = [...doc.querySelectorAll(".oep-bbhelp__btn")].find(
+    (b) => b.title === "Open ImageMap helper",
+  );
+  button.click();
+  return doc.querySelector(".oep-bbhelp-modal");
+}
+
+test("imagemap modal drops its document listeners on Cancel and on page change (B49)", async () => {
+  const window = setup(EDITOR);
+  const { startBbcodeHelperManager } =
+    await import("../../src/editor/bbcode-helper/manager.js");
+  const doc = window.document;
+  const live = trackDocumentListeners(doc);
+  const stop = startBbcodeHelperManager();
+  try {
+    const modal = openImagemap(doc);
+    assert.ok(modal);
+    assert.deepEqual([...live].sort(), ["mousemove", "mouseup"]);
+    [...modal.querySelectorAll("button")]
+      .find((b) => b.textContent === "Cancel")
+      .click();
+    assert.equal(doc.querySelector(".oep-bbhelp-modal"), null);
+    assert.equal(live.size, 0);
+
+    openImagemap(doc);
+    assert.equal(live.size, 2);
+  } finally {
+    stop();
+  }
+  // Leaving the page with the modal open.
+  assert.equal(doc.querySelector(".oep-bbhelp-modal"), null);
+  assert.equal(live.size, 0);
+});

@@ -70,7 +70,7 @@ function enhanceSingleBbcodeEditor(editorEl, session) {
         type: "button",
         class: BBHELP_BTN_CLASS,
         title: "Open ImageMap helper",
-        onclick: () => openImagemapHelper(textarea),
+        onclick: () => openImagemapHelper(textarea, session.signal),
       },
       el("span", { class: `${BBHELP_BTN_ICON_CLASS} fas fa-map-marked-alt` }),
       el("span", { class: BBHELP_BTN_TEXT_CLASS }, "Imagemap helper"),

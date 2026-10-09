@@ -3,12 +3,22 @@
  * generate an `[imagemap]` block (WS-40).
  */
 
+import { listen } from "../../core/lifecycle.js";
 import { el } from "../../features/legacy.js";
 import { safeHttpUrl } from "../sanitize.js";
 import { replaceRange } from "../textarea.js";
 import { BBHELP_BTN_CLASS, BBHELP_MODAL_CLASS } from "./constants.js";
 
-export function openImagemapHelper(textarea) {
+/**
+ * Open the ImageMap helper for `textarea`.
+ * @param {HTMLTextAreaElement} textarea
+ * @param {AbortSignal} [signal]  the helper run; aborting it closes the
+ *   modal and removes its document listeners (B49)
+ */
+export function openImagemapHelper(textarea, signal) {
+  if (signal?.aborted) return;
+  // Everything the modal adds outside itself goes away with `modal`.
+  const modal = new AbortController();
   // State
   const hotspots = []; // { x, y, w, h, url, title }
   let imgLoaded = false;
@@ -832,8 +842,8 @@ export function openImagemapHelper(textarea) {
     }
   };
 
-  document.addEventListener("mousemove", onGlobalMouseMove);
-  document.addEventListener("mouseup", onGlobalMouseUp);
+  listen(document, "mousemove", onGlobalMouseMove, modal.signal);
+  listen(document, "mouseup", onGlobalMouseUp, modal.signal);
 
   const loadImage = () => {
     const safe = safeHttpUrl(String(urlInput.value || "").trim());
@@ -911,10 +921,11 @@ export function openImagemapHelper(textarea) {
   });
 
   const close = () => {
-    document.removeEventListener("mousemove", onGlobalMouseMove);
-    document.removeEventListener("mouseup", onGlobalMouseUp);
+    modal.abort();
     overlay.remove();
   };
+  // The helper run ends (page change) while the modal is open.
+  if (signal) listen(signal, "abort", close, modal.signal);
 
   cancelBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (ev) => {
