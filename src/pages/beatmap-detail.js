@@ -4001,8 +4001,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   }
 
   /**
-   * Turn scoreboard cell `<a>` wrappers into `<span>` so the row is not navigable,
-   * except `a.beatmap-scoreboard-table__user-link` (profile URL).
+   * Turn scoreboard cell `<a>` wrappers into `<span>` so stale template links are
+   * not navigable, except `a.beatmap-scoreboard-table__user-link` (profile URL)
+   * and links already pointing at the row's own `/scores/{id}` page.
    * @param {HTMLTableRowElement} tr
    */
   function demoteBeatmapUserSearchResultRowLinks(tr) {
@@ -4010,6 +4011,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     for (const a of tr.querySelectorAll("a")) {
       if (!(a instanceof HTMLAnchorElement)) continue;
       if (a.classList.contains("beatmap-scoreboard-table__user-link")) continue;
+      if (/\/scores\/(?:[a-z]+\/)?\d+(?:[/?#]|$)/i.test(a.getAttribute("href") || "")) {
+        continue;
+      }
       const href = a.getAttribute("href") || "";
       if (
         /\/rankings\/[^/]+\/performance\?country=/i.test(href) &&
@@ -8606,6 +8610,26 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
 
     if (colMap.mods != null && tds[colMap.mods]) {
       applyScoreboardModsCell(tds[colMap.mods], score, modTemplateBtn);
+    }
+
+    pointScoreboardRowLinksAtScore(tr, score);
+  }
+
+  /**
+   * Row cells are cloned from a native row, so their `/scores/{id}` links still
+   * target that row's score. Re-point them at this score (like osu-web rows),
+   * or drop the link when the score has no id.
+   * @param {HTMLTableRowElement} tr
+   * @param {object} score
+   */
+  function pointScoreboardRowLinksAtScore(tr, score) {
+    const scoreId = leaderboardScoreId(score);
+    const scoreHrefRe = /\/scores\/(?:[a-z]+\/)?\d+(?:[/?#]|$)/i;
+    for (const a of tr.querySelectorAll("a[href]")) {
+      if (!(a instanceof HTMLAnchorElement)) continue;
+      if (!scoreHrefRe.test(a.getAttribute("href") || "")) continue;
+      if (scoreId) a.href = `https://osu.ppy.sh/scores/${scoreId}`;
+      else a.removeAttribute("href");
     }
   }
 
