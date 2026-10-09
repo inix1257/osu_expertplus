@@ -8070,7 +8070,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         "";
       const m =
         typeof refSrc === "string"
-          ? refSrc.match(/assets\.ppy\.sh\/([^\/]+)\/[A-Za-z0-9]{1,3}\.png/i)
+          ? refSrc.match(/assets\.ppy\.sh\/([^/]+)\/[A-Za-z0-9]{1,3}\.png/i)
           : null;
       if (m?.[1]) flagsFolder = m[1];
       else if (typeof refSrc === "string") {

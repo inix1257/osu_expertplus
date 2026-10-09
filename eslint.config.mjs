@@ -12,17 +12,19 @@ const userscriptGlobals = {
   OsuExpertPlus: "writable",
 };
 
-// Baseline from WS-10: existing code is not fixed here. WS-11 cleans these up
-// and promotes the temporary "warn" rules back to errors.
 const baselineRules = {
-  "no-unused-vars": "warn",
+  // `_`-prefixed names mark intentionally unused bindings (mostly `catch (_)`).
+  "no-unused-vars": [
+    "warn",
+    {
+      argsIgnorePattern: "^_",
+      caughtErrorsIgnorePattern: "^_",
+    },
+  ],
+  // Empty catches are handled once WS-20 adds a logger.
   "no-empty": ["warn", { allowEmptyCatch: true }],
   // `/* global GM_* */` comments in some files repeat the configured globals.
   "no-redeclare": ["error", { builtinGlobals: false }],
-  // Temporary (WS-11): existing violations.
-  "no-useless-escape": "warn",
-  "no-useless-assignment": "warn",
-  "preserve-caught-error": "warn",
 };
 
 export default [

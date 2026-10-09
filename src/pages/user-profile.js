@@ -6089,7 +6089,7 @@ OsuExpertPlus.pages.userProfile = (() => {
       value.slice(start, start + closeTag.length) === closeTag;
 
     let nextStart = start;
-    let nextEnd = end;
+    let nextEnd;
 
     if (hasSelection && selectedIsWrapped) {
       const inner = selected.slice(

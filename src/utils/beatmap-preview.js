@@ -542,12 +542,12 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       if (typeof GM_xmlhttpRequest === "function") {
         try {
           buf = await gmGetArrayBuffer();
-        } catch (_) {
+        } catch (gmErr) {
           const res = await fetch(absUrl, {
             credentials: "include",
             mode: "cors",
           });
-          if (!res.ok) throw new Error(String(res.status));
+          if (!res.ok) throw new Error(String(res.status), { cause: gmErr });
           buf = await res.arrayBuffer();
         }
       } else {
@@ -1443,8 +1443,8 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     /** @param {number} deltaMs */
     function seekByDeltaMs(deltaMs) {
       if (!sharedEngine || seekRange.disabled || !lastLoadedKey) return;
-      let t = 0;
-      let duration = 0;
+      let t;
+      let duration;
       try {
         t = sharedEngine.getCurrentTime?.() ?? 0;
         duration = sharedEngine.getDuration?.() ?? 0;
