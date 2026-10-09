@@ -5,17 +5,12 @@
 import { readBeatmapsetJson } from "../../osu/beatmapset-data.js";
 import { el, settingIds, settings } from "../legacy.js";
 import { PICKER_DIFF_NAMES_META_ATTR } from "./constants.js";
-
-/**
- * @param {HTMLAnchorElement} anchor
- * @returns {number|null}
- */
-export function parseBeatmapIdFromPickerLink(anchor) {
-  const href = anchor.getAttribute("href");
-  if (!href) return null;
-  const m = href.match(/#([a-z]+)\/(\d+)\s*$/i);
-  return m ? Number(m[2]) : null;
-}
+import {
+  PICKER_LINK_SEL,
+  PICKER_SEL,
+  pickerLinkBeatmapId,
+  subscribePickerChanges,
+} from "./picker.js";
 
 /**
  * @param {number} n
@@ -59,7 +54,7 @@ export function getBeatmapVersionAndRatingForHeader(beatmapId) {
  * @returns {() => void}
  */
 export function startPickerDiffNames(header, pathRe) {
-  const picker = header.querySelector(".beatmapset-beatmap-picker");
+  const picker = header.querySelector(PICKER_SEL);
   if (!(picker instanceof HTMLElement)) return () => {};
 
   let disposed = false;
@@ -72,21 +67,13 @@ export function startPickerDiffNames(header, pathRe) {
     );
   }
 
-  function beatmapIdFromPickerAnchor(a) {
-    if (!(a instanceof HTMLAnchorElement)) return null;
-    const fromHash = parseBeatmapIdFromPickerLink(a);
-    if (fromHash != null) return fromHash;
-    const m = (a.getAttribute("href") || "").match(/\/beatmaps\/(\d+)/);
-    return m ? Number(m[1]) : null;
-  }
-
   function syncRow(a) {
     if (!settings().isEnabled(settingIds().PICKER_DIFF_NAMES)) {
       a.querySelector(`[${PICKER_DIFF_NAMES_META_ATTR}]`)?.remove();
       return;
     }
 
-    const id = beatmapIdFromPickerAnchor(a);
+    const id = pickerLinkBeatmapId(a, { pathFallback: true });
     const { version, rating } =
       id != null
         ? getBeatmapVersionAndRatingForHeader(id)
@@ -146,9 +133,7 @@ export function startPickerDiffNames(header, pathRe) {
   function syncAll() {
     if (disposed || !pathRe.test(location.pathname)) return;
     syncEnabledClass();
-    for (const a of picker.querySelectorAll(
-      "a.beatmapset-beatmap-picker__beatmap",
-    )) {
+    for (const a of picker.querySelectorAll(PICKER_LINK_SEL)) {
       if (a instanceof HTMLAnchorElement) syncRow(a);
     }
   }
@@ -175,12 +160,8 @@ export function startPickerDiffNames(header, pathRe) {
   window.addEventListener("hashchange", onRouteSignal, { passive: true });
   window.addEventListener("popstate", onRouteSignal, { passive: true });
 
-  const mo = new MutationObserver(scheduleSync);
-  mo.observe(picker, {
-    subtree: true,
-    childList: true,
-    attributes: true,
-    attributeFilter: ["class", "href"],
+  const unsubscribePicker = subscribePickerChanges(picker, scheduleSync, {
+    label: "beatmapset/picker-names",
   });
 
   return () => {
@@ -191,7 +172,7 @@ export function startPickerDiffNames(header, pathRe) {
     header.classList.remove("oep-picker-diff-names-enabled");
     window.removeEventListener("hashchange", onRouteSignal);
     window.removeEventListener("popstate", onRouteSignal);
-    mo.disconnect();
+    unsubscribePicker();
     for (const node of picker.querySelectorAll(
       `[${PICKER_DIFF_NAMES_META_ATTR}]`,
     )) {

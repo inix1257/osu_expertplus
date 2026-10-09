@@ -9,6 +9,7 @@ import {
   BEATMAPSET_FAV_BTN_FAVOURITED_CLASS,
   ROOT_CLASS,
 } from "./constants.js";
+import { observe } from "../../core/observe.js";
 
 /**
  * @param {HTMLElement} header  `.beatmapset-header`
@@ -44,16 +45,19 @@ export function startBeatmapsetFavouriteButtonPinkIndicator(header) {
 
   sync();
 
-  const mo = new MutationObserver(sync);
-  mo.observe(buttons, {
-    subtree: true,
-    childList: true,
-    attributes: true,
-    attributeFilter: ["class"],
-  });
+  // The heart icon's class (fas/far) says whether the set is favourited.
+  const unsubscribe = observe.subscribe(
+    {
+      selector: ".beatmapset-header__buttons, .beatmapset-header__buttons *",
+      attributes: ["class"],
+      schedule: "sync",
+      label: "beatmapset/favourite-button",
+    },
+    sync,
+  );
 
   return () => {
-    mo.disconnect();
+    unsubscribe();
     findFavouriteButton()?.classList.remove(
       BEATMAPSET_FAV_BTN_FAVOURITED_CLASS,
     );
@@ -334,8 +338,15 @@ export function setupBeatmapsetFavouriteHoverPopover(
     }, 40);
   }
 
-  const mo = new MutationObserver(() => scheduleTryBind());
-  mo.observe(header, { childList: true, subtree: true });
+  // osu-web re-renders the header stats (the heart's count span).
+  const unsubscribe = observe.subscribe(
+    {
+      selector: ".beatmapset-header__value",
+      schedule: "sync",
+      label: "beatmapset/favourites-popover",
+    },
+    scheduleTryBind,
+  );
 
   function onWinResize() {
     if (visible && boundSpan) positionPopover(boundSpan);
@@ -346,7 +357,7 @@ export function setupBeatmapsetFavouriteHoverPopover(
 
   return () => {
     if (moDebounce) window.clearTimeout(moDebounce);
-    mo.disconnect();
+    unsubscribe();
     window.removeEventListener("resize", onWinResize);
     spanAbort?.abort();
     spanAbort = null;

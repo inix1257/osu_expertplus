@@ -9,7 +9,13 @@ import {
   OEP_OMDB_VOTE_CLASS,
   OEP_OMDB_WRAP_CLASS,
 } from "./constants.js";
-import { parseBeatmapIdFromPickerLink } from "./picker-diff-names.js";
+import {
+  activePickerBeatmapId,
+  PICKER_LINK_SEL,
+  PICKER_SEL,
+  pickerLinkBeatmapId,
+  subscribePickerChanges,
+} from "./picker.js";
 
 /**
  * @param {unknown} n
@@ -461,7 +467,7 @@ export function mountOmdbBeatmapsetLinkOnlyRow(header, beatmapsetId) {
  */
 export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
   const diffName = header.querySelector(".beatmapset-header__diff-name");
-  const picker = header.querySelector(".beatmapset-beatmap-picker");
+  const picker = header.querySelector(PICKER_SEL);
   const box = header.querySelector(".beatmapset-header__beatmap-picker-box");
   if (!diffName || !picker || !box) return () => {};
 
@@ -677,17 +683,8 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
   let disposed = false;
   let raf = 0;
 
-  function getActiveBeatmapIdFromPicker() {
-    const a = picker.querySelector(
-      "a.beatmapset-beatmap-picker__beatmap--active",
-    );
-    return a instanceof HTMLAnchorElement
-      ? parseBeatmapIdFromPickerLink(a)
-      : null;
-  }
-
   function currentDisplayedBeatmapId() {
-    return hoveredBeatmapId ?? getActiveBeatmapIdFromPicker();
+    return hoveredBeatmapId ?? activePickerBeatmapId(picker);
   }
 
   function isOmdbDifficultyBlacklisted(beatmapId) {
@@ -772,16 +769,16 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
   function onPickerMouseOver(e) {
     const t = e.target;
     if (!(t instanceof Element)) return;
-    const a = t.closest("a.beatmapset-beatmap-picker__beatmap");
+    const a = t.closest(PICKER_LINK_SEL);
     if (!(a instanceof HTMLAnchorElement) || !picker.contains(a)) return;
-    const id = parseBeatmapIdFromPickerLink(a);
+    const id = pickerLinkBeatmapId(a);
     if (id != null) hoveredBeatmapId = id;
-    syncDisplay();
+    scheduleSync();
   }
 
   function onPickerMouseLeave() {
     hoveredBeatmapId = null;
-    syncDisplay();
+    scheduleSync();
   }
 
   function onHashChange() {
@@ -906,12 +903,8 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
   picker.addEventListener("mouseleave", onPickerMouseLeave);
   window.addEventListener("hashchange", onHashChange, { passive: true });
 
-  const mo = new MutationObserver(scheduleSync);
-  mo.observe(picker, {
-    subtree: true,
-    childList: true,
-    attributes: true,
-    attributeFilter: ["class", "href"],
+  const unsubscribePicker = subscribePickerChanges(picker, scheduleSync, {
+    label: "beatmapset/omdb-picker",
   });
 
   scheduleSync();
@@ -919,7 +912,7 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
   return () => {
     disposed = true;
     if (raf) window.cancelAnimationFrame(raf);
-    mo.disconnect();
+    unsubscribePicker();
     picker.removeEventListener("mouseover", onPickerMouseOver);
     picker.removeEventListener("mouseleave", onPickerMouseLeave);
     window.removeEventListener("hashchange", onHashChange);

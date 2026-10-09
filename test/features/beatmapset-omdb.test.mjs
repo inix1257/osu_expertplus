@@ -7,6 +7,9 @@ function setup(omdbStub) {
     url: "https://osu.ppy.sh/beatmapsets/7#osu/71",
   });
   window.OsuExpertPlus.omdb = omdbStub;
+  // Picker hovers re-sync on the next frame.
+  window.requestAnimationFrame = (cb) => setTimeout(cb, 0);
+  window.cancelAnimationFrame = (id) => clearTimeout(id);
   for (const key of [
     "window",
     "document",
@@ -67,11 +70,13 @@ test("OMDB row: hovering the picker keeps Loading… and errors (B57)", async ()
   const dispose = mountOmdbRow(header, "7", PATH);
 
   hoverOther(window);
+  await tick();
   assert.equal(body(window).textContent, "Loading OMDB…");
 
   fail(new Error("OMDB is down"));
   await tick();
   hoverOther(window);
+  await tick();
   assert.equal(body(window).textContent, "OMDB is down");
   assert.ok(
     body(window).classList.contains("oep-beatmapset-omdb-row__body--error"),
