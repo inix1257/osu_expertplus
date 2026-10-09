@@ -21,6 +21,8 @@ import {
 import {
   EXTENDED_SCORE_ROW_ATTR,
   SCOREBOARD_PP_ORIGINAL_ATTR,
+  SCORE_USER_SEARCH_RESULT_ATTR,
+  WILDCARD_MERGED_ROW_ATTR,
   _rowScoreMap,
   getBeatmapPageRuleset,
 } from "./context.js";
@@ -628,4 +630,54 @@ export function pointScoreboardRowLinksAtScore(tr, score) {
     if (scoreId) a.href = `https://osu.ppy.sh/scores/${scoreId}`;
     else a.removeAttribute("href");
   }
+}
+
+/** Rows we inserted (extended leaderboard, wildcard merge, player lookup). */
+const INJECTED_ROW_ATTRS = [
+  EXTENDED_SCORE_ROW_ATTR,
+  WILDCARD_MERGED_ROW_ATTR,
+  SCORE_USER_SEARCH_RESULT_ATTR,
+];
+
+/**
+ * The row to copy injected rows from: the first osu-web row, not one we
+ * inserted earlier (B13: the renderers picked the first row before removing
+ * the previous injected rows, so clones inherited their markers and
+ * values). Falls back to the first row.
+ * @param {ParentNode} tbody
+ * @returns {HTMLTableRowElement|null}
+ */
+export function findScoreboardTemplateRow(tbody) {
+  const rows = [
+    ...tbody.querySelectorAll("tr.beatmap-scoreboard-table__body-row"),
+  ];
+  const native = rows.find(
+    (r) => !INJECTED_ROW_ATTRS.some((attr) => r.hasAttribute(attr)),
+  );
+  const row = native ?? rows[0] ?? null;
+  return row instanceof HTMLTableRowElement ? row : null;
+}
+
+/**
+ * A copy of `templateRow` without anything Expert+ added to it: every
+ * `data-oep-*` attribute (row and cells, e.g. the pp original text), our
+ * global rank badge, the hidden style, and osu-web's per-user row modifiers.
+ * @param {HTMLTableRowElement} templateRow
+ * @returns {HTMLTableRowElement}
+ */
+export function cloneTemplateRow(templateRow) {
+  const row = /** @type {HTMLTableRowElement} */ (templateRow.cloneNode(true));
+  for (const node of [row, ...row.querySelectorAll("*")]) {
+    for (const { name } of [...node.attributes]) {
+      if (name.startsWith("data-oep-")) node.removeAttribute(name);
+    }
+  }
+  row.querySelectorAll(".oep-scoreboard-rank-badge").forEach((n) => n.remove());
+  row.style.display = "";
+  row.classList.remove(
+    "beatmap-scoreboard-table__body-row--friend",
+    "beatmap-scoreboard-table__body-row--first",
+    "beatmap-scoreboard-table__body-row--self",
+  );
+  return row;
 }

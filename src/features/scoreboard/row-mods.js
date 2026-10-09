@@ -148,6 +148,39 @@ export function patchBeatmapScoreboardModButton(btn, acronym, opts) {
 }
 
 /**
+ * When no table row has mods, the template is a filter strip or mod grid
+ * button, which carries the filter state: `disabled`, `aria-pressed`, our
+ * wildcard and hidden markers (B18). Clear that so table mods look like
+ * osu-web's own (enabled, no filter markers).
+ * @param {HTMLElement} btn  a fresh clone of the template
+ */
+function stripModButtonState(btn) {
+  for (const node of [btn, ...btn.querySelectorAll("*")]) {
+    for (const { name } of [...node.attributes]) {
+      if (
+        name.startsWith("data-oep-") ||
+        name === "disabled" ||
+        name === "aria-pressed" ||
+        name === "aria-disabled"
+      ) {
+        node.removeAttribute(name);
+      }
+    }
+    for (const cls of [...node.classList]) {
+      if (
+        cls.startsWith("oep-") ||
+        cls === "beatmap-scoreboard-mod--disabled"
+      ) {
+        node.classList.remove(cls);
+      }
+    }
+    if (node.classList.contains("beatmap-scoreboard-mod")) {
+      node.classList.add("beatmap-scoreboard-mod--enabled");
+    }
+  }
+}
+
+/**
  * @param {HTMLTableCellElement} td
  * @param {object} score
  * @param {HTMLElement|null} modTemplateBtn  from {@link resolveBeatmapScoreboardModTemplateEl}
@@ -163,6 +196,7 @@ export function applyScoreboardModsCell(td, score, modTemplateBtn) {
       const ac = typeof m === "string" ? m : m?.acronym;
       if (!ac) continue;
       const btn = /** @type {HTMLElement} */ (modTemplateBtn.cloneNode(true));
+      stripModButtonState(btn);
       const spd = speedChangeFromMod(m);
       patchBeatmapScoreboardModButton(
         btn,

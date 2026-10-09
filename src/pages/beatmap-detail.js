@@ -30,6 +30,8 @@ import {
 import {
   applyApiScoreToBeatmapScoreRow,
   buildBeatmapScoreboardColumnMap,
+  cloneTemplateRow,
+  findScoreboardTemplateRow,
 } from "../features/scoreboard/row-builder.js";
 import { resolveBeatmapScoreboardModTemplateEl } from "../features/scoreboard/row-mods.js";
 import {
@@ -2335,9 +2337,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       "tbody.beatmap-scoreboard-table__body",
     );
     if (!tbody) return;
-    const templateRow = tbody.querySelector(
-      "tr.beatmap-scoreboard-table__body-row",
-    );
+    const templateRow = findScoreboardTemplateRow(tbody);
     if (!(templateRow instanceof HTMLTableRowElement)) return;
 
     const colMap = buildBeatmapScoreboardColumnMap(templateRow, realTable);
@@ -2377,9 +2377,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     for (let i = 0; i < scores.length; i++) {
       const score = scores[i];
       if (!score || typeof score !== "object") continue;
-      const row = /** @type {HTMLTableRowElement} */ (
-        templateRow.cloneNode(true)
-      );
+      const row = cloneTemplateRow(templateRow);
       row.setAttribute(WILDCARD_MERGED_ROW_ATTR, "1");
       row.removeAttribute(RATE_EDIT_ROW_ATTR);
       row.removeAttribute(WILDCARD_DUPE_ROW_ATTR);
@@ -4032,9 +4030,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     );
     if (!tbody) return false;
 
-    const templateRow = tbody.querySelector(
-      "tr.beatmap-scoreboard-table__body-row",
-    );
+    const templateRow = findScoreboardTemplateRow(tbody);
     if (!(templateRow instanceof HTMLTableRowElement)) return false;
 
     const colMap = buildBeatmapScoreboardColumnMap(templateRow, realTable);
@@ -4072,9 +4068,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     let inserted = 0;
     for (const score of scores) {
       if (!score || typeof score !== "object") continue;
-      const resultRow = /** @type {HTMLTableRowElement} */ (
-        templateRow.cloneNode(true)
-      );
+      const resultRow = cloneTemplateRow(templateRow);
       resultRow.setAttribute(SCORE_USER_SEARCH_RESULT_ATTR, "1");
       resultRow.removeAttribute(RATE_EDIT_ROW_ATTR);
       resultRow.style.display = "";
