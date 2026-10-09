@@ -7,6 +7,7 @@
 import { observe } from "../../core/observe.js";
 import {
   beatmapsetIdFromPath,
+  isBeatmapsetDiscussion,
   isDiscussionReviewsTotal,
 } from "../../core/routes.js";
 import { renderMarkdown } from "../../editor/markdown-render.js";
@@ -79,7 +80,7 @@ export function startDiscussionPreview(beatmapsetId) {
 
   const isSupportedDiscussionPath = () =>
     beatmapsetIdFromPath(location.pathname) === beatmapsetId &&
-    /^\/beatmapsets\/\d+\/discussion\//i.test(location.pathname) &&
+    isBeatmapsetDiscussion(location.pathname) &&
     !isDiscussionReviewsTotal(location.pathname);
 
   /**
