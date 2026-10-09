@@ -4387,9 +4387,16 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       "Add osu! API OAuth credentials in Expert+ settings to search players.";
     let debounceTimer = 0;
 
+    // clearUserSearchMergedLeaderboard refreshes the whole table (DOM writes), so only
+    // call it when there is something to clear; otherwise the document observer below
+    // re-runs us forever.
+    const hasUserSearchResultRows = (scoreboardRoot) =>
+      scoreboardRoot instanceof HTMLElement &&
+      !!scoreboardRoot.querySelector(`tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`);
+
     const cleanup = () => {
       document.querySelectorAll(".beatmapset-scoreboard").forEach((el) => {
-        if (el instanceof HTMLElement) {
+        if (hasUserSearchResultRows(el)) {
           clearUserSearchMergedLeaderboard(
             el,
             el.querySelector(".beatmapset-scoreboard__mods"),
@@ -4410,20 +4417,22 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       const resultEl = wrap.querySelector(".oep-user-search__result");
       const configured = auth.isConfigured();
       wrap.classList.toggle("oep-user-search--no-api", !configured);
-      if (input instanceof HTMLInputElement) {
+      if (input instanceof HTMLInputElement && input.disabled !== !configured) {
         input.disabled = !configured;
       }
-      if (goBtn instanceof HTMLButtonElement) {
+      if (goBtn instanceof HTMLButtonElement && goBtn.disabled !== !configured) {
         goBtn.disabled = !configured;
       }
       if (!configured) {
-        if (resetBtn instanceof HTMLElement) resetBtn.hidden = true;
-        if (resultEl) resultEl.replaceChildren();
-        if (input instanceof HTMLInputElement) input.value = "";
-        if (statusEl) statusEl.textContent = NO_API_STATUS;
+        if (resetBtn instanceof HTMLElement) setHiddenIfChanged(resetBtn, true);
+        if (resultEl && resultEl.firstChild) resultEl.replaceChildren();
+        if (input instanceof HTMLInputElement && input.value) input.value = "";
+        setTextIfChanged(statusEl, NO_API_STATUS);
         const boardRoot = findBeatmapScoreboardRoot();
-        const mods = boardRoot?.querySelector(".beatmapset-scoreboard__mods");
-        clearUserSearchMergedLeaderboard(boardRoot, mods, false);
+        if (hasUserSearchResultRows(boardRoot)) {
+          const mods = boardRoot.querySelector(".beatmapset-scoreboard__mods");
+          clearUserSearchMergedLeaderboard(boardRoot, mods, false);
+        }
       } else if (statusEl && statusEl.textContent === NO_API_STATUS) {
         statusEl.textContent = "";
       }
