@@ -17,6 +17,7 @@ import {
 } from "./modded-sr.js";
 import {
   _scoreListComplete,
+  beginScoreListVisit,
   fetchMostWatchedScores,
   fetchScores,
 } from "./score-list-data.js";
@@ -68,6 +69,7 @@ import {
  */
 export async function initScoreFeatures(userId, mode, run) {
   const { isDisposed, cleanupFns } = run;
+  beginScoreListVisit();
 
   await waitForStaleElementToLeave(PLAY_DETAIL_LIST_STALE_SEL);
   if (isDisposed()) return;

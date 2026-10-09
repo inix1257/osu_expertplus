@@ -20,21 +20,36 @@ export function _profileScoresCacheTtl(userId) {
 }
 
 /**
- * @typedef {{ scores: object[], done: boolean, ts: number, lastPageKey: string, pending: Promise<boolean>|null }} ScoreListEntry
+ * @typedef {{ scores: object[], done: boolean, ts: number, visit: number, lastPageKey: string, pending: Promise<boolean>|null }} ScoreListEntry
  * @type {Map<string, ScoreListEntry>}
  */
 const _scoreListCache = new Map();
+
+/** Profile page visits so far (see {@link beginScoreListVisit}). */
+let scoreListVisit = 0;
+
+/**
+ * A new profile page visit. The viewer's own lists (TTL 0) are fetched afresh
+ * once per visit and then continued page by page within it: "Show more" no
+ * longer starts again from offset 0 (B41).
+ */
+export function beginScoreListVisit() {
+  scoreListVisit += 1;
+}
 
 /** @returns {ScoreListEntry} */
 function _scoreListEntry(userId, mode, type) {
   const key = `${userId}:${mode}:${type}`;
   let entry = _scoreListCache.get(key);
   const ttl = _profileScoresCacheTtl(userId);
-  if (!entry || (!entry.pending && Date.now() - entry.ts >= ttl)) {
+  const stale = (/** @type {ScoreListEntry} */ e) =>
+    ttl === 0 ? e.visit !== scoreListVisit : Date.now() - e.ts >= ttl;
+  if (!entry || (!entry.pending && stale(entry))) {
     entry = {
       scores: [],
       done: false,
       ts: Date.now(),
+      visit: scoreListVisit,
       lastPageKey: "",
       pending: null,
     };
