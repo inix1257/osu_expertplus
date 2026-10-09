@@ -166,16 +166,69 @@ OsuExpertPlus.api = (() => {
   }
 
   /**
-   * Build fetch headers, injecting a Bearer token when available.
-   * @returns {Promise<HeadersInit>}
+   * Query string (without `?`) from params; `null`/`undefined` values are
+   * skipped and arrays repeat the key.
+   * @param {Record<string, unknown>} [params]
+   * @returns {string}
    */
-  async function buildHeaders() {
+  function buildQuery(params = {}) {
+    const usp = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null) continue;
+      if (Array.isArray(value)) {
+        for (const v of value) usp.append(key, String(v));
+      } else {
+        usp.append(key, String(value));
+      }
+    }
+    return usp.toString();
+  }
+
+  /**
+   * @param {string} url
+   * @param {Record<string, unknown>} [params]
+   */
+  function withQuery(url, params) {
+    const qs = buildQuery(params);
+    return qs ? `${url}?${qs}` : url;
+  }
+
+  /**
+   * JSON `Accept` header plus the OAuth Bearer token when `auth` is true and
+   * credentials are configured.
+   * @param {{ auth?: boolean }} [options]
+   * @returns {Promise<Record<string, string>>}
+   */
+  async function buildHeaders({ auth = true } = {}) {
+    /** @type {Record<string, string>} */
     const headers = { Accept: "application/json" };
-    const authHeader = await OsuExpertPlus.auth
-      .getAuthHeader()
-      .catch(() => null);
-    if (authHeader) headers["Authorization"] = authHeader;
+    if (auth) {
+      const authHeader = await OsuExpertPlus.auth
+        .getAuthHeader()
+        .catch(() => null);
+      if (authHeader) headers["Authorization"] = authHeader;
+    }
     return headers;
+  }
+
+  /**
+   * Query params shared by the API and site beatmap scoreboard routes.
+   * @param {{ mode?: string, legacy_only?: unknown, type?: string,
+   *   limit?: number, mods?: string[] }} [query]
+   */
+  function scoresQueryParams(query) {
+    /** @type {Record<string, unknown>} */
+    const params = {};
+    if (query && typeof query === "object") {
+      if (query.mode) params.mode = query.mode;
+      if (query.legacy_only != null) params.legacy_only = query.legacy_only;
+      if (query.type) params.type = query.type;
+      if (query.limit != null) params.limit = query.limit;
+      if (Array.isArray(query.mods) && query.mods.length) {
+        params["mods[]"] = query.mods;
+      }
+    }
+    return params;
   }
 
   /**
@@ -191,24 +244,8 @@ OsuExpertPlus.api = (() => {
    * @returns {Promise<any>}
    */
   async function get(url, params = {}, options = {}) {
-    const usp = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      if (value === undefined || value === null) continue;
-      if (Array.isArray(value)) {
-        for (const v of value) usp.append(key, String(v));
-      } else {
-        usp.append(key, String(value));
-      }
-    }
-    const qs = usp.toString();
-    const fullUrl = qs ? `${url}?${qs}` : url;
-    const headers = { Accept: "application/json" };
-    if (!options.sessionOnly) {
-      const authHeader = await OsuExpertPlus.auth
-        .getAuthHeader()
-        .catch(() => null);
-      if (authHeader) headers["Authorization"] = authHeader;
-    }
+    const fullUrl = withQuery(url, params);
+    const headers = await buildHeaders({ auth: !options.sessionOnly });
 
     const resp = await siteFetch(
       fullUrl,
@@ -362,18 +399,10 @@ OsuExpertPlus.api = (() => {
    * @returns {Promise<{ scores: object[] }>}
    */
   function getBeatmapScores(beatmapId, query) {
-    /** @type {Record<string, string|number|string[]>} */
-    const params = {};
-    if (query && typeof query === "object") {
-      if (query.mode) params.mode = query.mode;
-      if (query.legacy_only != null) params.legacy_only = query.legacy_only;
-      if (query.type) params.type = query.type;
-      if (query.limit != null) params.limit = query.limit;
-      if (Array.isArray(query.mods) && query.mods.length) {
-        params["mods[]"] = query.mods;
-      }
-    }
-    return get(`${BASE}/beatmaps/${beatmapId}/scores`, params);
+    return get(
+      `${BASE}/beatmaps/${beatmapId}/scores`,
+      scoresQueryParams(query),
+    );
   }
 
   /**
@@ -388,34 +417,11 @@ OsuExpertPlus.api = (() => {
    * @returns {Promise<{ scores: object[] }>}
    */
   async function getBeatmapScoresWebsite(beatmapId, query, options = {}) {
-    /** @type {Record<string, string|number|string[]>} */
-    const params = {};
-    if (query && typeof query === "object") {
-      if (query.mode) params.mode = query.mode;
-      if (query.legacy_only != null) params.legacy_only = query.legacy_only;
-      if (query.type) params.type = query.type;
-      if (query.limit != null) params.limit = query.limit;
-      if (Array.isArray(query.mods) && query.mods.length) {
-        params["mods[]"] = query.mods;
-      }
-    }
-    const usp = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      if (value === undefined || value === null) continue;
-      if (Array.isArray(value)) {
-        for (const v of value) usp.append(key, String(v));
-      } else {
-        usp.append(key, String(value));
-      }
-    }
-    const qs = usp.toString();
-    const fullUrl = `${SITE_ORIGIN}/beatmaps/${beatmapId}/scores${qs ? `?${qs}` : ""}`;
-
-    const headers = { Accept: "application/json" };
-    const authHeader = await OsuExpertPlus.auth
-      .getAuthHeader()
-      .catch(() => null);
-    if (authHeader) headers["Authorization"] = authHeader;
+    const fullUrl = withQuery(
+      `${SITE_ORIGIN}/beatmaps/${beatmapId}/scores`,
+      scoresQueryParams(query),
+    );
+    const headers = await buildHeaders();
 
     const resp = await siteFetch(fullUrl, { headers, signal: options.signal });
     if (!resp.ok) {
@@ -549,6 +555,8 @@ OsuExpertPlus.api = (() => {
 
   return {
     siteFetch,
+    buildQuery,
+    buildHeaders,
     get,
     getFriends,
     getBeatmapsetDiscussions,
