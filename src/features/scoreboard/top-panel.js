@@ -381,7 +381,9 @@ export function applyNativeRowToTopItem(item, row) {
       .querySelector(".oep-beatmap-scoreboard-pp-value")
       ?.textContent?.trim() ?? "";
   const timeEl = row.querySelector("time.js-tooltip-time");
-  const timeIso = timeEl?.getAttribute("datetime") ?? "";
+  // osu-web rows put the ISO time in `title` (no `datetime`) (B79).
+  const timeIso =
+    timeEl?.getAttribute("datetime") || timeEl?.getAttribute("title") || "";
   const timeText = timeEl?.textContent?.trim() ?? "";
   const rowMods = row.querySelector(".mods");
 
@@ -421,8 +423,13 @@ export function applyNativeRowToTopItem(item, row) {
  * @param {HTMLElement} scoreboardRoot
  */
 export function refreshBeatmapScoreTopPanel(scoreboardRoot) {
+  // B79: osu-web dropped the `__item` wrapper; the card is now
+  // `.beatmap-scoreboard-top > .beatmap-score-top`. Both are accepted.
   const nativeItem = scoreboardRoot.querySelector(
-    `.beatmap-scoreboard-top__item:not([${SCORE_TOP_OVERRIDE_ATTR}])`,
+    [
+      `.beatmap-scoreboard-top__item:not([${SCORE_TOP_OVERRIDE_ATTR}])`,
+      `.beatmap-scoreboard-top > .beatmap-score-top:not([${SCORE_TOP_OVERRIDE_ATTR}])`,
+    ].join(", "),
   );
   if (!(nativeItem instanceof HTMLElement)) return;
   const parent = nativeItem.parentElement;
