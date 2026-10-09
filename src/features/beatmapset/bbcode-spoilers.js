@@ -3,7 +3,8 @@
  */
 
 /**
- * Bind spoiler toggles for BBCode rendered HTML.
+ * Bind spoiler toggles for BBCode rendered HTML. Call once `root` is in the
+ * document and visible: the initial open state is read from layout (B59).
  *
  * osu!web wires spoiler interactivity for descriptions already present in the DOM.
  * Our modal injects BBCode HTML dynamically, so those click handlers may not be attached.
@@ -78,6 +79,18 @@ export function bindBbcodeSpoilers(root) {
     }
   };
 
+  /**
+   * The innermost spoiler container holding `node`: a nested spoiler's
+   * trigger belongs to it, not to the spoilers around it (B59).
+   * @param {Element} node
+   */
+  const ownerOf = (node) => {
+    for (let n = node.parentElement; n && n !== root; n = n.parentElement) {
+      if (containerToContents.has(/** @type {HTMLElement} */ (n))) return n;
+    }
+    return containerToContents.has(root) ? root : null;
+  };
+
   for (const [container, contents] of containerToContents.entries()) {
     if (!container || container.dataset.oepSpoilersBound === "1") continue;
     container.dataset.oepSpoilersBound = "1";
@@ -102,8 +115,9 @@ export function bindBbcodeSpoilers(root) {
     container.dataset.oepSpoilersOpen = initiallyOpen ? "1" : "0";
 
     const triggerEls = Array.from(container.querySelectorAll(triggerSel))
-      // Avoid treating the content nodes themselves as triggers.
-      .filter((n) => !contents.includes(n));
+      // Avoid treating the content nodes themselves as triggers, and leave
+      // nested spoilers' triggers to them.
+      .filter((n) => !contents.includes(n) && ownerOf(n) === container);
 
     const handler = (e) => {
       e.preventDefault();
@@ -134,6 +148,7 @@ export function bindBbcodeSpoilers(root) {
         const target = /** @type {HTMLElement} */ (e.target);
         if (!target) return;
         if (contents.some((c) => c.contains(target))) return;
+        if (ownerOf(target) !== container && target !== container) return;
         handler(e);
       });
     }

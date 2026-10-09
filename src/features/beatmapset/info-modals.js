@@ -255,8 +255,6 @@ export function buildDescriptionModalBody(data, elFn) {
   });
   const prose = elFn("div", { class: `${ROOT_CLASS}__description-prose` });
   prose.innerHTML = html;
-  // Bind spoiler click/toggle behavior for the dynamically-injected BBCode.
-  bindBbcodeSpoilers(prose);
   const plainForCopy = prose.innerText.replace(/\s+$/g, "").trim();
   appendCopyButton(
     elFn,
@@ -379,6 +377,7 @@ export function buildBeatmapMetadataOsuOpenButton(elFn, getBeatmapId) {
  * @param {string} [cfg.buttonExtraClass] Extra classes on the open button (e.g. compact placement)
  * @param {(elFn: typeof el) => Node|null|undefined} [cfg.buildModalTitleExtra] Shown after the modal title (left header group)
  * @param {() => Node} cfg.buildBody
+ * @param {(body: HTMLElement) => void} [cfg.onBodyBuilt]  runs once the body is in the open modal
  */
 export function attachBeatmapsetInfoModal(elFn, rootClass, cfg) {
   const {
@@ -388,6 +387,7 @@ export function attachBeatmapsetInfoModal(elFn, rootClass, cfg) {
     buttonIconClass = "",
     modalExtraClass = "",
     buildBody,
+    onBodyBuilt,
     buildModalTitleExtra,
     mountButton,
     buttonExtraClass = "",
@@ -456,6 +456,7 @@ export function attachBeatmapsetInfoModal(elFn, rootClass, cfg) {
     if (bodyBuilt) return;
     bodyBuilt = true;
     modalBody.appendChild(buildBody());
+    onBodyBuilt?.(modalBody);
   };
 
   modalPortal.appendChild(backdrop);
@@ -644,6 +645,9 @@ export function startBeatmapsetInfoModals(header, pathRe) {
           headWrap.appendChild(btn);
         },
         buildBody: () => buildDescriptionModalBody(data, el),
+        // Spoilers read their open state from layout, so bind them once the
+        // body is in the open modal (B59).
+        onBodyBuilt: (body) => bindBbcodeSpoilers(body),
       });
     }
   }
