@@ -130,7 +130,7 @@ export function buildOmdbRanksBlock(entry, rankedYear) {
           "a",
           {
             class: `${OEP_OMDB_ROW_CLASS}__rank-value`,
-            href: `https://omdb().nyahh.net/charts/?y=${encodeURIComponent(String(rankedYear))}&p=${yearPage}`,
+            href: `https://omdb.nyahh.net/charts/?y=${encodeURIComponent(String(rankedYear))}&p=${yearPage}`,
             target: "_blank",
             rel: "noopener noreferrer",
           },
@@ -159,7 +159,7 @@ export function buildOmdbRanksBlock(entry, rankedYear) {
         "a",
         {
           class: `${OEP_OMDB_ROW_CLASS}__rank-value`,
-          href: `https://omdb().nyahh.net/charts/?y=all-time&p=${overallPage}`,
+          href: `https://omdb.nyahh.net/charts/?y=all-time&p=${overallPage}`,
           target: "_blank",
           rel: "noopener noreferrer",
         },
@@ -411,7 +411,7 @@ export function mountOmdbBeatmapsetLinkOnlyRow(header, beatmapsetId) {
     "a",
     {
       class: `${OEP_OMDB_ROW_CLASS}__label`,
-      href: `https://omdb().nyahh.net/mapset/${encodeURIComponent(String(beatmapsetId))}`,
+      href: `https://omdb.nyahh.net/mapset/${encodeURIComponent(String(beatmapsetId))}`,
       target: "_blank",
       rel: "noopener noreferrer",
       title: "Open this beatmapset on OMDB",
@@ -551,7 +551,7 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
     "a",
     {
       class: `${OEP_OMDB_ROW_CLASS}__label`,
-      href: `https://omdb().nyahh.net/mapset/${encodeURIComponent(String(beatmapsetId))}`,
+      href: `https://omdb.nyahh.net/mapset/${encodeURIComponent(String(beatmapsetId))}`,
       target: "_blank",
       rel: "noopener noreferrer",
       title: "Open this beatmapset on OMDB",
