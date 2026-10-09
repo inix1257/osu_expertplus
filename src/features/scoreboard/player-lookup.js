@@ -3,6 +3,7 @@
  * scores replace osu-web's rows until Reset.
  */
 
+import { observe } from "../../core/observe.js";
 import {
   el,
   isAuthConfigured,
@@ -33,6 +34,7 @@ import {
   insertBeatmapScoreUserSearchBar,
   isPlayerLookupSearchBarPlacedCorrectly,
   removeEmptyBeatmapScoreboardToolsRows,
+  TOOLS_ROW_WATCH_SEL,
 } from "./tools-row.js";
 
 /**
@@ -291,18 +293,21 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
     () => schedule(),
   );
 
-  const obs = new MutationObserver(schedule);
-  obs.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
+  const unsubscribe = observe.subscribe(
+    {
+      selector: TOOLS_ROW_WATCH_SEL,
+      schedule: 16,
+      label: "scoreboard/player-lookup",
+    },
+    run,
+  );
   schedule();
 
   return () => {
     unsubLookup();
     window.removeEventListener(OSU_API_CREDS_CHANGE, onOsuApiCredsChange);
     window.clearTimeout(debounceTimer);
-    obs.disconnect();
+    unsubscribe();
     cleanup();
   };
 }

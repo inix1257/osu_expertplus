@@ -12,6 +12,20 @@ import {
 } from "./context.js";
 
 /**
+ * What the tools row features watch: the scoreboard and its mod strip
+ * appearing or being re-rendered, and our own elements being removed.
+ */
+export const TOOLS_ROW_WATCH_SEL = [
+  ".beatmapset-scoreboard",
+  SCOREBOARD_MODS_SEL,
+  ".beatmapset-scoreboard__main",
+  ".beatmap-scoreboard-table",
+  `[${SCOREBOARD_TOOLS_ROW_ATTR}]`,
+  `[${SCOREBOARD_USER_SEARCH_ATTR}]`,
+  `[${RATE_EDIT_FILTER_BAR_ATTR}]`,
+].join(", ");
+
+/**
  * Moves the tools row to the canonical spot (after mods when present, else
  * the same fallbacks as legacy single-widget placement).
  * @param {HTMLElement} scoreboardRoot

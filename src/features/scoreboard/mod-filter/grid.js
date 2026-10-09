@@ -4,12 +4,14 @@
  * controls, wildcard clicks and a Reset button.
  */
 
+import { observe } from "../../../core/observe.js";
 import {
   CREDENTIALS_CHANGED_EVENT,
   getActiveBeatmapScoreboardFilterMods,
   MERGED_MOD_ATTR,
   MOD_GRID_CLASS,
   MOD_HIDDEN_ATTR,
+  SCOREBOARD_MODS_SEL,
 } from "../context.js";
 import {
   el,
@@ -30,7 +32,6 @@ import {
 } from "./merged-cycle.js";
 import {
   getWildcardMods,
-  HIDDEN_ORIGINAL_SEL,
   hiddenOriginals,
   isBeatmapScoreboardModStripButtonOn,
   isGridCloneOn,
@@ -57,10 +58,6 @@ import {
   syncWildcardLoadingOverlay,
   updateCloneWildcardVisual,
 } from "./wildcard.js";
-
-const MOD_RESET_BTN_SYNC_ATTR = "data-oep-mod-reset-sync-obs";
-/** Live MO + debounce ids for `.beatmapset-scoreboard__mods` (tear down if setting flips off mid-setup). */
-const beatmapModGridLiveHandles = new WeakMap();
 
 /**
  * Turn off each active mod filter by clicking the real strip buttons (not NM — that toggles “no mod”).
@@ -197,15 +194,6 @@ export function syncBeatmapModGridCloneHighlights(modsEl) {
 export function stopBeatmapScoreboardModGridLive(modsEl) {
   cancelClicks();
   state.mergedTarget.clear();
-  const h = beatmapModGridLiveHandles.get(modsEl);
-  if (h) {
-    window.clearTimeout(h.debounceId);
-    window.clearTimeout(h.modStateDebounceId);
-    h.mo?.disconnect();
-    h.modStateMo?.disconnect();
-    beatmapModGridLiveHandles.delete(modsEl);
-  }
-  modsEl.removeAttribute(MOD_RESET_BTN_SYNC_ATTR);
   teardownBeatmapModGrid(modsEl);
 }
 
@@ -608,7 +596,13 @@ export function applyBeatmapModGrid(modsEl, elFn) {
   syncBeatmapScoreboardModResetButton(modsEl);
 }
 
+/** Strip buttons the grid hid, and anything inside them. */
+const HIDDEN_ORIGINAL_TREE_SEL = `.beatmapset-scoreboard__mods > [${MOD_HIDDEN_ATTR}], .beatmapset-scoreboard__mods > [${MOD_HIDDEN_ATTR}] *`;
+
 /**
+ * Builds the grid once osu-web's mod strip exists and keeps it in sync. Each
+ * call owns its subscriptions, so the dispose of a superseded setup cannot
+ * stop a newer one's.
  * @returns {Promise<function(): void>}
  */
 export async function setupBeatmapScoreboardModGrid() {
@@ -616,168 +610,125 @@ export async function setupBeatmapScoreboardModGrid() {
     return () => {};
   }
 
-  let modsEl = null;
-  /** @type {{ mo: MutationObserver|null, modStateMo: MutationObserver|null, debounceId: number, modStateDebounceId: number }|null} */
-  let handles = null;
-
-  function scheduleApply() {
-    if (!handles || !modsEl) return;
-    window.clearTimeout(handles.debounceId);
-    handles.debounceId = window.setTimeout(() => {
-      handles.debounceId = 0;
-      if (!modsEl || !document.body.contains(modsEl)) return;
-      try {
-        if (
-          modsEl.querySelector(
-            `:scope > .beatmap-scoreboard-mod:not([${MOD_HIDDEN_ATTR}])`,
-          )
-        ) {
-          applyBeatmapModGrid(modsEl, el);
-        }
-      } catch (_) {}
-    }, 0);
-  }
-
+  /** @type {HTMLElement|null} */
+  let modsEl;
   try {
-    modsEl = await waitForElement(".beatmapset-scoreboard__mods", 20000);
+    modsEl = await waitForElement(SCOREBOARD_MODS_SEL, 20000);
   } catch {
     return () => {};
   }
+  if (!(modsEl instanceof HTMLElement) || !document.body.contains(modsEl)) {
+    return () => {};
+  }
+  const grid = modsEl;
+  const scoreboardRoot = grid.closest(".beatmapset-scoreboard");
+  const ac = new AbortController();
+  const { signal } = ac;
 
-  if (!document.body.contains(modsEl)) return () => {};
+  // osu-web added (or re-rendered) strip buttons: rebuild the grid around
+  // the ones not hidden yet.
+  observe.subscribe(
+    {
+      selector: ".beatmap-scoreboard-mod",
+      schedule: 0,
+      signal,
+      label: "scoreboard/mod-grid",
+    },
+    () => {
+      if (!document.body.contains(grid)) return;
+      try {
+        if (
+          grid.querySelector(
+            `:scope > .beatmap-scoreboard-mod:not([${MOD_HIDDEN_ATTR}])`,
+          )
+        ) {
+          applyBeatmapModGrid(grid, el);
+        }
+      } catch (_) {}
+    },
+  );
 
-  handles = {
-    mo: null,
-    modStateMo: null,
-    debounceId: 0,
-    modStateDebounceId: 0,
-  };
-  beatmapModGridLiveHandles.set(modsEl, handles);
-
-  const scoreboardRootForTabs = modsEl.closest(".beatmapset-scoreboard");
   const onScoreboardTabClick = (e) => {
     const tab = e.target?.closest?.(".page-tabs__tab");
     if (!(tab instanceof HTMLElement)) return;
     if (
-      !(scoreboardRootForTabs instanceof HTMLElement) ||
-      !scoreboardRootForTabs.contains(tab)
+      !(scoreboardRoot instanceof HTMLElement) ||
+      !scoreboardRoot.contains(tab)
     ) {
       return;
     }
-    if (getWildcardMods().length > 0) scheduleWildcardFetch(modsEl);
+    if (getWildcardMods().length > 0) scheduleWildcardFetch(grid);
   };
-  if (scoreboardRootForTabs instanceof HTMLElement) {
-    scoreboardRootForTabs.addEventListener("click", onScoreboardTabClick, true);
+  if (scoreboardRoot instanceof HTMLElement) {
+    scoreboardRoot.addEventListener("click", onScoreboardTabClick, {
+      capture: true,
+      signal,
+    });
+
+    // osu-web switches difficulty through the history API (no hashchange) and
+    // re-renders the scoreboard table, so detect the beatmap change from
+    // there. Wildcard results are per beatmap: drop them and refetch for the
+    // new one. Only writes when the key actually changes, so our own writes
+    // can't loop.
+    let wildcardBeatmapKey = getWildcardBeatmapKey();
+    observe.subscribe(
+      {
+        selector:
+          ".beatmap-scoreboard-table, .beatmap-scoreboard-table__body-row, .beatmapset-scoreboard__notice",
+        schedule: "sync",
+        signal,
+        label: "scoreboard/wildcard-beatmap",
+      },
+      () => {
+        syncWildcardLoadingOverlay(scoreboardRoot);
+        const key = getWildcardBeatmapKey();
+        if (key === wildcardBeatmapKey) return;
+        wildcardBeatmapKey = key;
+        if (getWildcardMods().length === 0) return;
+        clearMergedLeaderboard(scoreboardRoot, "wildcard");
+        scheduleWildcardFetch(grid);
+      },
+    );
   }
 
-  // osu-web switches difficulty through the history API (no hashchange) and only
-  // re-renders the scoreboard table, so detect the beatmap change from there.
-  // Wildcard results are per beatmap: drop them and refetch for the new one.
-  // Only writes when the key actually changes, so our own writes can't loop.
-  let wildcardBeatmapKey = getWildcardBeatmapKey();
-  const onScoreboardMutation = () => {
-    if (scoreboardRootForTabs instanceof HTMLElement) {
-      syncWildcardLoadingOverlay(scoreboardRootForTabs);
-    }
-    const key = getWildcardBeatmapKey();
-    if (key === wildcardBeatmapKey) return;
-    wildcardBeatmapKey = key;
-    if (!modsEl || getWildcardMods().length === 0) return;
-    if (scoreboardRootForTabs instanceof HTMLElement) {
-      clearMergedLeaderboard(scoreboardRootForTabs, "wildcard");
-    }
-    scheduleWildcardFetch(modsEl);
-  };
-  const beatmapChangeMo =
-    scoreboardRootForTabs instanceof HTMLElement
-      ? new MutationObserver(onScoreboardMutation)
-      : null;
-  beatmapChangeMo?.observe(scoreboardRootForTabs, {
-    childList: true,
-    subtree: true,
-  });
+  applyBeatmapModGrid(grid, el);
 
-  handles.mo = new MutationObserver(scheduleApply);
-  handles.mo.observe(modsEl, { childList: true });
-  applyBeatmapModGrid(modsEl, el);
-
-  if (!modsEl.hasAttribute(MOD_RESET_BTN_SYNC_ATTR)) {
-    modsEl.setAttribute(MOD_RESET_BTN_SYNC_ATTR, "1");
-    const scheduleModStateSync = () => {
-      if (!handles || !modsEl) return;
-      window.clearTimeout(handles.modStateDebounceId);
-      handles.modStateDebounceId = window.setTimeout(() => {
-        handles.modStateDebounceId = 0;
-        if (modsEl && document.body.contains(modsEl)) {
-          syncBeatmapModGridCloneHighlights(modsEl);
-          syncBeatmapScoreboardModResetButton(modsEl);
-        }
-      }, 0);
-    };
-    handles.modStateMo = new MutationObserver((records) => {
-      const hidden = modsEl.querySelectorAll(HIDDEN_ORIGINAL_SEL);
-      const touchesHiddenOriginal = records.some((r) => {
-        const n = r.target;
-        if (n instanceof Element) {
-          for (const h of hidden) {
-            if (h === n || h.contains(n)) return true;
-          }
-          return false;
-        }
-        if (n instanceof Text) {
-          for (const h of hidden) {
-            if (h.contains(n)) return true;
-          }
-        }
-        return false;
-      });
-      if (touchesHiddenOriginal) scheduleModStateSync();
-    });
-    handles.modStateMo.observe(modsEl, {
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["class", "aria-pressed", "aria-disabled", "title"],
+  // osu-web updated a hidden original (selection, counts, disabled): mirror
+  // it onto the clones.
+  observe.subscribe(
+    {
+      selector: HIDDEN_ORIGINAL_TREE_SEL,
+      attributes: ["class", "aria-pressed", "aria-disabled", "title"],
       characterData: true,
-      childList: true,
-    });
-  }
+      schedule: 0,
+      signal,
+      label: "scoreboard/mod-grid-state",
+    },
+    () => {
+      if (!document.body.contains(grid)) return;
+      syncBeatmapModGridCloneHighlights(grid);
+      syncBeatmapScoreboardModResetButton(grid);
+    },
+  );
 
   const onCredsChange = () => {
-    if (!isAuthConfigured() && modsEl) {
-      clearWildcardState();
-      const scoreboardRoot = modsEl.closest(".beatmapset-scoreboard");
-      if (scoreboardRoot instanceof HTMLElement) {
-        clearMergedLeaderboard(scoreboardRoot, "wildcard");
-      }
-      syncBeatmapModGridCloneHighlights(modsEl);
-      syncBeatmapScoreboardModResetButton(modsEl);
+    if (isAuthConfigured()) return;
+    clearWildcardState();
+    if (scoreboardRoot instanceof HTMLElement) {
+      clearMergedLeaderboard(scoreboardRoot, "wildcard");
     }
+    syncBeatmapModGridCloneHighlights(grid);
+    syncBeatmapScoreboardModResetButton(grid);
   };
-  window.addEventListener(CREDENTIALS_CHANGED_EVENT, onCredsChange);
+  window.addEventListener(CREDENTIALS_CHANGED_EVENT, onCredsChange, {
+    signal,
+  });
 
   return () => {
-    window.removeEventListener(CREDENTIALS_CHANGED_EVENT, onCredsChange);
-    beatmapChangeMo?.disconnect();
-    if (scoreboardRootForTabs instanceof HTMLElement) {
-      scoreboardRootForTabs.removeEventListener(
-        "click",
-        onScoreboardTabClick,
-        true,
-      );
-    }
+    ac.abort();
     clearWildcardState();
     cancelClicks();
     state.mergedTarget.clear();
-    if (modsEl && document.body.contains(modsEl)) {
-      stopBeatmapScoreboardModGridLive(modsEl);
-    } else if (handles) {
-      window.clearTimeout(handles.debounceId);
-      window.clearTimeout(handles.modStateDebounceId);
-      handles.mo?.disconnect();
-      handles.modStateMo?.disconnect();
-      if (modsEl) beatmapModGridLiveHandles.delete(modsEl);
-    }
-    handles = null;
-    modsEl = null;
+    if (document.body.contains(grid)) stopBeatmapScoreboardModGridLive(grid);
   };
 }

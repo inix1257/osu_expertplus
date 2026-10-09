@@ -4,6 +4,7 @@
  * in the tools row hides them.
  */
 
+import { observe } from "../../core/observe.js";
 import { isNonDefaultSpeed } from "../../osu/mods.js";
 import { el, settingIds, settings } from "../legacy.js";
 import {
@@ -25,6 +26,7 @@ import {
   insertBeatmapRateEditFilterBar,
   isRateEditFilterBarPlacedCorrectly,
   removeEmptyBeatmapScoreboardToolsRows,
+  TOOLS_ROW_WATCH_SEL,
 } from "./tools-row.js";
 
 /**
@@ -121,17 +123,21 @@ export function startBeatmapScoreboardHideRateEditFilterBar(pathRe) {
     },
   );
 
-  const obs = new MutationObserver(schedule);
-  obs.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
+  // Its own writes are only the bar and its placement: drop their records.
+  const unsubscribe = observe.subscribe(
+    {
+      selector: TOOLS_ROW_WATCH_SEL,
+      schedule: 16,
+      label: "scoreboard/rate-filter",
+    },
+    () => observe.mutate(run),
+  );
   schedule();
 
   return () => {
     unsub();
     window.clearTimeout(debounceTimer);
-    obs.disconnect();
+    unsubscribe();
     cleanup();
   };
 }
