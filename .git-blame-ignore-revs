@@ -1,0 +1,5 @@
+# Bulk formatting commits, ignored by git blame.
+# Use: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# WS-11: style: apply prettier
+01d01f5b9948526abf64a63692f1b6596206c80a
