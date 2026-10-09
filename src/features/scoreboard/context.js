@@ -35,6 +35,22 @@ export const MERGED_MOD_ATTR = "data-oep-merged-mod";
 /** Fired on window by the settings panel when OAuth credentials change. */
 export const CREDENTIALS_CHANGED_EVENT = "oep-osu-api-credentials-changed";
 
+/** Wildcard row that is not the player's highest-ranked score in the merged list. */
+export const WILDCARD_DUPE_ROW_ATTR = "data-oep-wildcard-dupe";
+/** Row whose effective speed is not 1.00× or 1.50× (a custom-rate score). */
+export const RATE_EDIT_ROW_ATTR = "data-oep-rate-edit";
+/** Row hidden because “hide custom rate scores” is on (restored when filter off). */
+export const RATE_EDIT_ROW_HIDDEN_ATTR = "data-oep-rate-edit-filtered";
+/** In-page “hide custom rate scores” control. */
+export const RATE_EDIT_FILTER_BAR_ATTR = "data-oep-rate-edit-filter-bar";
+/** Player lookup bar wrapper; sits inside the tools row with the rate filter. */
+export const SCOREBOARD_USER_SEARCH_ATTR = "data-oep-beatmap-user-search";
+/** Flex row under the mod filters holding player lookup and the rate filter. */
+export const SCOREBOARD_TOOLS_ROW_ATTR = "data-oep-scoreboard-tools-row";
+/** On the table wrapper while a wildcard fetch is pending. */
+export const WILDCARD_LOADING_CLASS = "oep-wildcard-loading";
+export const SCOREBOARD_MODS_SEL = ".beatmapset-scoreboard__mods";
+
 /** osu-web uses `.beatmap-scoreboard-table` on the wrapper `div`; the real `<table>` is `__table`. */
 export const SCOREBOARD_HTML_TABLE_SEL =
   "table.beatmap-scoreboard-table__table";
