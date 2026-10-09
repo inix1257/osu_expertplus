@@ -3535,20 +3535,27 @@ OsuExpertPlus.pages.userProfile = (() => {
       });
       q.append("include", "beatmap");
       q.append("include", "beatmapset");
+      // A failed first page is an error, not "no recent scores" (B08); later
+      // pages only cut the list short.
       let resp;
       try {
         resp = await OsuExpertPlus.api.siteFetch(
           `/users/${userId}/scores/recent?${q}`,
           { headers: { Accept: "application/json" } },
         );
-      } catch {
+      } catch (err) {
+        if (pageCount === 0) throw err;
         break;
       }
-      if (!resp.ok) break;
+      if (!resp.ok) {
+        if (pageCount === 0) throw new Error(`HTTP ${resp.status}`);
+        break;
+      }
       let body;
       try {
         body = await resp.json();
-      } catch {
+      } catch (err) {
+        if (pageCount === 0) throw err;
         break;
       }
       const items = Array.isArray(body)
@@ -3671,15 +3678,22 @@ OsuExpertPlus.pages.userProfile = (() => {
     });
   }
 
+  /**
+   * Rejects when neither source could be read, so a failure is never shown (or
+   * cached) as "no recent scores" (B08).
+   */
   async function fetchRecentScoresPrimaryWithFails(userId, mode) {
     // Prefer the site endpoint: it returns lazer-shaped scores (mod objects with
     // settings, Classic/DA/FF/AD, custom rates). API v2 is only a fallback since
     // its score shape depends on the request's `x-api-version`.
-    const site = await fetchRecentScoresPaginatedHtmlWithFails(
-      userId,
-      mode,
-    ).catch(() => []);
-    if (site.length) return site;
+    let site = null;
+    let siteError = null;
+    try {
+      site = await fetchRecentScoresPaginatedHtmlWithFails(userId, mode);
+    } catch (err) {
+      siteError = err;
+    }
+    if (site?.length) return site;
     try {
       const data = await OsuExpertPlus.api.getUserRecentScores(
         userId,
@@ -3689,8 +3703,10 @@ OsuExpertPlus.pages.userProfile = (() => {
         true,
       );
       return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
+    } catch (err) {
+      // The site answered (with no scores): trust it over a failed fallback.
+      if (site) return site;
+      throw siteError || err;
     }
   }
 
@@ -3912,6 +3928,8 @@ OsuExpertPlus.pages.userProfile = (() => {
 
     innerList.textContent = "";
     if (!scores.length) {
+      // Only reached on a successful (empty) fetch; on errors the catch above
+      // keeps the official list.
       innerList.appendChild(
         el("p", { class: "oep-recent-fails-empty" }, RECENT_FAILS_EMPTY_MSG),
       );
