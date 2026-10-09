@@ -68,6 +68,49 @@ import {
  * @param {{ isDisposed: () => boolean, cleanupFns: function[] }} run
  * @returns {Promise<void>}
  */
+/**
+ * The synchronous per-list decorations, in the order they were applied by
+ * the four copies of this block (initial pass, per-list observer, late
+ * sections). `applies(section)` says whether the decoration is on for that
+ * list; `revert` is only used by the initial pass (`revertOff`).
+ * @type {{ name: string,
+ *   applies: (section: { listEl: HTMLElement, type: string }) => boolean,
+ *   apply: (listEl: HTMLElement) => void,
+ *   revert?: (listEl: HTMLElement) => void }[]}
+ */
+const LIST_DECORATIONS = [
+  {
+    name: "pp-decimals",
+    applies: () => settings().isEnabled(SCORE_PP_DECIMALS_ID),
+    apply: applyPpDecimals,
+  },
+  {
+    name: "hide-weighted-pp",
+    applies: () => true,
+    apply: applyHideWeightedPp,
+  },
+  {
+    name: "place-numbers",
+    applies: ({ type }) =>
+      settings().isEnabled(SCORE_PLACE_NUMBER_ID) &&
+      type === SCORE_PLACE_SECTION_TYPE,
+    apply: applyPlaceNumbers,
+    revert: revertPlaceNumbers,
+  },
+];
+
+/**
+ * Apply every decoration that is on for `section`.
+ * @param {{ listEl: HTMLElement, type: string }} section
+ * @param {{ revertOff?: boolean }} [options]  also revert the ones that are off
+ */
+function decorateScoreList(section, { revertOff = false } = {}) {
+  for (const d of LIST_DECORATIONS) {
+    if (d.applies(section)) d.apply(section.listEl);
+    else if (revertOff) d.revert?.(section.listEl);
+  }
+}
+
 export async function initScoreFeatures(userId, mode, run) {
   const { isDisposed, cleanupFns } = run;
   beginScoreListVisit();
@@ -104,19 +147,9 @@ export async function initScoreFeatures(userId, mode, run) {
     syncScoreListPpDecimalsWidthClass(listEl),
   );
 
-  scoreSections.forEach(({ listEl, type }) => {
-    if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
-    applyHideWeightedPp(listEl);
-    if (settings().isEnabled(SCORE_PLACE_NUMBER_ID)) {
-      if (type === SCORE_PLACE_SECTION_TYPE) {
-        applyPlaceNumbers(listEl);
-      } else {
-        revertPlaceNumbers(listEl);
-      }
-    } else {
-      revertPlaceNumbers(listEl);
-    }
-  });
+  scoreSections.forEach((section) =>
+    decorateScoreList(section, { revertOff: true }),
+  );
   if (
     settings().isEnabled(SCORE_PLACE_NUMBER_ID) &&
     scoreSections.some((s) => s.type === SCORE_PLACE_SECTION_TYPE)
@@ -264,14 +297,7 @@ export async function initScoreFeatures(userId, mode, run) {
 
       if (!hasNewRows && !hasPpDecimalOverwrite && !hasMwPpMissing) return;
 
-      if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
-      applyHideWeightedPp(listEl);
-      if (
-        settings().isEnabled(SCORE_PLACE_NUMBER_ID) &&
-        type === SCORE_PLACE_SECTION_TYPE
-      ) {
-        applyPlaceNumbers(listEl);
-      }
+      decorateScoreList(section);
 
       const allEls = Array.from(listEl.querySelectorAll(".play-detail"));
       if (settings().isEnabled(SCORE_HIT_STATISTICS_ID)) {
@@ -387,16 +413,12 @@ export async function initScoreFeatures(userId, mode, run) {
     const hasRows = listEl.querySelector(".play-detail") != null;
 
     if (hasRows) {
-      if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
-      applyHideWeightedPp(listEl);
+      decorateScoreList(section);
       if (
         settings().isEnabled(SCORE_PLACE_NUMBER_ID) &&
         type === SCORE_PLACE_SECTION_TYPE
       ) {
-        applyPlaceNumbers(listEl);
-        if (scoreSections.some((s) => s.type === SCORE_PLACE_SECTION_TYPE)) {
-          scorePlaceNumberStyle.inject();
-        }
+        scorePlaceNumberStyle.inject();
       }
 
       if (type === "most_watched") {
