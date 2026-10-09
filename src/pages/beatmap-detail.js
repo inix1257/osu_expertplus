@@ -9,6 +9,11 @@ import { leaderboardScoreId } from "../osu/score.js";
 import {
   EXTENDED_SCORE_ROW_ATTR,
   MOD_GRID_CLASS,
+  SCOREBOARD_ROW_SEL,
+  SCOREBOARD_TBODY_SEL,
+  MOD_HIDDEN_ATTR,
+  MERGED_MOD_ATTR,
+  CREDENTIALS_CHANGED_EVENT,
   SCOREBOARD_HTML_TABLE_SEL,
   SCORE_USER_SEARCH_RESULT_ATTR,
   WILDCARD_MERGED_ROW_ATTR,
@@ -1994,7 +1999,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       `[data-oep-merged-mod="${MERGED_MOD_DT_NC}"], [data-oep-merged-mod="${MERGED_MOD_SD_PF}"]`,
     )) {
       if (!(clone instanceof HTMLElement)) continue;
-      const mergeId = clone.getAttribute("data-oep-merged-mod");
+      const mergeId = clone.getAttribute(MERGED_MOD_ATTR);
       if (mergeId) syncMergedModCloneHighlights(modsEl, clone, mergeId);
     }
 
@@ -2088,7 +2093,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     for (const btn of modsEl.querySelectorAll(
       ":scope > [data-oep-mod-hidden]",
     )) {
-      btn.removeAttribute("data-oep-mod-hidden");
+      btn.removeAttribute(MOD_HIDDEN_ATTR);
     }
 
     // Remove our grid elements (headers, labels, piles containing clones).
@@ -2333,9 +2338,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
   function renderWildcardMergedLeaderboard(scoreboardRoot, scores) {
     const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
     if (!(realTable instanceof HTMLTableElement)) return;
-    const tbody = realTable.querySelector(
-      "tbody.beatmap-scoreboard-table__body",
-    );
+    const tbody = realTable.querySelector(SCOREBOARD_TBODY_SEL);
     if (!tbody) return;
     const templateRow = findScoreboardTemplateRow(tbody);
     if (!(templateRow instanceof HTMLTableRowElement)) return;
@@ -2362,9 +2365,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       .querySelectorAll(`tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`)
       .forEach((r) => r.remove());
 
-    const nativeRows = [
-      ...tbody.querySelectorAll("tr.beatmap-scoreboard-table__body-row"),
-    ];
+    const nativeRows = [...tbody.querySelectorAll(SCOREBOARD_ROW_SEL)];
     for (const nr of nativeRows) nr.style.display = "none";
 
     // Insert wildcard rows before the hidden native rows so nth-child alternation
@@ -2451,9 +2452,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     if (!scoreboardRoot) return;
     const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
     if (!(realTable instanceof HTMLTableElement)) return;
-    const tbody = realTable.querySelector(
-      "tbody.beatmap-scoreboard-table__body",
-    );
+    const tbody = realTable.querySelector(SCOREBOARD_TBODY_SEL);
     if (!tbody) return;
     tbody
       .querySelectorAll(`tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`)
@@ -2461,9 +2460,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     tbody
       .querySelectorAll(`tr[${WILDCARD_MERGED_ROW_ATTR}]`)
       .forEach((r) => r.remove());
-    for (const nr of tbody.querySelectorAll(
-      "tr.beatmap-scoreboard-table__body-row",
-    )) {
+    for (const nr of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
       /** @type {HTMLElement} */ (nr).style.display = "";
     }
     refreshBeatmapScoreboardTableEnhancements(scoreboardRoot);
@@ -2483,16 +2480,12 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     if (!(scoreboardRoot instanceof HTMLElement)) return;
     const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
     if (!(realTable instanceof HTMLTableElement)) return;
-    const tbody = realTable.querySelector(
-      "tbody.beatmap-scoreboard-table__body",
-    );
+    const tbody = realTable.querySelector(SCOREBOARD_TBODY_SEL);
     if (!tbody) return;
     tbody
       .querySelectorAll(`tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`)
       .forEach((r) => r.remove());
-    for (const nr of tbody.querySelectorAll(
-      "tr.beatmap-scoreboard-table__body-row",
-    )) {
+    for (const nr of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
       /** @type {HTMLElement} */ (nr).style.display = "";
     }
     refreshBeatmapScoreboardTableEnhancements(scoreboardRoot);
@@ -3281,7 +3274,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       syncBeatmapScoreboardModResetButton(modsEl);
     });
     piles[pileKey]?.appendChild(clone);
-    btn.setAttribute("data-oep-mod-hidden", "1");
+    btn.setAttribute(MOD_HIDDEN_ATTR, "1");
   }
 
   /**
@@ -3301,7 +3294,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     pileKey,
   ) {
     const clone = primaryOriginal.cloneNode(true);
-    clone.setAttribute("data-oep-merged-mod", mergeId);
+    clone.setAttribute(MERGED_MOD_ATTR, mergeId);
     beatmapModGridOriginalToClone.set(primaryOriginal, clone);
     beatmapModGridOriginalToClone.set(secondaryOriginal, clone);
     clone.addEventListener("click", (e) => {
@@ -3313,8 +3306,8 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       applyMergedModTargetStep(modsEl, mergeId, next);
     });
     piles[pileKey]?.appendChild(clone);
-    primaryOriginal.setAttribute("data-oep-mod-hidden", "1");
-    secondaryOriginal.setAttribute("data-oep-mod-hidden", "1");
+    primaryOriginal.setAttribute(MOD_HIDDEN_ATTR, "1");
+    secondaryOriginal.setAttribute(MOD_HIDDEN_ATTR, "1");
   }
 
   /**
@@ -3757,13 +3750,10 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
         syncBeatmapScoreboardModResetButton(modsEl);
       }
     };
-    window.addEventListener("oep-osu-api-credentials-changed", onCredsChange);
+    window.addEventListener(CREDENTIALS_CHANGED_EVENT, onCredsChange);
 
     return () => {
-      window.removeEventListener(
-        "oep-osu-api-credentials-changed",
-        onCredsChange,
-      );
+      window.removeEventListener(CREDENTIALS_CHANGED_EVENT, onCredsChange);
       beatmapChangeMo?.disconnect();
       if (scoreboardRootForTabs instanceof HTMLElement) {
         scoreboardRootForTabs.removeEventListener(
@@ -4025,9 +4015,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
     if (!(realTable instanceof HTMLTableElement)) return false;
 
-    const tbody = realTable.querySelector(
-      "tbody.beatmap-scoreboard-table__body",
-    );
+    const tbody = realTable.querySelector(SCOREBOARD_TBODY_SEL);
     if (!tbody) return false;
 
     const templateRow = findScoreboardTemplateRow(tbody);
@@ -4059,9 +4047,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       .querySelectorAll(`tr[${SCORE_USER_SEARCH_RESULT_ATTR}]`)
       .forEach((r) => r.remove());
 
-    const nativeRows = [
-      ...tbody.querySelectorAll("tr.beatmap-scoreboard-table__body-row"),
-    ];
+    const nativeRows = [...tbody.querySelectorAll(SCOREBOARD_ROW_SEL)];
     for (const nr of nativeRows) nr.style.display = "none";
     const firstNative = nativeRows[0] ?? null;
 
@@ -4397,7 +4383,7 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
       debounceTimer = window.setTimeout(run, 16);
     };
 
-    const OSU_API_CREDS_CHANGE = "oep-osu-api-credentials-changed";
+    const OSU_API_CREDS_CHANGE = CREDENTIALS_CHANGED_EVENT;
     const onOsuApiCredsChange = () => schedule();
     window.addEventListener(OSU_API_CREDS_CHANGE, onOsuApiCredsChange);
 
@@ -4685,13 +4671,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     if (!(scoreboardRoot instanceof HTMLElement)) return;
     const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
     if (!(realTable instanceof HTMLTableElement)) return;
-    const tbody = realTable.querySelector(
-      "tbody.beatmap-scoreboard-table__body",
-    );
+    const tbody = realTable.querySelector(SCOREBOARD_TBODY_SEL);
     if (!tbody) return;
-    for (const row of tbody.querySelectorAll(
-      "tr.beatmap-scoreboard-table__body-row",
-    )) {
+    for (const row of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
       if (!(row instanceof HTMLElement)) continue;
       if (row.style.display === "none") continue;
       const needs = beatmapScoreboardRowNeedsRateEditMarkFromDom(row);
@@ -4735,13 +4717,9 @@ OsuExpertPlus.pages.beatmapDetail = (() => {
     const hide = settings.isEnabled(SCOREBOARD_HIDE_CUSTOM_RATE_SCORES_ID);
     const realTable = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
     if (!(realTable instanceof HTMLTableElement)) return;
-    const tbody = realTable.querySelector(
-      "tbody.beatmap-scoreboard-table__body",
-    );
+    const tbody = realTable.querySelector(SCOREBOARD_TBODY_SEL);
     if (!tbody) return;
-    for (const row of tbody.querySelectorAll(
-      "tr.beatmap-scoreboard-table__body-row",
-    )) {
+    for (const row of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
       if (!(row instanceof HTMLElement)) continue;
       const filtered = row.hasAttribute(RATE_EDIT_ROW_HIDDEN_ATTR);
       const isRate = row.hasAttribute(RATE_EDIT_ROW_ATTR);

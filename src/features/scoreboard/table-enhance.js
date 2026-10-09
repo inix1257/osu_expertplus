@@ -9,9 +9,10 @@ import { formatDecimal, parseLocaleNumber } from "../../osu/format.js";
 import { hitstatClassFromLabel } from "../../osu/score.js";
 import { settingIds, settings } from "../legacy.js";
 import {
+  findBeatmapScoreboardRoot,
+  SCOREBOARD_CELL_LINK_SEL,
   SCOREBOARD_HTML_TABLE_SEL,
   SCOREBOARD_PP_ORIGINAL_ATTR,
-  findBeatmapScoreboardRoot,
 } from "./context.js";
 import { refreshBeatmapScoreboardTableEnhancements } from "./refresh.js";
 import { buildBeatmapScoreboardColumnMap } from "./row-builder.js";
@@ -99,7 +100,7 @@ export function clearBeatmapScoreboardHitstatColorClasses(el) {
  */
 export function beatmapScoreboardHitstatPaintTarget(td) {
   if (!td) return null;
-  const a = td.querySelector("a.beatmap-scoreboard-table__cell-content");
+  const a = td.querySelector(SCOREBOARD_CELL_LINK_SEL);
   if (a instanceof HTMLElement) {
     const sp = a.querySelector("span");
     if (sp instanceof HTMLElement) return sp;

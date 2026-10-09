@@ -14,11 +14,13 @@ import {
 } from "../../osu/score.js";
 import {
   EXTENDED_SCORE_ROW_ATTR,
-  SCOREBOARD_HTML_TABLE_SEL,
-  SCORE_USER_SEARCH_RESULT_ATTR,
-  WILDCARD_MERGED_ROW_ATTR,
-  getRowScore,
   getBeatmapPageRuleset,
+  getRowScore,
+  SCORE_USER_SEARCH_RESULT_ATTR,
+  SCOREBOARD_HTML_TABLE_SEL,
+  SCOREBOARD_ROW_SEL,
+  SCOREBOARD_TBODY_SEL,
+  WILDCARD_MERGED_ROW_ATTR,
 } from "./context.js";
 import { leaderboardTableScoreNumber } from "./sort.js";
 
@@ -140,11 +142,9 @@ function apiHitValue(name, score) {
 export function getEffectiveBoardTopRow(scoreboardRoot) {
   const table = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
   if (!(table instanceof HTMLTableElement)) return null;
-  const tbody = table.querySelector("tbody.beatmap-scoreboard-table__body");
+  const tbody = table.querySelector(SCOREBOARD_TBODY_SEL);
   if (!tbody) return null;
-  for (const row of tbody.querySelectorAll(
-    "tr.beatmap-scoreboard-table__body-row",
-  )) {
+  for (const row of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
     if (!(row instanceof HTMLElement) || row.style.display === "none") continue;
     // The native rank-#1 row carries `--first` and no OEP-injected attributes.
     // When it is the first visible row the native panel is already correct.

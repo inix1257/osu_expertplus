@@ -4,7 +4,7 @@
  */
 
 import { el, settingIds, settings } from "../legacy.js";
-import { getBeatmapPageRuleset } from "./context.js";
+import { getBeatmapPageRuleset, SCOREBOARD_ROW_SEL } from "./context.js";
 
 export const SCOREBOARD_GLOBAL_RANK_BADGE_CLASS = "oep-scoreboard-rank-badge";
 
@@ -209,9 +209,7 @@ function scoreboardGlobalRankIo() {
  */
 export function syncBeatmapScoreboardGlobalRanks(scoreboardRoot) {
   if (!(scoreboardRoot instanceof HTMLElement)) return;
-  const rows = Array.from(
-    scoreboardRoot.querySelectorAll("tr.beatmap-scoreboard-table__body-row"),
-  );
+  const rows = Array.from(scoreboardRoot.querySelectorAll(SCOREBOARD_ROW_SEL));
 
   // Rows React replaced (difficulty switch, re-sort, ...) no longer need a lookup.
   for (const row of _scoreboardGlobalRankObserved) {

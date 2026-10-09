@@ -8,9 +8,11 @@ import { observe } from "../../core/observe.js";
 import { parseLocaleNumber } from "../../osu/format.js";
 import { el } from "../legacy.js";
 import {
-  SCOREBOARD_HTML_TABLE_SEL,
   findBeatmapScoreboardRoot,
   isLazerModeEnabledForLeaderboard,
+  SCOREBOARD_HTML_TABLE_SEL,
+  SCOREBOARD_ROW_SEL,
+  SCOREBOARD_TBODY_SEL,
 } from "./context.js";
 import { refreshBeatmapScoreboardTableEnhancements } from "./refresh.js";
 import { buildBeatmapScoreboardColumnMap } from "./row-builder.js";
@@ -356,12 +358,10 @@ export function applyBeatmapScoreboardLeaderboardSort(scoreboardRoot) {
   if (!(scoreboardRoot instanceof HTMLElement)) return;
   const table = scoreboardRoot.querySelector(SCOREBOARD_HTML_TABLE_SEL);
   if (!(table instanceof HTMLTableElement)) return;
-  const tbody = table.querySelector("tbody.beatmap-scoreboard-table__body");
+  const tbody = table.querySelector(SCOREBOARD_TBODY_SEL);
   if (!(tbody instanceof HTMLElement)) return;
 
-  const allRows = [
-    ...tbody.querySelectorAll("tr.beatmap-scoreboard-table__body-row"),
-  ];
+  const allRows = [...tbody.querySelectorAll(SCOREBOARD_ROW_SEL)];
   if (allRows.length < 1) return;
 
   const visible = allRows.filter(

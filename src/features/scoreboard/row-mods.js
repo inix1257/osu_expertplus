@@ -10,7 +10,7 @@ import {
   speedChangeFromMod,
 } from "../../osu/mods.js";
 import { el } from "../legacy.js";
-import { MOD_GRID_CLASS } from "./context.js";
+import { MOD_GRID_CLASS, MOD_HIDDEN_ATTR } from "./context.js";
 
 /**
  * Row #1 is often NM — no `.beatmap-scoreboard-mod` inside its mods cell. Use any
@@ -53,7 +53,7 @@ export function resolveBeatmapScoreboardModTemplateEl(scoreboardRoot) {
 export function patchBeatmapScoreboardModButton(btn, acronym, opts) {
   const mi = OsuExpertPlus.modIconsAsAcronyms;
   mi?.stripOepModAcronymFromClonedMod?.(btn);
-  btn.removeAttribute("data-oep-mod-hidden");
+  btn.removeAttribute(MOD_HIDDEN_ATTR);
   const safe = String(acronym).replace(/[^A-Za-z0-9]/g, "") || "X";
   const full = modFullName(acronym);
   const icon = btn.querySelector(".mod__icon");

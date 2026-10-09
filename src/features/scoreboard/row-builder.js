@@ -20,11 +20,13 @@ import {
 } from "../../osu/score.js";
 import {
   EXTENDED_SCORE_ROW_ATTR,
-  SCOREBOARD_PP_ORIGINAL_ATTR,
-  SCORE_USER_SEARCH_RESULT_ATTR,
-  WILDCARD_MERGED_ROW_ATTR,
-  registerRowScore,
   getBeatmapPageRuleset,
+  registerRowScore,
+  SCORE_USER_SEARCH_RESULT_ATTR,
+  SCOREBOARD_CELL_LINK_SEL,
+  SCOREBOARD_PP_ORIGINAL_ATTR,
+  SCOREBOARD_ROW_SEL,
+  WILDCARD_MERGED_ROW_ATTR,
 } from "./context.js";
 import { applyScoreboardModsCell } from "./row-mods.js";
 import { leaderboardTableScoreNumber } from "./sort.js";
@@ -49,8 +51,8 @@ export function scoreboardRefTd(templateRow, colIndex) {
  */
 export function applyScoreboardTextCellLikeRef(td, refTd, text) {
   if (!td) return;
-  const a = td.querySelector("a.beatmap-scoreboard-table__cell-content");
-  const refA = refTd?.querySelector("a.beatmap-scoreboard-table__cell-content");
+  const a = td.querySelector(SCOREBOARD_CELL_LINK_SEL);
+  const refA = refTd?.querySelector(SCOREBOARD_CELL_LINK_SEL);
 
   // Common osu-web markup: `td > a.beatmap-scoreboard-table__cell-content`.
   if (a instanceof HTMLAnchorElement) {
@@ -109,8 +111,8 @@ export function toggleScoreboardCellPerfectClass(cls, on) {
 export function applyScoreboardComboCell(td, refTd, score, mapFullCombo) {
   if (!td) return;
   const comboStr = formatCombo(score.max_combo);
-  const a = td.querySelector("a.beatmap-scoreboard-table__cell-content");
-  const refA = refTd?.querySelector("a.beatmap-scoreboard-table__cell-content");
+  const a = td.querySelector(SCOREBOARD_CELL_LINK_SEL);
+  const refA = refTd?.querySelector(SCOREBOARD_CELL_LINK_SEL);
   if (!a || !refA) return;
   const perfect = isFullCombo(score, mapFullCombo, { apiFlags: true });
   a.className = toggleScoreboardCellPerfectClass(refA.className, perfect);
@@ -132,8 +134,8 @@ export function applyScoreboardComboCell(td, refTd, score, mapFullCombo) {
 export function applyScoreboardAccuracyCell(td, refTd, score) {
   if (!td) return;
   const accStr = formatAccuracy(score.accuracy, ACCURACY_FORMAT.scoreboard);
-  const a = td.querySelector("a.beatmap-scoreboard-table__cell-content");
-  const refA = refTd?.querySelector("a.beatmap-scoreboard-table__cell-content");
+  const a = td.querySelector(SCOREBOARD_CELL_LINK_SEL);
+  const refA = refTd?.querySelector(SCOREBOARD_CELL_LINK_SEL);
   if (!a || !refA) return;
   const perfect = isPerfectAccuracy(score.accuracy);
   a.className = toggleScoreboardCellPerfectClass(refA.className, perfect);
@@ -170,8 +172,8 @@ function formatPpTitle(pp) {
  */
 export function applyScoreboardPpCell(td, refTd, score) {
   if (!td) return;
-  const a = td.querySelector("a.beatmap-scoreboard-table__cell-content");
-  const refA = refTd?.querySelector("a.beatmap-scoreboard-table__cell-content");
+  const a = td.querySelector(SCOREBOARD_CELL_LINK_SEL);
+  const refA = refTd?.querySelector(SCOREBOARD_CELL_LINK_SEL);
   if (!a || !refA) return;
   a.className = refA.className;
   const pp = score.pp;
@@ -236,9 +238,9 @@ export function applyScoreboardFlagCell(td, refTd, user, ruleset) {
   const code = String(user?.country_code || "")
     .trim()
     .toUpperCase();
-  const a = td.querySelector("a.beatmap-scoreboard-table__cell-content");
+  const a = td.querySelector(SCOREBOARD_CELL_LINK_SEL);
   if (!(a instanceof HTMLAnchorElement)) return;
-  const refA = refTd?.querySelector("a.beatmap-scoreboard-table__cell-content");
+  const refA = refTd?.querySelector(SCOREBOARD_CELL_LINK_SEL);
   if (refA) a.className = refA.className;
   if (!code) {
     a.replaceChildren();
@@ -470,10 +472,8 @@ export function applyScoreboardGradeCell(td, refTd, score) {
   if (!td) return;
   // osu-web rank classes use the API rank casing (e.g. `XH`, `SH`, `F`).
   const rankKey = scoreGrade(score, { sanitize: true });
-  const link = td.querySelector("a.beatmap-scoreboard-table__cell-content");
-  const refLink = refTd?.querySelector(
-    "a.beatmap-scoreboard-table__cell-content",
-  );
+  const link = td.querySelector(SCOREBOARD_CELL_LINK_SEL);
+  const refLink = refTd?.querySelector(SCOREBOARD_CELL_LINK_SEL);
   if (link && refLink) link.className = refLink.className;
   let div = td.querySelector("div.score-rank");
   if (!div && link) {
@@ -648,9 +648,7 @@ const INJECTED_ROW_ATTRS = [
  * @returns {HTMLTableRowElement|null}
  */
 export function findScoreboardTemplateRow(tbody) {
-  const rows = [
-    ...tbody.querySelectorAll("tr.beatmap-scoreboard-table__body-row"),
-  ];
+  const rows = [...tbody.querySelectorAll(SCOREBOARD_ROW_SEL)];
   const native = rows.find(
     (r) => !INJECTED_ROW_ATTRS.some((attr) => r.hasAttribute(attr)),
   );

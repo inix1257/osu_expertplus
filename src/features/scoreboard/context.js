@@ -22,6 +22,19 @@ export const SCOREBOARD_PP_ORIGINAL_ATTR = "data-oep-scoreboard-pp-original";
 
 export const EXTENDED_SCORE_ROW_ATTR = "data-oep-api-extended-score";
 
+/** Score rows of the scoreboard table (osu-web and injected). */
+export const SCOREBOARD_ROW_SEL = "tr.beatmap-scoreboard-table__body-row";
+export const SCOREBOARD_TBODY_SEL = "tbody.beatmap-scoreboard-table__body";
+/** The link inside most score cells (`td > a.…__cell-content`). */
+export const SCOREBOARD_CELL_LINK_SEL =
+  "a.beatmap-scoreboard-table__cell-content";
+/** osu-web mod strip buttons hidden by the mod grid (WS-32). */
+export const MOD_HIDDEN_ATTR = "data-oep-mod-hidden";
+/** Grid control standing for a merged pair (DT/NC, SD/PF) (WS-32). */
+export const MERGED_MOD_ATTR = "data-oep-merged-mod";
+/** Fired on window by the settings panel when OAuth credentials change. */
+export const CREDENTIALS_CHANGED_EVENT = "oep-osu-api-credentials-changed";
+
 /** osu-web uses `.beatmap-scoreboard-table` on the wrapper `div`; the real `<table>` is `__table`. */
 export const SCOREBOARD_HTML_TABLE_SEL =
   "table.beatmap-scoreboard-table__table";
