@@ -105,12 +105,19 @@ export function getActiveBeatmapScoreboardFilterMods(scoreboardRoot) {
  * @returns {boolean}
  */
 export function isLazerModeEnabledForLeaderboard() {
-  // Account menu toggle reflects current preference; checked icon means lazer mode on.
+  // The account menu toggle. Its title is translated, so it is found by the
+  // option it sends (B16). The check icon shows the current state; the URL
+  // sets legacy_score_only to the opposite (=1 while lazer mode is on).
   const toggle = document.querySelector(
-    'button[title*="Lazer mode"][data-url*="legacy_score_only"]',
+    'button[data-url*="legacy_score_only"]',
   );
   if (!(toggle instanceof HTMLButtonElement)) return false;
-  return Boolean(toggle.querySelector(".fa-check-square"));
+  if (toggle.querySelector(".fa-check-square")) return true;
+  if (toggle.querySelector(".fa-square")) return false;
+  const m = /legacy_score_only(?:%5D|\])=([01])\b/i.exec(
+    toggle.getAttribute("data-url") || "",
+  );
+  return m ? m[1] === "1" : false;
 }
 
 /** @type {Map<string, number|null>} */
