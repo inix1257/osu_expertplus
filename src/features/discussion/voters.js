@@ -10,8 +10,37 @@ import {
   isBeatmapsetDiscussion,
 } from "../../core/routes.js";
 
-/** id → { id, username, avatarUrl }, shared across pages. */
-const DISCUSSION_USER_CACHE = new Map();
+/** Successful lookups kept across pages; oldest dropped past this size. */
+const USER_CACHE_LIMIT = 500;
+/**
+ * id → { id, username, avatarUrl }. Only successful lookups are cached, so
+ * a failed request is retried the next time the row is shown.
+ * @type {Map<string, { id: string, username: string, avatarUrl: string }>}
+ */
+const userCache = new Map();
+
+/** @param {string} id */
+function cachedUser(id) {
+  const user = userCache.get(id);
+  if (user) {
+    // Refresh recency.
+    userCache.delete(id);
+    userCache.set(id, user);
+  }
+  return user;
+}
+
+/** @param {{ id: string, username: string, avatarUrl: string }} user */
+function cacheUser(user) {
+  userCache.delete(user.id);
+  userCache.set(user.id, user);
+  while (userCache.size > USER_CACHE_LIMIT) {
+    userCache.delete(userCache.keys().next().value);
+  }
+}
+
+/** Tooltip roots this feature rewrites (qTip's own root, B60). */
+const TOOLTIP_SEL = ".qtip";
 
 /**
  * Enhances voters avatar tooltips into a scrollable user list.
@@ -22,10 +51,15 @@ export function startDiscussionVotersTooltips(beatmapsetId) {
   const { el } = OsuExpertPlus.dom;
   const ENHANCED_ATTR = "data-oep-discussion-voters-tooltip";
   const USER_ROW_ATTR = "data-oep-voter-user-id";
-  const inFlight = new Map();
-  const queue = [];
-  let activeFetches = 0;
-  const MAX_CONCURRENT = 4;
+  /** Our list inside the qTip root; qTip's own children are only hidden. */
+  const LIST_ATTR = "data-oep-voters-list";
+  const HIDDEN_ORIGINAL_ATTR = "data-oep-voters-hidden";
+  let disposed = false;
+  /** id → callbacks waiting for the next batch. @type {Map<string, Set<Function>>} */
+  const waiting = new Map();
+  let flushTimer = 0;
+  /** IntersectionObserver disconnects, run on cleanup (B61). @type {Set<() => void>} */
+  const rowObservers = new Set();
 
   const parseUserIdFromHref = (href) => {
     const m = String(href || "").match(/\/users\/(\d+)(?:\/|$)/i);
@@ -120,73 +154,68 @@ export function startDiscussionVotersTooltips(beatmapsetId) {
     return /\buser-card\b|\bprofile-card\b|\buser-popup\b/.test(allClasses);
   };
 
+  /**
+   * Looks the user up with one batched `/users?ids[]=` request per flush
+   * instead of one `/users/{id}` request each. `onDone(null)` when the
+   * lookup failed or the user is missing; the row then keeps what the
+   * tooltip already showed (B60).
+   * @param {string} id
+   * @param {(u: { id: string, username: string, avatarUrl: string } | null) => void} onDone
+   */
   const scheduleUserFetch = (id, onDone) => {
     if (!id) return;
-    if (DISCUSSION_USER_CACHE.has(id)) {
-      onDone?.(DISCUSSION_USER_CACHE.get(id));
+    const hit = cachedUser(id);
+    if (hit) {
+      onDone(hit);
       return;
     }
-    if (inFlight.has(id)) {
-      inFlight.get(id).then((data) => onDone?.(data));
-      return;
+    let set = waiting.get(id);
+    if (!set) {
+      set = new Set();
+      waiting.set(id, set);
     }
-
-    queue.push({ id, onDone });
-    const pump = () => {
-      while (activeFetches < MAX_CONCURRENT && queue.length) {
-        const next = queue.shift();
-        if (!next || !next.id) continue;
-        const uid = next.id;
-
-        if (DISCUSSION_USER_CACHE.has(uid)) {
-          next.onDone?.(DISCUSSION_USER_CACHE.get(uid));
-          continue;
-        }
-        if (inFlight.has(uid)) {
-          inFlight.get(uid).then((data) => next.onDone?.(data));
-          continue;
-        }
-
-        activeFetches += 1;
-        const req = OsuExpertPlus.api
-          .getUser(uid)
-          .then((user) => {
-            const data = {
-              id: String(user?.id || uid),
-              username: String(user?.username || `User ${uid}`),
-              avatarUrl:
-                String(user?.avatar_url || "").trim() ||
-                `https://a.ppy.sh/${uid}`,
-            };
-            DISCUSSION_USER_CACHE.set(uid, data);
-            return data;
-          })
-          .catch(() => {
-            const fallback = {
-              id: String(uid),
-              username: `User ${uid}`,
-              avatarUrl: `https://a.ppy.sh/${uid}`,
-            };
-            DISCUSSION_USER_CACHE.set(uid, fallback);
-            return fallback;
-          })
-          .finally(() => {
-            inFlight.delete(uid);
-            activeFetches = Math.max(0, activeFetches - 1);
-            pump();
-          });
-        inFlight.set(uid, req);
-        req.then((data) => next.onDone?.(data));
-      }
-    };
-    pump();
+    set.add(onDone);
+    if (!flushTimer) flushTimer = window.setTimeout(flush, 30);
   };
 
-  const hydrateVisibleRows = (container) => {
-    if (!(container instanceof HTMLElement)) return () => {};
-    const rows = Array.from(container.querySelectorAll(`[${USER_ROW_ATTR}]`));
-    if (!rows.length) return () => {};
+  const flush = () => {
+    flushTimer = 0;
+    const batch = new Map(waiting);
+    waiting.clear();
+    if (!batch.size) return;
+    const settle = (users) => {
+      if (disposed) return;
+      const byId = new Map();
+      for (const user of users) {
+        const id = String(user?.id ?? "");
+        if (!id) continue;
+        const data = {
+          id,
+          username: String(user.username || `User ${id}`),
+          avatarUrl:
+            String(user.avatar_url || "").trim() || `https://a.ppy.sh/${id}`,
+        };
+        cacheUser(data);
+        byId.set(id, data);
+      }
+      for (const [id, callbacks] of batch) {
+        const data = byId.get(id) ?? null;
+        for (const cb of callbacks) cb(data);
+      }
+    };
+    Promise.resolve()
+      .then(() => OsuExpertPlus.api.getUsers([...batch.keys()]))
+      .then(settle, () => settle([]));
+  };
 
+  /**
+   * Fills in rows as they scroll into view.
+   * @param {HTMLElement} container
+   */
+  const hydrateVisibleRows = (container) => {
+    const rows = Array.from(container.querySelectorAll(`[${USER_ROW_ATTR}]`));
+    if (!rows.length) return;
+    let remaining = rows.length;
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -194,52 +223,45 @@ export function startDiscussionVotersTooltips(beatmapsetId) {
           const row = entry.target;
           if (!(row instanceof HTMLAnchorElement)) continue;
           const uid = row.getAttribute(USER_ROW_ATTR) || "";
-          if (!uid || row.getAttribute("data-oep-user-loaded") === "1") {
-            observer.unobserve(row);
-            continue;
+          if (uid && row.getAttribute("data-oep-user-loaded") !== "1") {
+            scheduleUserFetch(uid, (u) => {
+              if (!u || !row.isConnected) return;
+              const img = row.querySelector(
+                ".oep-discussion-voters-tooltip__avatar",
+              );
+              const name = row.querySelector(
+                ".oep-discussion-voters-tooltip__name",
+              );
+              if (img instanceof HTMLImageElement) {
+                img.src = u.avatarUrl;
+                img.alt = u.username;
+              }
+              if (name instanceof HTMLElement) name.textContent = u.username;
+              row.href = `/users/${u.id}`;
+              row.setAttribute("data-oep-user-loaded", "1");
+            });
           }
-
-          scheduleUserFetch(uid, (u) => {
-            if (!u || !row.isConnected) return;
-            const img = row.querySelector(
-              ".oep-discussion-voters-tooltip__avatar",
-            );
-            const name = row.querySelector(
-              ".oep-discussion-voters-tooltip__name",
-            );
-            if (img instanceof HTMLImageElement) {
-              img.src = u.avatarUrl;
-              img.alt = u.username;
-            }
-            if (name instanceof HTMLElement) name.textContent = u.username;
-            row.href = `/users/${u.id}`;
-            row.setAttribute("data-oep-user-loaded", "1");
-          });
           observer.unobserve(row);
+          remaining -= 1;
+          if (remaining <= 0) disconnect();
         }
       },
       { root: container, threshold: 0.01 },
     );
-
+    const disconnect = () => {
+      observer.disconnect();
+      rowObservers.delete(disconnect);
+    };
+    rowObservers.add(disconnect);
     rows.forEach((r) => observer.observe(r));
-    return () => observer.disconnect();
   };
 
   const maybeEnhanceTooltip = (node) => {
     if (!(node instanceof HTMLElement)) return;
+    if (!node.classList.contains("qtip")) return;
     if (node.getAttribute(ENHANCED_ATTR) === "1") return;
     if (beatmapsetIdFromPath(location.pathname) !== beatmapsetId) return;
     if (!isBeatmapsetDiscussion(location.pathname)) return;
-
-    const role = node.getAttribute("role") || "";
-    const cls = node.className || "";
-    if (
-      role !== "tooltip" &&
-      !/\btooltip\b/i.test(cls) &&
-      !/\bqtip\b/i.test(cls)
-    ) {
-      return;
-    }
     if (isSingleUserCardTooltip(node)) return;
 
     const users = buildUserRowsFromTooltip(node);
@@ -248,7 +270,10 @@ export function startDiscussionVotersTooltips(beatmapsetId) {
     node.setAttribute(ENHANCED_ATTR, "1");
     node.classList.add("oep-discussion-voters-tooltip");
 
-    const list = el("div", { class: "oep-discussion-voters-tooltip__list" });
+    const list = el("div", {
+      class: "oep-discussion-voters-tooltip__list",
+      [LIST_ATTR]: "1",
+    });
     for (const u of users) {
       const row = el(
         "a",
@@ -268,23 +293,26 @@ export function startDiscussionVotersTooltips(beatmapsetId) {
       list.appendChild(row);
     }
 
-    node.replaceChildren(list);
+    // Hide qTip's own nodes instead of removing them (B60): qTip keeps
+    // references to its content and tip elements.
+    for (const child of Array.from(node.children)) {
+      if (!(child instanceof HTMLElement) || child.hidden) continue;
+      child.hidden = true;
+      child.setAttribute(HIDDEN_ORIGINAL_ATTR, "1");
+    }
+    node.appendChild(list);
     hydrateVisibleRows(list);
-  };
-
-  const TOOLTIP_SEL = '[role="tooltip"], .tooltip, .qtip';
-  const enhanceWithin = (node) => {
-    maybeEnhanceTooltip(node);
-    node
-      .querySelectorAll(TOOLTIP_SEL)
-      .forEach((tip) => maybeEnhanceTooltip(tip));
   };
 
   const unsubscribe = observe.subscribe(
     { selector: TOOLTIP_SEL, schedule: "sync", label: "discussion/voters" },
     ({ added }) => {
       for (const node of added) {
-        if (node instanceof HTMLElement) enhanceWithin(node);
+        if (!(node instanceof HTMLElement)) continue;
+        maybeEnhanceTooltip(node);
+        node
+          .querySelectorAll(TOOLTIP_SEL)
+          .forEach((tip) => maybeEnhanceTooltip(tip));
       }
     },
   );
@@ -293,8 +321,17 @@ export function startDiscussionVotersTooltips(beatmapsetId) {
     .forEach((tip) => maybeEnhanceTooltip(tip));
 
   return () => {
+    disposed = true;
     unsubscribe();
+    window.clearTimeout(flushTimer);
+    waiting.clear();
+    for (const disconnect of [...rowObservers]) disconnect();
     document.querySelectorAll(`[${ENHANCED_ATTR}]`).forEach((n) => {
+      n.querySelectorAll(`[${LIST_ATTR}]`).forEach((list) => list.remove());
+      n.querySelectorAll(`[${HIDDEN_ORIGINAL_ATTR}]`).forEach((child) => {
+        child.removeAttribute(HIDDEN_ORIGINAL_ATTR);
+        child.hidden = false;
+      });
       n.removeAttribute(ENHANCED_ATTR);
       n.classList.remove("oep-discussion-voters-tooltip");
     });
