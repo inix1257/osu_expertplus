@@ -7,6 +7,7 @@ import {
   STATS_DISPLAY,
   beatmapMaxComboFromScore,
   isFullCombo,
+  scoreIndicatesPerfectCombo,
   statsCells,
 } from "../../osu/score.js";
 import { el } from "../legacy.js";
@@ -16,6 +17,9 @@ import {
   _applyByBeatmapId,
   _buildScoresByBeatmapId,
 } from "./score-rows.js";
+/** On the achieved-combo number when the API flagged the score as perfect. */
+const PERFECT_COMBO_ATTR = "data-oep-perfect-combo";
+
 /**
  * After attributes API resolves max combo, update the injected "achieved/maxx" span.
  * @param {HTMLElement} rowEl
@@ -40,9 +44,9 @@ export function _applyApiMaxComboToComboInline(rowEl, maxCombo) {
   }
 
   const base = "oep-combo-inline__num";
-  const fullCombo = isFullCombo({ max_combo: achN }, maxN, {
-    apiFlags: false,
-  });
+  const fullCombo =
+    achEl.hasAttribute(PERFECT_COMBO_ATTR) ||
+    isFullCombo({ max_combo: achN }, maxN, { apiFlags: true });
   achEl.className = fullCombo ? `${base} ${base}--full` : base;
   maxEl.className = `${base} ${base}--full`;
 }
@@ -65,7 +69,9 @@ function injectComboAfterAccuracy(rowEl, score) {
       ? String(maxCombo)
       : "0";
 
-  const fullCombo = isFullCombo(score, maxCombo, { apiFlags: false });
+  // D10-7: the score's own perfect-combo flags count too (as on the
+  // scoreboard), not only achieved === map max.
+  const fullCombo = isFullCombo(score, maxCombo, { apiFlags: true });
 
   const achNumClass = (base) => (fullCombo ? `${base} ${base}--full` : base);
   const maxNumClass = (base) =>
@@ -76,7 +82,10 @@ function injectComboAfterAccuracy(rowEl, score) {
   const comboParts = [
     el(
       "span",
-      { class: achNumClass("oep-combo-inline__num") },
+      {
+        class: achNumClass("oep-combo-inline__num"),
+        [PERFECT_COMBO_ATTR]: scoreIndicatesPerfectCombo(score) ? "" : null,
+      },
       String(achieved),
     ),
     "/",
