@@ -59,7 +59,9 @@ export function scoreGrade(score, options = {}) {
 /** @type {Readonly<Record<"profile"|"scoreboard", Readonly<AccuracyFormatOptions>>>} */
 export const ACCURACY_FORMAT = Object.freeze({
   profile: Object.freeze({ scale: "auto", coerce: true, invalid: "—" }),
-  scoreboard: Object.freeze({ scale: "fraction", coerce: false, invalid: "" }),
+  // D10-6: the scoreboard parses like the profile (it used to accept only
+  // numbers and always multiply by 100); only the invalid text differs.
+  scoreboard: Object.freeze({ scale: "auto", coerce: true, invalid: "" }),
 });
 
 /**
@@ -84,12 +86,16 @@ export function formatAccuracy(accuracy, options) {
 }
 
 /**
- * Scoreboard rule for the "perfect" accuracy colour: a number ≥ 1.
+ * The scoreboard's "perfect" accuracy colour: 100%. Read like
+ * `formatAccuracy` with the `"auto"` scale (D10-6): numeric strings count,
+ * and values above 1 are already percentages.
  * @param {unknown} accuracy
  * @returns {boolean}
  */
 export function isPerfectAccuracy(accuracy) {
-  return typeof accuracy === "number" && accuracy >= 1;
+  const n = accuracy != null && accuracy !== "" ? Number(accuracy) : NaN;
+  if (!Number.isFinite(n)) return false;
+  return (n > 1 ? n / 100 : n) >= 1;
 }
 
 /**

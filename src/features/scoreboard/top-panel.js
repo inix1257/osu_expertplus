@@ -100,7 +100,7 @@ export function applyApiScoreToTopItem(item, score, row) {
   if (achievedTime instanceof HTMLElement && iso) {
     achievedTime.setAttribute("datetime", iso);
     achievedTime.setAttribute("title", iso);
-    achievedTime.textContent = formatRelativeShort(iso, { rounding: "round" });
+    achievedTime.textContent = formatRelativeShort(iso, { rounding: "floor" });
   }
 
   const countryA = item.querySelector(".beatmap-score-top__flags a");
@@ -158,7 +158,7 @@ export function applyApiScoreToTopItem(item, score, row) {
         const t = document.createElement("time");
         t.className = "js-tooltip-time";
         t.setAttribute("data-orig-title", iso);
-        t.textContent = formatRelativeShort(iso, { rounding: "round" });
+        t.textContent = formatRelativeShort(iso, { rounding: "floor" });
         valueEl.replaceChildren(t);
       }
     } else if (labelLow === "mods") {

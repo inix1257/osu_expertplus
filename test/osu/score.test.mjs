@@ -46,33 +46,40 @@ test("formatAccuracy: profile vs scoreboard", () => {
   const oldScoreboard = (acc) =>
     typeof acc === "number" ? `${(acc * 100).toFixed(2)}%` : "";
   const cases = [
-    // accuracy, profile, scoreboard
-    [0.98765, "98.77%", "98.77%"],
-    [1, "100.00%", "100.00%"],
-    [0, "0.00%", "0.00%"],
-    [98.5, "98.50%", "9850.00%"],
-    ["0.95", "95.00%", ""],
-    [null, "—", ""],
-    [undefined, "—", ""],
-    [NaN, "—", ""],
+    // accuracy, profile, scoreboard, same as the old scoreboard code
+    [0.98765, "98.77%", "98.77%", true],
+    [1, "100.00%", "100.00%", true],
+    [0, "0.00%", "0.00%", true],
+    // D10-6: the scoreboard now parses like the profile (old: "9850.00%", "")
+    [98.5, "98.50%", "98.50%", false],
+    ["0.95", "95.00%", "95.00%", false],
+    [null, "—", "", true],
+    [undefined, "—", "", true],
+    [NaN, "—", "", false],
   ];
-  for (const [acc, profile, scoreboard] of cases) {
+  for (const [acc, profile, scoreboard, sameAsOld] of cases) {
     assert.equal(formatAccuracy(acc, ACCURACY_FORMAT.profile), profile);
     assert.equal(formatAccuracy(acc, ACCURACY_FORMAT.scoreboard), scoreboard);
     assert.equal(oldProfile({ accuracy: acc }), profile, `${acc} (old)`);
-    if (!Number.isNaN(acc)) {
+    if (sameAsOld) {
       assert.equal(oldScoreboard(acc), scoreboard, `${acc} (old)`);
     }
   }
   // The old scoreboard code printed "NaN%" for NaN; the helper gives "".
   assert.equal(oldScoreboard(NaN), "NaN%");
+  assert.equal(oldScoreboard(98.5), "9850.00%");
   assert.throws(() => formatAccuracy(0.9, {}), TypeError);
 });
 
 test("isPerfectAccuracy and formatCombo", () => {
   assert.equal(isPerfectAccuracy(1), true);
   assert.equal(isPerfectAccuracy(0.9999), false);
-  assert.equal(isPerfectAccuracy("1"), false);
+  // D10-6: read like formatAccuracy's "auto" scale.
+  assert.equal(isPerfectAccuracy("1"), true);
+  assert.equal(isPerfectAccuracy(100), true);
+  assert.equal(isPerfectAccuracy(99.99), false);
+  assert.equal(isPerfectAccuracy(null), false);
+  assert.equal(isPerfectAccuracy(""), false);
   assert.equal(formatCombo(1234), "1,234x");
   assert.equal(formatCombo(undefined), "0x");
 });
