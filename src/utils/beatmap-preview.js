@@ -1574,7 +1574,10 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     }
 
     function applyPreviewOffsetToEngine() {
-      if (!sharedEngine || typeof sharedEngine.setAudioOffsetMs !== "function") {
+      if (
+        !sharedEngine ||
+        typeof sharedEngine.setAudioOffsetMs !== "function"
+      ) {
         return;
       }
       try {
@@ -1882,7 +1885,10 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     return {
       dispose: () => {
         stopContextPoll();
-        window.removeEventListener("hashchange", onPossiblePreviewContextChange);
+        window.removeEventListener(
+          "hashchange",
+          onPossiblePreviewContextChange,
+        );
         window.removeEventListener("popstate", onPossiblePreviewContextChange);
         panel.removeEventListener("keydown", onPreviewPanelKeydown);
         stopSeekAnimationLoop();

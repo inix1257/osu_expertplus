@@ -108,7 +108,10 @@ OsuExpertPlus.beatmapsetsListingMode = (() => {
     };
     patchListingAnchors();
     linkMo = new MutationObserver(schedule);
-    linkMo.observe(document.documentElement, { childList: true, subtree: true });
+    linkMo.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
     return () => {
       linkMo?.disconnect();
       linkMo = null;

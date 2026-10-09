@@ -1,10 +1,10 @@
 ![](https://luscentos.s-ul.eu/Mfjdk1dV)
+
 # osu! ExpertPlus (for web)
 
 because i couldn't be bothered to make 200 PRs
 
 note: there might be potential behavior conflicts with other userscripts, so use at your own risk
-
 
 # Install
 

@@ -1262,7 +1262,8 @@ OsuExpertPlus.beatmapCardExtra = (() => {
      * content height without updating that value, so the b5 page background shows past the block.
      */
     function syncBeatmapsetsListingOuterHeight(outer, items) {
-      if (!(outer instanceof HTMLElement) || !(items instanceof HTMLElement)) return;
+      if (!(outer instanceof HTMLElement) || !(items instanceof HTMLElement))
+        return;
       const st = outer.getAttribute("style") || "";
       if (!/height\s*:\s*[\d.]+\s*px/i.test(st)) return;
       const cs = getComputedStyle(outer);
@@ -1290,7 +1291,10 @@ OsuExpertPlus.beatmapCardExtra = (() => {
         detachBeatmapsetsListingItemsRo();
         return;
       }
-      if (beatmapsetsListingItemsObserved === items && beatmapsetsListingItemsRo) {
+      if (
+        beatmapsetsListingItemsObserved === items &&
+        beatmapsetsListingItemsRo
+      ) {
         syncBeatmapsetsListingOuterHeight(outer, items);
         return;
       }

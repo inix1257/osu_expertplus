@@ -715,7 +715,13 @@ OsuExpertPlus.pages.userProfile = (() => {
     let entry = _scoreListCache.get(key);
     const ttl = _profileScoresCacheTtl(userId);
     if (!entry || (!entry.pending && Date.now() - entry.ts >= ttl)) {
-      entry = { scores: [], done: false, ts: Date.now(), lastPageKey: "", pending: null };
+      entry = {
+        scores: [],
+        done: false,
+        ts: Date.now(),
+        lastPageKey: "",
+        pending: null,
+      };
       _scoreListCache.set(key, entry);
     }
     return entry;
@@ -946,7 +952,12 @@ OsuExpertPlus.pages.userProfile = (() => {
       if (ms.legacy_combo_increase != null) {
         return great + num("legacy_combo_increase");
       }
-      return great + num("large_tick_hit") + num("small_tick_hit") + num("slider_tail_hit");
+      return (
+        great +
+        num("large_tick_hit") +
+        num("small_tick_hit") +
+        num("slider_tail_hit")
+      );
     }
 
     if (rulesetId === 1) {
@@ -986,9 +997,9 @@ OsuExpertPlus.pages.userProfile = (() => {
     const maxN = Number(maxCombo);
     maxEl.textContent = String(maxCombo);
     const afterMax = maxEl.nextSibling;
-    if (
-      !(afterMax?.nodeType === Node.TEXT_NODE && afterMax.textContent === "x")
-    ) {
+    if (!(
+      afterMax?.nodeType === Node.TEXT_NODE && afterMax.textContent === "x"
+    )) {
       maxEl.after(document.createTextNode("x"));
     }
 
@@ -1094,7 +1105,8 @@ OsuExpertPlus.pages.userProfile = (() => {
       };
     }
     return {
-      great: Number(statistics.count_300 ?? 0) + Number(statistics.count_geki ?? 0),
+      great:
+        Number(statistics.count_300 ?? 0) + Number(statistics.count_geki ?? 0),
       ok: Number(statistics.count_100 ?? 0),
       meh: Number(statistics.count_50 ?? 0),
       miss: Number(statistics.count_miss ?? 0),
@@ -2218,7 +2230,6 @@ OsuExpertPlus.pages.userProfile = (() => {
         }
       }),
     );
-
   }
 
   function getUserIdFromUrl() {
@@ -2267,7 +2278,10 @@ OsuExpertPlus.pages.userProfile = (() => {
     if (!m) return true;
     const seg = decodeURIComponent(m[1]);
     if (/^\d+$/.test(seg)) return String(data.user.id) === seg;
-    const norm = (s) => String(s).toLowerCase().replace(/[\s_]+/g, "_");
+    const norm = (s) =>
+      String(s)
+        .toLowerCase()
+        .replace(/[\s_]+/g, "_");
     return norm(data.user.username ?? "") === norm(seg);
   }
 
@@ -3171,7 +3185,9 @@ OsuExpertPlus.pages.userProfile = (() => {
     if (Number.isFinite(rate) && rate > 0) {
       const label = `${rate.toFixed(2)}×`;
       chip.querySelector(".mod__extender")?.remove();
-      chip.appendChild(el("div", { class: "mod__extender" }, el("span", {}, label)));
+      chip.appendChild(
+        el("div", { class: "mod__extender" }, el("span", {}, label)),
+      );
       chip.setAttribute("title", `${mod.acronym} (${label})`);
     }
 
@@ -3179,7 +3195,10 @@ OsuExpertPlus.pages.userProfile = (() => {
     const badge = document.querySelector(
       ".mod__customised-indicator:not(.oep-mod-badge-clone)",
     );
-    if (badge instanceof HTMLElement && !chip.querySelector(".mod__customised-indicator")) {
+    if (
+      badge instanceof HTMLElement &&
+      !chip.querySelector(".mod__customised-indicator")
+    ) {
       const copy = /** @type {HTMLElement} */ (badge.cloneNode(true));
       copy.classList.add("oep-mod-badge-clone");
       chip.appendChild(copy);
@@ -3390,52 +3409,53 @@ OsuExpertPlus.pages.userProfile = (() => {
       String(getProfileUserId()) === String(getCurrentUserIdFromHeader());
 
     if (isOwnProfile) {
-    const pinBtn = el(
-      "button",
-      { type: "button", class: SCORE_OPTIONS_ITEM_CLASS },
-      "Pin",
-    );
-    pinBtn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      if (pinBtn.classList.contains(`${SCORE_OPTIONS_ITEM_CLASS}--pending`)) return;
+      const pinBtn = el(
+        "button",
+        { type: "button", class: SCORE_OPTIONS_ITEM_CLASS },
+        "Pin",
+      );
+      pinBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (pinBtn.classList.contains(`${SCORE_OPTIONS_ITEM_CLASS}--pending`))
+          return;
 
-      pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--pending`);
-      pinBtn.textContent = "Pinning…";
-      try {
-        const headers = {
-          Accept: "application/json, text/javascript, */*; q=0.01",
-          "X-Requested-With": "XMLHttpRequest",
-        };
-        const csrf = maybeCsrfToken();
-        if (csrf) headers["X-CSRF-Token"] = csrf;
-        const resp = await fetch(`/score-pins/${scoreId}`, {
-          method: "PUT",
-          credentials: "include",
-          headers,
-        });
-        pinBtn.classList.remove(`${SCORE_OPTIONS_ITEM_CLASS}--pending`);
-        if (resp.ok || resp.status === 204) {
-          pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--done`);
-          pinBtn.textContent = "Pinned!";
-        } else {
+        pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--pending`);
+        pinBtn.textContent = "Pinning…";
+        try {
+          const headers = {
+            Accept: "application/json, text/javascript, */*; q=0.01",
+            "X-Requested-With": "XMLHttpRequest",
+          };
+          const csrf = maybeCsrfToken();
+          if (csrf) headers["X-CSRF-Token"] = csrf;
+          const resp = await fetch(`/score-pins/${scoreId}`, {
+            method: "PUT",
+            credentials: "include",
+            headers,
+          });
+          pinBtn.classList.remove(`${SCORE_OPTIONS_ITEM_CLASS}--pending`);
+          if (resp.ok || resp.status === 204) {
+            pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--done`);
+            pinBtn.textContent = "Pinned!";
+          } else {
+            pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--error`);
+            pinBtn.textContent = `Failed (${resp.status})`;
+          }
+        } catch {
+          pinBtn.classList.remove(`${SCORE_OPTIONS_ITEM_CLASS}--pending`);
           pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--error`);
-          pinBtn.textContent = `Failed (${resp.status})`;
+          pinBtn.textContent = "Error";
         }
-      } catch {
-        pinBtn.classList.remove(`${SCORE_OPTIONS_ITEM_CLASS}--pending`);
-        pinBtn.classList.add(`${SCORE_OPTIONS_ITEM_CLASS}--error`);
-        pinBtn.textContent = "Error";
-      }
-      setTimeout(() => {
-        pinBtn.classList.remove(
-          `${SCORE_OPTIONS_ITEM_CLASS}--done`,
-          `${SCORE_OPTIONS_ITEM_CLASS}--error`,
-        );
-        pinBtn.textContent = "Pin";
-        menu.removeAttribute("data-open");
-      }, 2000);
-    });
-    menu.appendChild(pinBtn);
+        setTimeout(() => {
+          pinBtn.classList.remove(
+            `${SCORE_OPTIONS_ITEM_CLASS}--done`,
+            `${SCORE_OPTIONS_ITEM_CLASS}--error`,
+          );
+          pinBtn.textContent = "Pin";
+          menu.removeAttribute("data-open");
+        }, 2000);
+      });
+      menu.appendChild(pinBtn);
     } // end isOwnProfile
 
     const btn = el(
@@ -7793,9 +7813,7 @@ OsuExpertPlus.pages.userProfile = (() => {
         const srcMatch = body.match(
           /https?:\/\/[^\s\]]+\.(?:png|jpe?g|gif|webp|bmp|svg)/i,
         );
-        const srcUrl = _sanitizeEscapedPreviewUrl(
-          srcMatch ? srcMatch[0] : "",
-        );
+        const srcUrl = _sanitizeEscapedPreviewUrl(srcMatch ? srcMatch[0] : "");
         if (!srcUrl) return "";
         return `<div class="oep-bbhelp-preview__imagemap"><img src="${_escapePreviewHtml(srcUrl)}" alt="imagemap preview" loading="lazy" referrerpolicy="no-referrer" /><div class="oep-bbhelp-preview__imagemap-meta">ImageMap base image preview</div></div>`;
       },

@@ -983,7 +983,8 @@ OsuExpertPlus.settingsPanel = (() => {
       {
         type: "button",
         class: "osu-expertplus-panel__footer-reset",
-        title: "Set every toggle above to its default (API keys are not changed)",
+        title:
+          "Set every toggle above to its default (API keys are not changed)",
       },
       "Reset to defaults",
     );

@@ -3,19 +3,19 @@
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
 OsuExpertPlus.omdb = (() => {
-  const KEY_API = 'oep_omdb_api_key';
-  const API_BASE = 'https://omdb.nyahh.net';
+  const KEY_API = "oep_omdb_api_key";
+  const API_BASE = "https://omdb.nyahh.net";
 
   /** Shown when /api/set returns non-JSON or not an array (missing mapset, API error page, etc.). */
   const MSG_BEATMAPSET_RESPONSE_UNEXPECTED =
-    'This beatmapset may not be on OMDB, or OMDB returned an error.';
+    "This beatmapset may not be on OMDB, or OMDB returned an error.";
 
   function getApiKey() {
-    return String(GM_getValue(KEY_API, '') || '').trim();
+    return String(GM_getValue(KEY_API, "") || "").trim();
   }
 
   function setApiKey(apiKey) {
-    GM_setValue(KEY_API, String(apiKey || '').trim());
+    GM_setValue(KEY_API, String(apiKey || "").trim());
   }
 
   function clearApiKey() {
@@ -40,10 +40,12 @@ OsuExpertPlus.omdb = (() => {
     const key = getApiKey();
     if (!key) return null;
     const url = `${API_BASE}/api/set.php?id=${encodeURIComponent(String(beatmapsetId))}&key=${encodeURIComponent(key)}`;
-    const resp = await fetch(url, { credentials: 'omit' });
-    const raw = await resp.text().catch(() => '');
+    const resp = await fetch(url, { credentials: "omit" });
+    const raw = await resp.text().catch(() => "");
     if (!resp.ok) {
-      throw new Error(`OMDB HTTP ${resp.status}${raw ? `: ${raw.slice(0, 160)}` : ''}`);
+      throw new Error(
+        `OMDB HTTP ${resp.status}${raw ? `: ${raw.slice(0, 160)}` : ""}`,
+      );
     }
     let data;
     try {
@@ -70,21 +72,23 @@ OsuExpertPlus.omdb = (() => {
    */
   async function rateBeatmap(beatmapId, score) {
     const key = getApiKey();
-    if (!key) throw new Error('OMDB API key not configured');
+    if (!key) throw new Error("OMDB API key not configured");
     const s0 = Number(score);
-    if (!Number.isFinite(s0)) throw new Error('Invalid score');
+    if (!Number.isFinite(s0)) throw new Error("Invalid score");
     let s;
     if (s0 === -2) {
       s = -2;
     } else {
       s = Math.round(s0 * 2) / 2;
-      if (s < 0 || s > 5) throw new Error('Score must be between 0 and 5');
+      if (s < 0 || s > 5) throw new Error("Score must be between 0 and 5");
     }
     const url = `${API_BASE}/api/rate.php?id=${encodeURIComponent(String(beatmapId))}&key=${encodeURIComponent(key)}&score=${encodeURIComponent(String(s))}`;
-    const resp = await fetch(url, { credentials: 'omit' });
+    const resp = await fetch(url, { credentials: "omit" });
     if (!resp.ok) {
-      const t = await resp.text().catch(() => '');
-      throw new Error(`OMDB HTTP ${resp.status}${t ? `: ${t.slice(0, 160)}` : ''}`);
+      const t = await resp.text().catch(() => "");
+      throw new Error(
+        `OMDB HTTP ${resp.status}${t ? `: ${t.slice(0, 160)}` : ""}`,
+      );
     }
     try {
       return await resp.json();

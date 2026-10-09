@@ -3,18 +3,22 @@
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 
 OsuExpertPlus.auth = (() => {
-  const TOKEN_ENDPOINT = 'https://osu.ppy.sh/oauth/token';
+  const TOKEN_ENDPOINT = "https://osu.ppy.sh/oauth/token";
 
-  const KEY_CLIENT_ID     = 'oep_client_id';
-  const KEY_CLIENT_SECRET = 'oep_client_secret';
-  const KEY_ACCESS_TOKEN  = 'oep_access_token';
-  const KEY_TOKEN_EXPIRY  = 'oep_token_expiry';   // Unix ms
+  const KEY_CLIENT_ID = "oep_client_id";
+  const KEY_CLIENT_SECRET = "oep_client_secret";
+  const KEY_ACCESS_TOKEN = "oep_access_token";
+  const KEY_TOKEN_EXPIRY = "oep_token_expiry"; // Unix ms
 
   // Dedupe concurrent token refresh
   let _fetchPromise = null;
 
-  function getClientId()     { return GM_getValue(KEY_CLIENT_ID, ''); }
-  function getClientSecret() { return GM_getValue(KEY_CLIENT_SECRET, ''); }
+  function getClientId() {
+    return GM_getValue(KEY_CLIENT_ID, "");
+  }
+  function getClientSecret() {
+    return GM_getValue(KEY_CLIENT_SECRET, "");
+  }
 
   function isConfigured() {
     return Boolean(getClientId() && getClientSecret());
@@ -27,7 +31,7 @@ OsuExpertPlus.auth = (() => {
    * @param {string} clientSecret
    */
   function setCredentials(clientId, clientSecret) {
-    GM_setValue(KEY_CLIENT_ID,     clientId.trim());
+    GM_setValue(KEY_CLIENT_ID, clientId.trim());
     GM_setValue(KEY_CLIENT_SECRET, clientSecret.trim());
     clearCachedToken();
   }
@@ -45,7 +49,7 @@ OsuExpertPlus.auth = (() => {
   }
 
   function getCachedToken() {
-    const token  = GM_getValue(KEY_ACCESS_TOKEN, '');
+    const token = GM_getValue(KEY_ACCESS_TOKEN, "");
     const expiry = GM_getValue(KEY_TOKEN_EXPIRY, 0);
     // Treat token as expired 60 s before actual expiry for safety margin.
     if (token && Date.now() < expiry - 60_000) return token;
@@ -57,33 +61,35 @@ OsuExpertPlus.auth = (() => {
    * @returns {Promise<string>}  The raw access token string.
    */
   async function fetchNewToken() {
-    const clientId     = getClientId();
+    const clientId = getClientId();
     const clientSecret = getClientSecret();
 
     if (!clientId || !clientSecret) {
-      throw new Error('[osu! Expert+] OAuth credentials not configured.');
+      throw new Error("[osu! Expert+] OAuth credentials not configured.");
     }
 
     const body = new URLSearchParams({
-      client_id:     clientId,
+      client_id: clientId,
       client_secret: clientSecret,
-      grant_type:    'client_credentials',
-      scope:         'public',
+      grant_type: "client_credentials",
+      scope: "public",
     });
 
     const resp = await fetch(TOKEN_ENDPOINT, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
     });
 
     if (!resp.ok) {
-      const text = await resp.text().catch(() => '');
-      throw new Error(`[osu! Expert+] Token request failed (${resp.status}): ${text}`);
+      const text = await resp.text().catch(() => "");
+      throw new Error(
+        `[osu! Expert+] Token request failed (${resp.status}): ${text}`,
+      );
     }
 
     const data = await resp.json();
-    const token    = data.access_token;
+    const token = data.access_token;
     const expiresIn = data.expires_in ?? 86400; // seconds
 
     GM_setValue(KEY_ACCESS_TOKEN, token);
@@ -105,7 +111,9 @@ OsuExpertPlus.auth = (() => {
 
     // Deduplicate concurrent requests.
     if (!_fetchPromise) {
-      _fetchPromise = fetchNewToken().finally(() => { _fetchPromise = null; });
+      _fetchPromise = fetchNewToken().finally(() => {
+        _fetchPromise = null;
+      });
     }
 
     return _fetchPromise;

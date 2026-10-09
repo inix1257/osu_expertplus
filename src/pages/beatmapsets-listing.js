@@ -16,7 +16,10 @@ OsuExpertPlus.pages.beatmapsetsListing = (() => {
     const bag = createCleanupBag();
 
     bag.add(
-      OsuExpertPlus.beatmapCardStats.startAlwaysShowStats(settings, manageStyle),
+      OsuExpertPlus.beatmapCardStats.startAlwaysShowStats(
+        settings,
+        manageStyle,
+      ),
     );
     bag.add(
       OsuExpertPlus.beatmapCardStats.startFullBeatmapStatNumbers(settings),

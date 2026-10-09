@@ -39,8 +39,10 @@ OsuExpertPlus.Router = class Router {
     this._currentPath = path;
 
     // Previous module cleanup
-    if (typeof this._cleanupFn === 'function') {
-      try { this._cleanupFn(); } catch (_) {}
+    if (typeof this._cleanupFn === "function") {
+      try {
+        this._cleanupFn();
+      } catch (_) {}
       this._cleanupFn = null;
     }
 
@@ -49,17 +51,21 @@ OsuExpertPlus.Router = class Router {
       if (match) {
         try {
           const result = route.module.init(match);
-          if (result && typeof result.then === 'function') {
-            result.then((fn) => {
-              // Ignore cleanup if path changed before async init finished
-              if (this._currentPath === path) {
-                this._cleanupFn = typeof fn === 'function' ? fn : null;
-              } else if (typeof fn === 'function') {
-                try { fn(); } catch (_) {}
-              }
-            }).catch(() => {});
+          if (result && typeof result.then === "function") {
+            result
+              .then((fn) => {
+                // Ignore cleanup if path changed before async init finished
+                if (this._currentPath === path) {
+                  this._cleanupFn = typeof fn === "function" ? fn : null;
+                } else if (typeof fn === "function") {
+                  try {
+                    fn();
+                  } catch (_) {}
+                }
+              })
+              .catch(() => {});
           } else {
-            this._cleanupFn = typeof result === 'function' ? result : null;
+            this._cleanupFn = typeof result === "function" ? result : null;
           }
         } catch (_) {}
         return;
@@ -82,7 +88,7 @@ OsuExpertPlus.Router = class Router {
     history.replaceState = wrap(history.replaceState);
 
     // Back/forward: clear path so dedupe cannot skip the event
-    window.addEventListener('popstate', () => {
+    window.addEventListener("popstate", () => {
       this._currentPath = null;
       navigate(location.pathname);
     });

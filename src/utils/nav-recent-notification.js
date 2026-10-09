@@ -188,7 +188,9 @@ OsuExpertPlus.navRecentNotification = (() => {
     const userHref = `/users/${n.sourceUserId}`;
     const want = normalizeSpace(prefix);
     for (const post of doc.querySelectorAll(".beatmap-discussion-post")) {
-      const link = post.querySelector(".beatmap-discussion-user-card__user-link");
+      const link = post.querySelector(
+        ".beatmap-discussion-user-card__user-link",
+      );
       if (!link?.getAttribute("href")?.endsWith(userHref)) continue;
       const msg = post.querySelector(".beatmap-discussion-post__message");
       const text = msg?.textContent?.trim();
