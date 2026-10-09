@@ -2,7 +2,37 @@
  * Which profile and ruleset the page shows, and who is signed in (WS-41).
  */
 
+import { observe } from "../../core/observe.js";
 import { rulesetFromProfileUrl } from "../../osu/ruleset.js";
+
+const INITIAL_DATA_SEL = ".js-react[data-initial-data]";
+
+/**
+ * Resolves when initial data is added or changed, or after `ms`.
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+function initialDataChange(ms) {
+  return new Promise((resolve) => {
+    const ac = new AbortController();
+    const done = () => {
+      clearTimeout(timer);
+      ac.abort();
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    observe.subscribe(
+      {
+        selector: INITIAL_DATA_SEL,
+        attributes: ["data-initial-data"],
+        schedule: "sync",
+        signal: ac.signal,
+        label: "profile/target",
+      },
+      done,
+    );
+  });
+}
 
 function getUserIdFromUrl() {
   const m = location.pathname.match(/^\/users\/(\d+)/);
@@ -15,7 +45,7 @@ function getUserIdFromUrl() {
  * @returns {Object|null}
  */
 export function parseProfileInitialData() {
-  const nodes = document.querySelectorAll(".js-react[data-initial-data]");
+  const nodes = document.querySelectorAll(INITIAL_DATA_SEL);
   for (const node of nodes) {
     let data;
     try {
@@ -121,8 +151,10 @@ export async function resolveProfileTarget(timeoutMs = 8000) {
         urlMode ?? data.current_mode ?? "osu",
       );
     }
-    if (Date.now() - start >= timeoutMs) return null;
-    await new Promise((r) => setTimeout(r, 100));
+    const left = timeoutMs - (Date.now() - start);
+    if (left <= 0) return null;
+    // Wait for the new page's data instead of polling every 100ms.
+    await initialDataChange(left);
   }
 }
 

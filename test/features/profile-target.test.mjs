@@ -4,7 +4,14 @@ import { loadScripts } from "../helpers/load-script.mjs";
 
 function setup(url, html) {
   const { window } = loadScripts([], { url });
-  for (const key of ["window", "document", "location", "HTMLAnchorElement"]) {
+  for (const key of [
+    "window",
+    "document",
+    "location",
+    "HTMLAnchorElement",
+    "MutationObserver",
+    "Element",
+  ]) {
     Object.defineProperty(globalThis, key, {
       value: key === "window" ? window : window[key],
       configurable: true,
