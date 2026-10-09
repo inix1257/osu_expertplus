@@ -212,6 +212,28 @@ OsuExpertPlus.api = (() => {
   }
 
   /**
+   * `siteFetch` with the JSON/Bearer headers from `buildHeaders` (merged under
+   * `init.headers`). When a Bearer request gets 401, the cached token is
+   * dropped and the request is sent once more with fresh headers (B35).
+   * @param {string} url
+   * @param {RequestInit & { headers?: Record<string, string> }} [init]
+   * @param {{ priority?: "high"|"low", auth?: boolean }} [options]
+   * @returns {Promise<Response>}
+   */
+  async function authedFetch(url, init = {}, options = {}) {
+    const { auth = true, ...queueOptions } = options;
+    const send = async () => {
+      const headers = { ...(await buildHeaders({ auth })), ...init.headers };
+      const resp = await siteFetch(url, { ...init, headers }, queueOptions);
+      return { resp, usedBearer: Boolean(headers.Authorization) };
+    };
+    const first = await send();
+    if (first.resp.status !== 401 || !first.usedBearer) return first.resp;
+    OsuExpertPlus.auth.clearCachedToken();
+    return (await send()).resp;
+  }
+
+  /**
    * Query params shared by the API and site beatmap scoreboard routes.
    * @param {{ mode?: string, legacy_only?: unknown, type?: string,
    *   limit?: number, mods?: string[] }} [query]
@@ -360,12 +382,10 @@ OsuExpertPlus.api = (() => {
    */
   async function get(url, params = {}, options = {}) {
     const fullUrl = withQuery(url, params);
-    const headers = await buildHeaders({ auth: !options.sessionOnly });
-
-    const resp = await siteFetch(
+    const resp = await authedFetch(
       fullUrl,
-      { headers },
-      { priority: options.priority },
+      {},
+      { priority: options.priority, auth: !options.sessionOnly },
     );
 
     if (!resp.ok) {
@@ -557,9 +577,7 @@ OsuExpertPlus.api = (() => {
       `${SITE_ORIGIN}/beatmaps/${beatmapId}/scores`,
       scoresQueryParams(query),
     );
-    const headers = await buildHeaders();
-
-    const resp = await siteFetch(fullUrl, { headers, signal: options.signal });
+    const resp = await authedFetch(fullUrl, { signal: options.signal });
     if (!resp.ok) {
       throw new Error(`[osu! Expert+] ${resp.status}: ${fullUrl}`);
     }
@@ -645,14 +663,11 @@ OsuExpertPlus.api = (() => {
    */
   async function postBeatmapAttributes(beatmapId, mods, ruleset = "osu") {
     const url = `${BASE}/beatmaps/${beatmapId}/attributes`;
-    const headers = await buildHeaders();
-    headers["Content-Type"] = "application/json";
-
-    const resp = await siteFetch(
+    const resp = await authedFetch(
       url,
       {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mods, ruleset }),
       },
       { priority: "low" },

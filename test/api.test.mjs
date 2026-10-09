@@ -139,3 +139,39 @@ test("get() errors carry the HTTP status", async () => {
     (err) => err.status === 404,
   );
 });
+
+test("a 401 on a Bearer request drops the token and retries once (B35)", async () => {
+  let status = 401;
+  const { api, calls, window } = loadApi({
+    respond: () => ({ ok: status === 200, status, json: async () => ({}) }),
+  });
+  let cleared = 0;
+  let token = "old";
+  window.OsuExpertPlus.auth = {
+    getAuthHeader: async () => (token ? `Bearer ${token}` : null),
+    clearCachedToken: () => {
+      cleared++;
+      token = "new";
+      status = 200;
+    },
+  };
+  await api.getBeatmap(1);
+  assert.equal(cleared, 1);
+  assert.deepEqual(
+    calls.map((c) => c.init.headers.Authorization),
+    ["Bearer old", "Bearer new"],
+  );
+
+  // Still 401 after the retry: give up (no loop).
+  status = 401;
+  window.OsuExpertPlus.auth.clearCachedToken = () => cleared++;
+  calls.length = 0;
+  await assert.rejects(api.getBeatmap(1), (err) => err.status === 401);
+  assert.equal(calls.length, 2);
+
+  // No Bearer: no retry.
+  token = null;
+  calls.length = 0;
+  await assert.rejects(api.getBeatmap(1));
+  assert.equal(calls.length, 1);
+});
