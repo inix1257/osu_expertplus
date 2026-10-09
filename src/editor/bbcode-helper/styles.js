@@ -355,7 +355,9 @@ export const BBHELP_CSS = `
     max-width: min(100%, 520px);
     height: auto;
     border-radius: 4px;
-    display: block;
+    /* inline-block so [centre] and [right] align images, as on osu-web */
+    display: inline-block;
+    vertical-align: top;
     margin: 0.3em 0;
   }
   .${BBHELP_PREVIEW_BODY_CLASS} .oep-bbhelp-preview__imagemap {
