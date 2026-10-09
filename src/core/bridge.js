@@ -13,6 +13,7 @@ import { observe } from "./observe.js";
 import * as pageHooks from "./page-hooks.js";
 import * as pageWindow from "./page-window.js";
 import * as routes from "./routes.js";
+import * as storage from "./storage.js";
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 window.OsuExpertPlus.core = Object.freeze({
@@ -23,5 +24,6 @@ window.OsuExpertPlus.core = Object.freeze({
   pageHooks,
   pageWindow,
   routes,
+  storage,
 });
 window.OsuExpertPlus.kirino = kirino;

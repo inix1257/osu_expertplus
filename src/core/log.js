@@ -5,8 +5,10 @@
  * `oep.debug` is true (set it from the userscript manager's storage editor).
  */
 
+import { KEYS } from "./storage.js";
+
 const PREFIX = "[osu! Expert+]";
-export const DEBUG_KEY = "oep.debug";
+export const DEBUG_KEY = KEYS.DEBUG.key;
 
 /** @type {boolean|null} */
 let debugEnabled = null;
