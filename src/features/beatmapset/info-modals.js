@@ -448,8 +448,15 @@ export function attachBeatmapsetInfoModal(elFn, rootClass, cfg) {
   const modalBody = elFn("div", {
     class: `${rootClass}__modal-body u-fancy-scrollbar`,
   });
-  modalBody.appendChild(buildBody());
   modal.appendChild(modalBody);
+  // The body (description HTML with its images and iframes) is built on the
+  // first open, not on every page load.
+  let bodyBuilt = false;
+  const ensureBody = () => {
+    if (bodyBuilt) return;
+    bodyBuilt = true;
+    modalBody.appendChild(buildBody());
+  };
 
   modalPortal.appendChild(backdrop);
   modalPortal.appendChild(modal);
@@ -477,6 +484,7 @@ export function attachBeatmapsetInfoModal(elFn, rootClass, cfg) {
 
     modalPortal.classList.add(`${rootClass}__modal-portal--open`);
     modalPortal.setAttribute("aria-hidden", "false");
+    ensureBody();
     closeBtn.focus();
 
     const onKeydown = (e) => {
