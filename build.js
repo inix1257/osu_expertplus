@@ -1,44 +1,29 @@
 #!/usr/bin/env node
 /**
- * Simple bundle script — concatenates all source files in the correct load
- * order and prepends the userscript metadata block to produce
- * dist/osu-expertplus.user.js.
+ * Bundles src/main.js with esbuild into dist/osu-expertplus.user.js, prefixed
+ * with the userscript metadata block (@version comes from package.json), and
+ * writes the local dev loader next to it.
  *
- * Run:  node build.js
+ * Run:  npm run build              release build + dev loader
+ *       npm run build:dev          same, with an inline source map (never commit)
+ *       npm run check:dist         rebuild in memory, compare with dist on disk
  */
 
 const fs = require("fs");
 const path = require("path");
+const esbuild = require("esbuild");
 
 const ROOT = __dirname;
+const ENTRY = path.join(ROOT, "src", "main.js");
 const OUT = path.join(ROOT, "dist", "osu-expertplus.user.js");
 // Local dev loader: same metadata, but @require's the built file from disk so
 // Tampermonkey picks up every rebuild on page reload. Machine-specific, so it
 // is gitignored. Needs "Allow access to file URLs" for Tampermonkey.
 const DEV_OUT = path.join(ROOT, "dist", "osu-expertplus.dev.user.js");
 
-// Files are concatenated in this exact order.
-const FILES = [
-  "src/utils/dom.js",
-  "src/utils/html-sanitize.js",
-  "src/utils/difficulty-colours.js",
-  "src/utils/auth.js",
-  "src/utils/api.js",
-  "src/utils/omdb.js",
-  "src/utils/settings.js",
-  "src/utils/beatmap-preview.js",
-  "src/utils/beatmap-card-extra.js",
-  "src/utils/beatmap-card-stats.js",
-  "src/utils/mod-icons-as-acronyms.js",
-  "src/utils/beatmapsets-listing-mode.js",
-  "src/utils/nav-recent-notification.js",
-  "src/pages/beatmapsets-listing.js",
-  "src/pages/beatmap-detail.js",
-  "src/pages/user-profile.js",
-  "src/pages/account-edit.js",
-  "src/router.js",
-  "src/ui/settings-panel.js",
-];
+const { version } = JSON.parse(
+  fs.readFileSync(path.join(ROOT, "package.json"), "utf8"),
+);
 
 // Public install URL (GitHub raw). Change owner/repo/branch if your fork differs.
 const INSTALL_BASE =
@@ -48,7 +33,7 @@ const METADATA = `\
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.2.27
+// @version      ${version}
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -71,51 +56,74 @@ const METADATA = `\
 'use strict';
 `;
 
-function build() {
-  const parts = [METADATA];
+const toLf = (text) => text.replace(/\r\n?/g, "\n");
 
-  for (const relPath of FILES) {
-    const absPath = path.join(ROOT, relPath);
-    const src = fs
-      .readFileSync(absPath, "utf8")
-      // Strip 'use strict' directives (already at the top).
-      .replace(/^'use strict';\s*/m, "")
-      .trimEnd();
-    parts.push(`\n/* ── ${relPath} ── */\n${src}`);
-  }
-
-  // Entry-point IIFE.
-  parts.push(`
-/* ── entry point ── */
-(function () {
-  OsuExpertPlus.settingsPanel.init();
-  OsuExpertPlus.modIconsAsAcronyms.install(OsuExpertPlus.settings);
-  OsuExpertPlus.beatmapsetsListingMode.installLinkPatcher();
-  OsuExpertPlus.navRecentNotification.install(OsuExpertPlus.settings);
-
-  const router = new OsuExpertPlus.Router();
-  router.init();
-})();
-`);
-
-  fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, parts.join("\n"), "utf8");
-  console.log(`Built → ${OUT}`);
-
-  buildDevLoader();
+/**
+ * @param {{ sourcemap?: boolean }} [opts]
+ * @returns {Promise<string>} the complete userscript text (LF line endings)
+ */
+async function bundle({ sourcemap = false } = {}) {
+  const result = await esbuild.build({
+    entryPoints: [ENTRY],
+    bundle: true,
+    format: "iife",
+    charset: "utf8",
+    minify: false,
+    legalComments: "inline",
+    target: ["chrome120", "firefox120"],
+    banner: { js: toLf(METADATA) },
+    sourcemap: sourcemap ? "inline" : false,
+    write: false,
+    logLevel: "warning",
+  });
+  return toLf(result.outputFiles[0].text);
 }
 
 function buildDevLoader() {
   const fileUrl = "file:///" + OUT.replace(/\\/g, "/").replace(/^\//, "");
-  const header = METADATA.replace(/\n'use strict';\n$/, "\n")
+  const header = toLf(METADATA)
+    .replace(/\n'use strict';\n$/, "\n")
     .replace(/^\/\/ @name .*$/m, (line) => `${line} (dev)`)
     .replace(/^\/\/ @(downloadURL|updateURL) .*\n/gm, "")
     .replace(
       "// ==/UserScript==",
-      `// @require      ${fileUrl}\n// ==/UserScript==`
+      `// @require      ${fileUrl}\n// ==/UserScript==`,
     );
   fs.writeFileSync(DEV_OUT, header, "utf8");
   console.log(`Built → ${DEV_OUT}`);
 }
 
-build();
+async function build({ sourcemap }) {
+  const text = await bundle({ sourcemap });
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.writeFileSync(OUT, text, "utf8");
+  console.log(`Built → ${OUT}`);
+  buildDevLoader();
+}
+
+/** Release check: the committed dist must equal a fresh build of the sources. */
+async function checkDist() {
+  const expected = await bundle();
+  const actual = fs.existsSync(OUT) ? toLf(fs.readFileSync(OUT, "utf8")) : "";
+  if (actual === expected) {
+    console.log(`dist is up to date (${path.relative(ROOT, OUT)})`);
+    return;
+  }
+  const a = actual.split("\n");
+  const e = expected.split("\n");
+  let line = 0;
+  while (line < a.length && line < e.length && a[line] === e[line]) line += 1;
+  console.error(
+    `dist is stale: first difference at line ${line + 1}. Run \`npm run build\`.`,
+  );
+  process.exitCode = 1;
+}
+
+const args = new Set(process.argv.slice(2));
+(args.has("--check-dist")
+  ? checkDist()
+  : build({ sourcemap: args.has("--sourcemap") })
+).catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

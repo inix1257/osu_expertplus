@@ -1,0 +1,27 @@
+{
+  "name": "osu-expertplus",
+  "version": "0.2.27",
+  "private": true,
+  "description": "Userscript that adds QoL features to osu.ppy.sh",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "node build.js",
+    "build:dev": "node build.js --sourcemap",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "check": "npm run lint && npm test && npm run build",
+    "check:dist": "node build.js --check-dist"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "esbuild": "0.28.2",
+    "eslint": "10.11.0",
+    "globals": "17.12.0",
+    "jsdom": "30.1.1",
+    "prettier": "3.9.9"
+  }
+}
