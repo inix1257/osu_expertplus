@@ -64,19 +64,18 @@ export const BEATMAPSET_CSS = `
     color: #fff;
   }
   .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  /* Sticky bar matches osu beatmapset-info__header--sticky so title + Full description stay together. */
-  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > .${ROOT_CLASS}__description-sticky-head {
-    display: flex;
     flex-direction: row;
     flex-wrap: wrap;
-    align-items: center;
-    column-gap: 10px;
-    row-gap: 6px;
-    padding-bottom: 12px;
-    margin-bottom: 0;
+    align-items: stretch;
+  }
+  /*
+   * osu-web's sticky title and our "Full description" box share one sticky
+   * band (same look as beatmapset-info__header--sticky). The title stays
+   * where osu-web rendered it; the box is its next sibling.
+   */
+  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > h3.beatmapset-info__header,
+  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > .${ROOT_CLASS}__description-heading-actions {
+    margin: 0;
     position: sticky;
     top: 0;
     z-index: 1;
@@ -87,17 +86,19 @@ export const BEATMAPSET_CSS = `
       hsl(var(--hsl-b4)) 5px
     );
   }
-  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row .${ROOT_CLASS}__description-sticky-head > h3.beatmapset-info__header {
-    margin: 0;
-    padding: 5px 0 0;
+  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > h3.beatmapset-info__header {
+    padding: 5px 0 12px;
     flex: 0 1 auto;
     min-width: 0;
-    position: static;
-    top: auto;
-    z-index: auto;
-    background-image: none;
   }
-  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row .${ROOT_CLASS}__description-sticky-head > .${ROOT_CLASS}__action-btn--description-heading {
+  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > .${ROOT_CLASS}__description-heading-actions {
+    display: flex;
+    align-items: center;
+    flex: 1 1 0;
+    min-width: max-content;
+    padding: 0 0 12px 10px;
+  }
+  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > .${ROOT_CLASS}__description-heading-actions > .${ROOT_CLASS}__action-btn--description-heading {
     flex: 0 0 auto;
     align-self: center;
     margin: 0;
@@ -112,10 +113,10 @@ export const BEATMAPSET_CSS = `
     border-color: hsl(var(--hsl-b5, 333 18% 28%));
     text-shadow: none;
   }
-  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row .${ROOT_CLASS}__description-sticky-head > .${ROOT_CLASS}__action-btn--description-heading i {
+  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > .${ROOT_CLASS}__description-heading-actions > .${ROOT_CLASS}__action-btn--description-heading i {
     font-size: 10px;
   }
-  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row .${ROOT_CLASS}__description-sticky-head > .${ROOT_CLASS}__action-btn--description-heading:hover {
+  .beatmapset-info > .beatmapset-info__box:first-child .beatmapset-info__row.${ROOT_CLASS}__description-heading-row > .${ROOT_CLASS}__description-heading-actions > .${ROOT_CLASS}__action-btn--description-heading:hover {
     background: hsl(var(--hsl-b4, 333 18% 22%));
     border-color: hsl(var(--hsl-c2, 333 60% 70%) / 0.4);
   }

@@ -533,14 +533,9 @@ export function attachBeatmapsetInfoModal(elFn, rootClass, cfg) {
 export function teardownBeatmapDescriptionHeadingLayout(descRow) {
   if (!(descRow instanceof HTMLElement)) return;
   descRow.classList.remove(`${ROOT_CLASS}__description-heading-row`);
-  const headWrap = descRow.querySelector(
-    `:scope > .${ROOT_CLASS}__description-sticky-head`,
-  );
-  if (headWrap) {
-    const h = headWrap.querySelector(":scope > h3.beatmapset-info__header");
-    if (h) descRow.insertBefore(h, headWrap);
-    headWrap.remove();
-  }
+  descRow
+    .querySelector(`:scope > .${ROOT_CLASS}__description-heading-actions`)
+    ?.remove();
 }
 
 /**
@@ -635,14 +630,16 @@ export function startBeatmapsetInfoModals(header, pathRe) {
         buttonIconClass: "fas fa-align-left",
         buttonExtraClass: `${ROOT_CLASS}__action-btn--description-heading`,
         modalExtraClass: `${ROOT_CLASS}__modal--description`,
+        // osu-web's heading stays where React put it; the button goes in our
+        // own box right after it (styles.js lays both out as one bar).
         mountButton: (btn) => {
           btn.setAttribute("data-oep-beatmapset-desc", "");
-          const headWrap = el("div", {
-            class: `${ROOT_CLASS}__description-sticky-head`,
-          });
-          descRow.insertBefore(headWrap, descHeading);
-          headWrap.appendChild(descHeading);
-          headWrap.appendChild(btn);
+          const actions = el(
+            "div",
+            { class: `${ROOT_CLASS}__description-heading-actions` },
+            btn,
+          );
+          descHeading.insertAdjacentElement("afterend", actions);
         },
         buildBody: () => buildDescriptionModalBody(data, el),
         // Spoilers read their open state from layout, so bind them once the
