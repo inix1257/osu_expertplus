@@ -23,7 +23,7 @@ import {
   SCOREBOARD_TBODY_SEL,
   WILDCARD_MERGED_ROW_ATTR,
 } from "./context.js";
-import { leaderboardTableScoreNumber } from "./sort.js";
+import { scoreAsDisplayed } from "./row-builder.js";
 
 /** Marks an OEP-managed `.beatmap-scoreboard-top__item` that overrides the native panel. */
 export const SCORE_TOP_OVERRIDE_ATTR = "data-oep-score-top-override";
@@ -166,7 +166,8 @@ export function getEffectiveBoardTopRow(scoreboardRoot) {
  * @param {object} score
  * @param {HTMLTableRowElement|null} row - the corresponding rendered row (source of mods HTML)
  */
-export function applyApiScoreToTopItem(item, score, row) {
+export function applyApiScoreToTopItem(item, apiScore, row) {
+  const score = scoreAsDisplayed(apiScore);
   const uid = score.user?.id ?? score.user_id;
   const username = score.user?.username ?? (uid != null ? String(uid) : "");
   const iso = score.ended_at ?? score.created_at ?? "";
@@ -223,8 +224,7 @@ export function applyApiScoreToTopItem(item, score, row) {
     flagSpan.title = countryName;
   }
 
-  const rawScore = leaderboardTableScoreNumber(score);
-  const scoreStr = Number(rawScore).toLocaleString("en-US");
+  const scoreStr = Number(score.oepDisplayTotal).toLocaleString("en-US");
   const accStr = formatAccuracy(score.accuracy, ACCURACY_FORMAT.scoreboard);
   const comboStr = formatCombo(score.max_combo);
   const ppNum =

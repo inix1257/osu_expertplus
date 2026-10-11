@@ -3,7 +3,7 @@
  * state, sorting the table rows, and sorting API score lists the same way.
  */
 
-import { leaderboardScoreId } from "../../osu/score.js";
+import { leaderboardScoreId, scoreDisplayValues } from "../../osu/score.js";
 import { observe } from "../../core/observe.js";
 import { parseLocaleNumber } from "../../osu/format.js";
 import { el } from "../legacy.js";
@@ -11,7 +11,7 @@ import {
   SCORE_USER_SEARCH_RESULT_ATTR,
   isScoreboardRowHidden,
   findBeatmapScoreboardRoot,
-  isLazerModeEnabledForLeaderboard,
+  readScoreDisplayPrefs,
   SCOREBOARD_HTML_TABLE_SEL,
   SCOREBOARD_ROW_SEL,
   SCOREBOARD_TBODY_SEL,
@@ -32,42 +32,27 @@ export const BEATMAP_SCOREBOARD_SORT_KEYS = Object.freeze([
 ]);
 
 /**
- * Main score column value aligned with osu-web's Lazer mode toggle.
- * Lazer mode off -> prefer `legacy_total_score`.
- * Lazer mode on  -> prefer `classic_total_score`.
+ * Main score column value as osu-web shows it (B94): the legacy total while
+ * Lazer mode is off, else classic or standardised per `scoring_mode`.
  * @param {object} s
+ * @param {import("../../osu/score.js").ScoreDisplayPrefs} [prefs]
  */
-export function leaderboardTableScoreNumber(s) {
-  const nz = (v) => {
-    const x = Number(v);
-    return Number.isFinite(x) && x > 0 ? x : 0;
-  };
-  const cls = nz(s.classic_total_score);
-  const leg = nz(s.legacy_total_score);
-  if (isLazerModeEnabledForLeaderboard()) {
-    if (cls) return cls;
-    if (leg) return leg;
-  } else {
-    if (leg) return leg;
-    if (cls) return cls;
-  }
-  const tot = nz(s.total_score);
-  if (tot) return tot;
-  const raw = nz(s.score);
-  if (raw) return raw;
-  const xTot = Number(s.total_score);
-  if (Number.isFinite(xTot)) return xTot;
-  const xLeg = Number(s.legacy_total_score);
-  if (Number.isFinite(xLeg)) return xLeg;
-  return 0;
+export function leaderboardTableScoreNumber(
+  s,
+  prefs = readScoreDisplayPrefs(),
+) {
+  return scoreDisplayValues(s, prefs).total;
 }
 
 /**
  * @param {object[]} scores
  */
 export function sortLeaderboardScoresLikeTable(scores) {
+  const prefs = readScoreDisplayPrefs();
   scores.sort((a, b) => {
-    const ds = leaderboardTableScoreNumber(b) - leaderboardTableScoreNumber(a);
+    const ds =
+      leaderboardTableScoreNumber(b, prefs) -
+      leaderboardTableScoreNumber(a, prefs);
     if (ds !== 0) return ds;
     const ppb = Number(b.pp);
     const ppa = Number(a.pp);

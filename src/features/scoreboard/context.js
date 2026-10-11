@@ -10,6 +10,8 @@ import {
   readBeatmapsetJson,
 } from "../../osu/beatmapset-data.js";
 
+import { pageLocalStorage, pageWindow } from "../../core/page-window.js";
+
 export { readBeatmapsetJson };
 
 export const MOD_GRID_CLASS = "oep-beatmap-scoreboard-mods";
@@ -209,6 +211,46 @@ export function isLazerModeEnabledForLeaderboard() {
     toggle.getAttribute("data-url") || "",
   );
   return m ? m[1] === "1" : false;
+}
+
+/**
+ * osu-web's score display preferences, read where osu-web reads them
+ * (`osuCore.userPreferences`, which mirrors to the `userPreferences`
+ * localStorage key). Without either, Lazer mode comes from the account menu
+ * toggle and the scoring mode is osu-web's default (standardised) (B94).
+ * @returns {import("../../osu/score.js").ScoreDisplayPrefs}
+ */
+export function readScoreDisplayPrefs() {
+  /** @type {{ legacy_score_only?: unknown, scoring_mode?: unknown }|null} */
+  let raw = null;
+  try {
+    const prefs = pageWindow()?.osuCore?.userPreferences;
+    if (prefs && typeof prefs.get === "function") {
+      raw = {
+        legacy_score_only: prefs.get("legacy_score_only"),
+        scoring_mode: prefs.get("scoring_mode"),
+      };
+    }
+  } catch {
+    // Page object unavailable (sandbox wrappers).
+  }
+  if (!raw) {
+    try {
+      const parsed = JSON.parse(
+        pageLocalStorage()?.getItem("userPreferences") ?? "null",
+      );
+      if (parsed && typeof parsed === "object") raw = parsed;
+    } catch {
+      // Unreadable storage.
+    }
+  }
+  const legacyScoreOnly =
+    typeof raw?.legacy_score_only === "boolean"
+      ? raw.legacy_score_only
+      : !isLazerModeEnabledForLeaderboard();
+  const scoringMode =
+    raw?.scoring_mode === "classic" ? "classic" : "standardised";
+  return { legacyScoreOnly, scoringMode };
 }
 
 /** @type {Map<string, number|null>} */

@@ -46,3 +46,36 @@ test("isLazerModeEnabledForLeaderboard reads the toggle in any language (B16)", 
   useDom("<button>nothing</button>");
   assert.equal(isLazerModeEnabledForLeaderboard(), false);
 });
+
+test("readScoreDisplayPrefs follows osu-web's userPreferences (B94)", async () => {
+  const { readScoreDisplayPrefs } =
+    await import("../../src/features/scoreboard/context.js");
+  const win = useDom(toggle("Lazer mode", "fa-square", 1));
+  // osuCore wins over localStorage and the toggle.
+  win.localStorage.setItem(
+    "userPreferences",
+    JSON.stringify({ legacy_score_only: true, scoring_mode: "standardised" }),
+  );
+  const current = { legacy_score_only: false, scoring_mode: "classic" };
+  win.osuCore = { userPreferences: { get: (k) => current[k] } };
+  assert.deepEqual(readScoreDisplayPrefs(), {
+    legacyScoreOnly: false,
+    scoringMode: "classic",
+  });
+  current.scoring_mode = "standardised";
+  assert.equal(readScoreDisplayPrefs().scoringMode, "standardised");
+  // Without osuCore: the localStorage mirror.
+  delete win.osuCore;
+  assert.deepEqual(readScoreDisplayPrefs(), {
+    legacyScoreOnly: true,
+    scoringMode: "standardised",
+  });
+  // Neither: toggle for Lazer mode, osu-web's default scoring mode.
+  win.localStorage.clear();
+  assert.deepEqual(readScoreDisplayPrefs(), {
+    legacyScoreOnly: true,
+    scoringMode: "standardised",
+  });
+  useDom(toggle("Lazer mode", "fa-check-square", 1));
+  assert.equal(readScoreDisplayPrefs().legacyScoreOnly, false);
+});

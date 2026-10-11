@@ -16,11 +16,13 @@ import {
   isFullCombo,
   isPerfectAccuracy,
   leaderboardScoreId,
+  scoreDisplayValues,
   scoreGrade,
 } from "../../osu/score.js";
 import {
   EXTENDED_SCORE_ROW_ATTR,
   getBeatmapPageRuleset,
+  readScoreDisplayPrefs,
   registerRowScore,
   SCORE_USER_SEARCH_RESULT_ATTR,
   SCOREBOARD_CELL_LINK_SEL,
@@ -29,7 +31,6 @@ import {
   WILDCARD_MERGED_ROW_ATTR,
 } from "./context.js";
 import { applyScoreboardModsCell } from "./row-mods.js";
-import { leaderboardTableScoreNumber } from "./sort.js";
 
 /**
  * @param {HTMLTableRowElement} templateRow
@@ -486,8 +487,32 @@ export function applyScoreboardGradeCell(td, refTd, score) {
 }
 
 /**
- * @param {HTMLTableRowElement} tr
+ * The score with the total, accuracy, grade and mods osu-web would show under
+ * the current display preferences (B94): stable values for legacy scores
+ * while Lazer mode is off (CL hidden, like osu-web's `displayMods`).
  * @param {object} score
+ * @param {import("../../osu/score.js").ScoreDisplayPrefs} [prefs]
+ * @returns {object & { oepDisplayTotal: number }}
+ */
+export function scoreAsDisplayed(score, prefs = readScoreDisplayPrefs()) {
+  const dv = scoreDisplayValues(score, prefs, getBeatmapPageRuleset());
+  const shown = {
+    ...score,
+    accuracy: dv.accuracy,
+    rank: dv.rank,
+    oepDisplayTotal: dv.total,
+  };
+  if (dv.legacy && Array.isArray(score.mods)) {
+    shown.mods = score.mods.filter(
+      (m) => (typeof m === "string" ? m : m?.acronym) !== "CL",
+    );
+  }
+  return shown;
+}
+
+/**
+ * @param {HTMLTableRowElement} tr
+ * @param {object} apiScore
  * @param {number} oneBasedRank
  * @param {ReturnType<typeof buildBeatmapScoreboardColumnMap>} colMap
  * @param {HTMLTableElement} table
@@ -496,7 +521,7 @@ export function applyScoreboardGradeCell(td, refTd, score) {
  */
 export function applyApiScoreToBeatmapScoreRow(
   tr,
-  score,
+  apiScore,
   oneBasedRank,
   colMap,
   table,
@@ -505,7 +530,8 @@ export function applyApiScoreToBeatmapScoreRow(
   mapFullCombo,
 ) {
   tr.setAttribute(EXTENDED_SCORE_ROW_ATTR, "1");
-  registerRowScore(tr, score);
+  registerRowScore(tr, apiScore);
+  const score = scoreAsDisplayed(apiScore);
   // Use real table cell indices (works with colspans and hidden columns).
   const tds = [...tr.cells];
   const uid = score.user?.id ?? score.user_id;
@@ -514,8 +540,7 @@ export function applyApiScoreToBeatmapScoreRow(
   const iso = score.ended_at ?? score.created_at ?? "";
   const ruleset = getBeatmapPageRuleset();
 
-  const rawScore = leaderboardTableScoreNumber(score);
-  const scoreStr = Number(rawScore).toLocaleString("en-US");
+  const scoreStr = Number(score.oepDisplayTotal).toLocaleString("en-US");
 
   if (colMap.rank != null) {
     applyScoreboardTextCellLikeRef(

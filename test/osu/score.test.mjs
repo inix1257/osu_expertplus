@@ -517,3 +517,113 @@ test("scoreMergeKey matches _recentScoreMergeKey", () => {
     assert.equal(old(s), expected, `${JSON.stringify(s)} (old)`);
   }
 });
+
+test("legacyAccuracyAndRank matches osu-web's legacy-score-helper (B94)", async () => {
+  const { legacyAccuracyAndRank } = await import("../../src/osu/score.js");
+  const osu = (statistics, extra = {}) => ({
+    ruleset_id: 0,
+    rank: "A",
+    mods: [],
+    statistics,
+    ...extra,
+  });
+  // 98 great, 2 ok: ratio 0.98, no meh, no miss → S
+  let r = legacyAccuracyAndRank(osu({ great: 98, ok: 2 }));
+  assert.equal(r.rank, "S");
+  assert.ok(Math.abs(r.accuracy - (98 * 300 + 2 * 100) / 30000) < 1e-12);
+  assert.equal(
+    legacyAccuracyAndRank(
+      osu({ great: 98, ok: 2 }, { mods: [{ acronym: "HD" }] }),
+    ).rank,
+    "SH",
+  );
+  assert.equal(legacyAccuracyAndRank(osu({ great: 98, miss: 2 })).rank, "A");
+  assert.equal(legacyAccuracyAndRank(osu({ great: 10 })).rank, "X");
+  assert.equal(
+    legacyAccuracyAndRank(osu({ great: 10 }, { rank: "F" })).rank,
+    "F",
+  );
+  assert.deepEqual(legacyAccuracyAndRank(osu({})), { accuracy: 1, rank: "X" });
+  // taiko: ok counts half
+  r = legacyAccuracyAndRank({
+    ruleset_id: 1,
+    statistics: { great: 95, ok: 5 },
+  });
+  assert.equal(r.rank, "S");
+  assert.equal(r.accuracy, (95 * 300 + 5 * 150) / 30000);
+  // fruits: droplets and misses
+  r = legacyAccuracyAndRank({
+    ruleset_id: 2,
+    statistics: {
+      great: 90,
+      large_tick_hit: 5,
+      small_tick_hit: 3,
+      miss: 1,
+      small_tick_miss: 1,
+    },
+  });
+  assert.equal(r.accuracy, 98 / 100);
+  assert.equal(r.rank, "A");
+  // mania: perfect and great both 300
+  r = legacyAccuracyAndRank({
+    ruleset_id: 3,
+    statistics: { perfect: 50, great: 46, good: 4 },
+  });
+  assert.equal(r.accuracy, (96 * 300 + 4 * 200) / 30000);
+  assert.equal(r.rank, "S");
+  // ruleset from the page when the score has none
+  assert.equal(
+    legacyAccuracyAndRank({ statistics: { great: 1 } }, "taiko").rank,
+    "X",
+  );
+  assert.equal(legacyAccuracyAndRank({ statistics: {} }), null);
+});
+
+test("scoreDisplayValues follows osu-web's totalScore/accuracy/rank (B94)", async () => {
+  const { scoreDisplayValues } = await import("../../src/osu/score.js");
+  const stable = {
+    type: "solo_score",
+    ruleset_id: 0,
+    legacy_score_id: 123,
+    legacy_total_score: 141639015,
+    classic_total_score: 141600000,
+    total_score: 1105047,
+    accuracy: 0.98765,
+    rank: "S",
+    mods: [{ acronym: "CL" }],
+    statistics: { great: 90, ok: 10 },
+    is_perfect_combo: true,
+    legacy_perfect: false,
+  };
+  const lazerOnly = { ...stable, legacy_score_id: null, legacy_total_score: 0 };
+  const std = { legacyScoreOnly: false, scoringMode: "standardised" };
+  const classic = { legacyScoreOnly: false, scoringMode: "classic" };
+  const legacy = { legacyScoreOnly: true, scoringMode: "standardised" };
+
+  let v = scoreDisplayValues(stable, std);
+  assert.equal(v.total, 1105047);
+  assert.equal(v.accuracy, 0.9876); // floored like osu-web
+  assert.equal(v.rank, "S");
+  assert.equal(v.perfectCombo, true);
+  assert.equal(v.legacy, false);
+  assert.equal(scoreDisplayValues(stable, classic).total, 141600000);
+
+  v = scoreDisplayValues(stable, legacy);
+  assert.equal(v.total, 141639015);
+  assert.equal(v.legacy, true);
+  assert.equal(
+    v.accuracy,
+    Math.floor(((90 * 300 + 10 * 100) / 30000) * 10000) / 10000,
+  );
+  assert.equal(v.rank, "A"); // ratio 0.9 is not > 0.9
+  assert.equal(v.perfectCombo, false);
+
+  // lazer-only scores ignore Lazer mode off
+  v = scoreDisplayValues(lazerOnly, legacy);
+  assert.equal(v.total, 1105047);
+  assert.equal(v.legacy, false);
+  assert.equal(scoreDisplayValues(lazerOnly, classic).total, 141600000);
+
+  // old-format score: only `score`
+  assert.equal(scoreDisplayValues({ score: 5000 }, classic).total, 5000);
+});

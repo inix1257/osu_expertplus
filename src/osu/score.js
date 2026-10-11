@@ -557,3 +557,159 @@ export function scoreMergeKey(score) {
   }
   return null;
 }
+
+/**
+ * @param {object} score
+ * @returns {boolean}
+ */
+function hasHiddenRankMod(score) {
+  return (Array.isArray(score.mods) ? score.mods : []).some((m) => {
+    const ac = typeof m === "string" ? m : m?.acronym;
+    return ac === "FI" || ac === "FL" || ac === "HD";
+  });
+}
+
+/**
+ * Stable accuracy and grade recomputed from lazer statistics, as osu-web's
+ * `legacyAccuracyAndRank` (resources/js/utils/legacy-score-helper.ts) does
+ * for legacy scores while "Lazer mode" is off.
+ * @param {object} score  lazer-format score (`statistics.great`, `ruleset_id`)
+ * @param {string} [fallbackRuleset]  used when the score has no `ruleset_id`
+ * @returns {{ accuracy: number, rank: string }|null}  null for an unknown ruleset
+ */
+export function legacyAccuracyAndRank(score, fallbackRuleset) {
+  const st =
+    score?.statistics && typeof score.statistics === "object"
+      ? score.statistics
+      : {};
+  const n = (k) => Number(st[k]) || 0;
+  const ruleset =
+    score?.ruleset_id != null
+      ? rulesetFromId(score.ruleset_id)
+      : fallbackRuleset;
+  const failed = scoreGrade(score) === "F";
+  const hidden = hasHiddenRankMod(score);
+  const miss = n("miss");
+  const great = n("great");
+  const ratioRank = (ratioGreat, sCondition) => {
+    if (ratioGreat === 1) return hidden ? "XH" : "X";
+    if (ratioGreat > 0.9 && sCondition && miss === 0)
+      return hidden ? "SH" : "S";
+    if ((ratioGreat > 0.8 && miss === 0) || ratioGreat > 0.9) return "A";
+    if ((ratioGreat > 0.7 && miss === 0) || ratioGreat > 0.8) return "B";
+    if (ratioGreat > 0.6) return "C";
+    return "D";
+  };
+  const accRank = (acc, s, a, b, c) => {
+    if (acc === 1) return hidden ? "XH" : "X";
+    if (acc > s) return hidden ? "SH" : "S";
+    if (acc > a) return "A";
+    if (acc > b) return "B";
+    if (acc > c) return "C";
+    return "D";
+  };
+  let accuracy;
+  let rank;
+  switch (ruleset) {
+    case "osu": {
+      const meh = n("meh");
+      const total = meh + n("ok") + great + miss;
+      accuracy =
+        total > 0
+          ? (meh * 50 + n("ok") * 100 + great * 300) / (total * 300)
+          : 1;
+      const ratioGreat = total > 0 ? great / total : 1;
+      const ratioMeh = total > 0 ? meh / total : 1;
+      rank = ratioRank(ratioGreat, ratioMeh <= 0.01);
+      break;
+    }
+    case "taiko": {
+      const total = n("ok") + great + miss;
+      accuracy = total > 0 ? (n("ok") * 150 + great * 300) / (total * 300) : 1;
+      rank = ratioRank(total > 0 ? great / total : 1, true);
+      break;
+    }
+    case "fruits": {
+      const hit = n("small_tick_hit") + n("large_tick_hit") + great;
+      const total = hit + miss + n("small_tick_miss");
+      accuracy = total > 0 ? hit / total : 1;
+      rank = accRank(accuracy, 0.98, 0.94, 0.9, 0.85);
+      break;
+    }
+    case "mania": {
+      const total =
+        n("perfect") + n("good") + n("ok") + n("meh") + great + miss;
+      accuracy =
+        total > 0
+          ? ((great + n("perfect")) * 300 +
+              n("good") * 200 +
+              n("ok") * 100 +
+              n("meh") * 50) /
+            (total * 300)
+          : 1;
+      rank = accRank(accuracy, 0.95, 0.9, 0.8, 0.7);
+      break;
+    }
+    default:
+      return null;
+  }
+  return { accuracy, rank: failed ? "F" : rank };
+}
+
+/**
+ * osu-web's score display preferences (`osuCore.userPreferences`).
+ * @typedef {object} ScoreDisplayPrefs
+ * @property {boolean} legacyScoreOnly  "Lazer mode" off
+ * @property {"classic"|"standardised"} scoringMode
+ */
+
+/**
+ * Total score, accuracy, grade and perfect-combo flag the way osu-web shows a
+ * score (resources/js/utils/score-helper.ts `totalScore`, `accuracy`, `rank`,
+ * `isPerfectCombo`, `displayMods`): legacy scores use their stable values
+ * while Lazer mode is off; otherwise the total follows `scoring_mode`.
+ * Old-format scores (`score`, no `total_score`) fall back to what they have.
+ * @param {object} score
+ * @param {ScoreDisplayPrefs} prefs
+ * @param {string} [fallbackRuleset]
+ * @returns {{ total: number, accuracy: unknown, rank: string, perfectCombo: boolean, legacy: boolean }}
+ */
+export function scoreDisplayValues(score, prefs, fallbackRuleset) {
+  const nz = (v) => {
+    const x = Number(v);
+    return Number.isFinite(x) && x > 0 ? x : 0;
+  };
+  const legacy = !!prefs?.legacyScoreOnly && score?.legacy_score_id != null;
+  let total = 0;
+  if (legacy) total = nz(score.legacy_total_score);
+  else if (
+    prefs?.scoringMode === "classic" &&
+    (score?.type == null || score.type === "solo_score")
+  ) {
+    total = nz(score?.classic_total_score);
+  }
+  if (!total) {
+    total =
+      nz(score?.total_score) ||
+      nz(score?.classic_total_score) ||
+      nz(score?.legacy_total_score) ||
+      nz(score?.score);
+  }
+  let accuracy = score?.accuracy;
+  let rank = scoreGrade(score);
+  const legacyAcc = legacy
+    ? legacyAccuracyAndRank(score, fallbackRuleset)
+    : null;
+  if (legacyAcc) {
+    accuracy = legacyAcc.accuracy;
+    rank = legacyAcc.rank;
+  }
+  // osu-web floors to 0.01% like the client (FormatUtils).
+  const accN = Number(accuracy);
+  if (accuracy != null && accuracy !== "" && Number.isFinite(accN) && accN <= 1)
+    accuracy = Math.floor(accN * 10000) / 10000;
+  const perfectCombo = legacy
+    ? score.legacy_perfect === true
+    : scoreIndicatesPerfectCombo(score);
+  return { total, accuracy, rank, perfectCombo, legacy };
+}
