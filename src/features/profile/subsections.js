@@ -18,6 +18,7 @@ import {
   RECENT_FAILS_HEADER_CLASS,
   RECENT_FAILS_WRAP_CLASS,
 } from "./recent-scores/common.js";
+import { _getSectionType } from "./score-rows.js";
 /** Same as section collapse `SECTION_COLLAPSE_SUBTITLE_SELECTOR` (defined below). */
 const PROFILE_PAGE_SUBTITLE_H3_SELECTOR = SUBSECTION_TITLE_SEL;
 /** osu `ProfileExtraPage` ids (`data-page-id`) where we skip h3 subsection UI (single block, no sub-titles). */
@@ -152,9 +153,9 @@ const subsectionCollapseStyle = manageStyle(
 );
 
 /**
- * Legacy subsection key, only used to migrate old collapse state. It must
- * reproduce keys written by older versions exactly, so keep the regex as is
- * (the doubled `'` was never `’`; B74).
+ * Title slug, deduplicated within a page. Old keys were made from the full
+ * title text with it and are migrated, so keep the regex as is (the doubled
+ * `'` was never `’`; B74). Current keys use it on the title without its count.
  * @param {string} text
  * @param {Set<string>} usedSlugs
  * @returns {string}
@@ -369,21 +370,63 @@ function teardownProfileSubsectionCollapse() {
 }
 
 /**
- * The storage key of a subsection, plus older keys to migrate from.
+ * The title's own text: without the count pill and our toggle.
+ * @param {HTMLElement} h3
+ */
+function subsectionTitleText(h3) {
+  const copy = /** @type {HTMLElement} */ (h3.cloneNode(true));
+  copy.querySelectorAll(".title__count, button").forEach((n) => n.remove());
+  return String(copy.textContent || "").trim();
+}
+
+/**
+ * A language-independent name for a score list subsection: "recent" for
+ * osu-web's Recent Plays and our Recent list, otherwise the list type
+ * (pinned, best, firsts, most_watched) or osu-web's show-more modifier.
+ * @param {HTMLElement} h3
+ * @returns {string|null}
+ */
+function subsectionContentName(h3) {
+  if (h3.closest(`.${RECENT_FAILS_HEADER_CLASS}`)) return "recent";
+  for (const body of collectSubsectionBodyElements(h3)) {
+    const list = body.matches(".play-detail-list")
+      ? body
+      : body.querySelector(".play-detail-list");
+    if (!(list instanceof HTMLElement)) continue;
+    if (
+      list.closest(`.${RECENT_FAILS_WRAP_CLASS}`) ||
+      (list.classList.contains("u-relative") &&
+        list.closest('[data-page-id="historical"]'))
+    ) {
+      return "recent";
+    }
+    const type = _getSectionType(list);
+    if (type) return type;
+  }
+  return subsectionNamedModifierFromFollowingContent(h3);
+}
+
+/**
+ * The storage key of a subsection, plus older keys to migrate from (B47).
+ * Score lists are keyed by what they are; other subsections by their title
+ * without the count (so the key follows the site language, but never another
+ * subsection). Titles Expert+ adds and subsections osu-web renders only with
+ * data used to shift the old index keys (`sub_N`), which are migrated here.
  * @param {string} pageId
  * @param {HTMLElement} h3
- * @param {{ index: number, legacySlugs: Set<string> }} pass  per-page counters
+ * @param {{ index: number, legacySlugs: Set<string>, titleSlugs: Set<string> }} pass
+ *   per-page counters
  * @returns {{ key: string, label: string, olderKeys: string[] }}
  */
 function subsectionKeys(pageId, h3, pass) {
   const label = String(h3.textContent || "").trim() || pageId;
   const legacyKey = `${pageId}::${subsectionSlugFromTitle(label, pass.legacySlugs)}`;
-  const namedMod = subsectionNamedModifierFromFollowingContent(h3);
-  const key = namedMod
-    ? `${pageId}::${namedMod}`
-    : `${pageId}::sub_${pass.index}`;
+  const indexKey = `${pageId}::sub_${pass.index}`;
   pass.index += 1;
-  return { key, label, olderKeys: [legacyKey] };
+  const name =
+    subsectionContentName(h3) ??
+    subsectionSlugFromTitle(subsectionTitleText(h3) || pageId, pass.titleSlugs);
+  return { key: `${pageId}::${name}`, label, olderKeys: [legacyKey, indexKey] };
 }
 
 /**
@@ -448,7 +491,7 @@ function syncPageSubsections(pageEl, collapsedSet, signal) {
   const pageId = pageEl.getAttribute("data-page-id");
   if (!pageId) return false;
   if (PROFILE_SUBSECTION_SKIP_PAGE_IDS.has(pageId)) return false;
-  const pass = { index: 0, legacySlugs: new Set() };
+  const pass = { index: 0, legacySlugs: new Set(), titleSlugs: new Set() };
   let migrationDirty = false;
   for (const h3 of pageEl.querySelectorAll(PROFILE_PAGE_SUBTITLE_H3_SELECTOR)) {
     if (!(h3 instanceof HTMLElement)) continue;

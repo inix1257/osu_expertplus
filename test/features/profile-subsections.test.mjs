@@ -155,3 +155,52 @@ test("B85: a subsection's body stops at our Recent list", async () => {
     stop();
   }
 });
+
+test("B47: keys follow the subsection, not its position", async () => {
+  reset(`<div class="js-sortable--page" data-page-id="historical">
+      <h3 class="title title--page-extra-small">Most Played Beatmaps<span class="title__count">11</span></h3>
+      <div class="most-played">x</div>
+      <div class="oep-recent-scores-with-fails">
+        <div class="oep-recent-fails-header"><h3 class="title title--page-extra-small">Recent scores</h3></div>
+        <div class="play-detail-list">r</div>
+      </div>
+      <h3 class="title title--page-extra-small">Most Watched Replays<span class="title__count">10</span></h3>
+      <div class="play-detail-list">w</div>
+    </div>`);
+  const stop = startProfileSubsectionCollapseManager();
+  try {
+    assert.deepEqual(toggles(), [
+      "historical::most_played_beatmaps",
+      "historical::recent",
+      "historical::most_watched",
+    ]);
+  } finally {
+    stop();
+  }
+});
+
+test("B47: old index keys move to the subsection now at that index", async () => {
+  reset(
+    page("beatmaps", [
+      ["Favourite Beatmaps", "5", "page-extra__beatmapsets"],
+      ["Graveyarded Beatmaps", "42", "page-extra__beatmapsets"],
+    ]),
+    { "beatmaps::sub_1": true, "other::x": true },
+  );
+  const stop = startProfileSubsectionCollapseManager();
+  try {
+    assert.deepEqual(stored(), {
+      "other::x": true,
+      "beatmaps::graveyarded_beatmaps": true,
+    });
+    const bodies = [...doc.querySelectorAll("h3 + div")];
+    assert.deepEqual(
+      bodies.map((b) =>
+        b.classList.contains("oep-profile-subsection-body--collapsed-hidden"),
+      ),
+      [false, true],
+    );
+  } finally {
+    stop();
+  }
+});
