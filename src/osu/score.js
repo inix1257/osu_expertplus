@@ -377,6 +377,43 @@ export function hitstatValue(label, score, options = {}) {
 }
 
 /**
+ * Text for a scoreboard hit-stat column osu-web marks with
+ * `beatmap-scoreboard-table__header--hit-<attribute>` (B95). The attribute is
+ * the lazer statistic osu-web shows there (`score-helper.ts`
+ * `scoreStatisticsMapping`); a statistic the score leaves out is 0, and the
+ * fruits miss column is `miss + large_tick_miss` like osu-web's. Legacy
+ * (`count_*`) statistics are mapped per ruleset.
+ * @param {string} attribute  e.g. `great`, `perfect`, `small_tick_miss`
+ * @param {object|null|undefined} score  API score (or a bare statistics object)
+ * @param {string} ruleset
+ * @returns {string|null}  null for an attribute this cannot map
+ */
+export function hitstatValueForAttribute(attribute, score, ruleset) {
+  const st =
+    score?.statistics && typeof score.statistics === "object"
+      ? score.statistics
+      : score && typeof score === "object"
+        ? score
+        : {};
+  const n = (k) => {
+    const v = Number(st[k] ?? 0);
+    return Number.isFinite(v) ? v : 0;
+  };
+  const attr = String(attribute);
+  if (LAZER_ANY_KEYS.some((k) => st[k] != null)) {
+    if (ruleset === "fruits" && attr === "miss") {
+      return String(n("miss") + n("large_tick_miss"));
+    }
+    return /^[a-z_]+$/.test(attr) ? String(n(attr)) : null;
+  }
+  if (ruleset === "fruits" && attr === "small_tick_miss") {
+    return String(firstNum(st, "count_katu", "countkatu"));
+  }
+  const norm = normalizeStatistics(st, ruleset, { legacyOsuGreat: "300" });
+  return Object.hasOwn(norm, attr) ? String(norm[attr]) : null;
+}
+
+/**
  * Scoreboard colour class for a hit-stat header label, or ""
  * (beatmap-detail `beatmapHitstatColorClassFromLabel`).
  * @param {string} label

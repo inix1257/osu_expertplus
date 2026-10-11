@@ -9,6 +9,7 @@ import {
   formatAccuracy,
   formatCombo,
   hitstatValue,
+  hitstatValueForAttribute,
   leaderboardScoreId,
   scoreGrade,
 } from "../../osu/score.js";
@@ -123,15 +124,17 @@ function rowHitValuesByName(row) {
 }
 
 /**
- * An API score's count for an osu-web hit result name: the lazer statistic
- * of that name, else the scoreboard label rules (legacy `count_*` fields).
+ * An API score's count for an osu-web hit result name, as the table column
+ * shows it ({@link hitstatValueForAttribute}), else the scoreboard label rules.
  * @param {string} name
  * @param {object} score
  */
 function apiHitValue(name, score) {
-  const v = score?.statistics?.[name];
-  if (v != null && v !== "" && Number.isFinite(Number(v))) return String(v);
-  return hitstatValue(name, score, { ruleset: getBeatmapPageRuleset() });
+  const ruleset = getBeatmapPageRuleset();
+  return (
+    hitstatValueForAttribute(name, score, ruleset) ??
+    hitstatValue(name, score, { ruleset })
+  );
 }
 
 /**

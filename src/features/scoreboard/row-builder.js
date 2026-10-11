@@ -13,6 +13,7 @@ import {
   formatAccuracy,
   formatCombo,
   hitstatValue,
+  hitstatValueForAttribute,
   isFullCombo,
   isPerfectAccuracy,
   leaderboardScoreId,
@@ -31,6 +32,9 @@ import {
   WILDCARD_MERGED_ROW_ATTR,
 } from "./context.js";
 import { applyScoreboardModsCell } from "./row-mods.js";
+
+/** osu-web's hit-stat header class: `…__header--hit-<statistic>`. */
+const HEADER_HIT_ATTR_RE = /\bbeatmap-scoreboard-table__header--hit-([a-z_]+)/;
 
 /**
  * @param {HTMLTableRowElement} templateRow
@@ -411,6 +415,8 @@ function computeColumnMap(templateRow, table, ths) {
   const hitstatIndices = [];
   /** @type {Record<number, string>} */
   const hitstatLabelsByIndex = {};
+  /** @type {Record<number, string>} osu-web `__header--hit-<attribute>` (B95) */
+  const hitstatAttrsByIndex = {};
   ths.forEach((th) => {
     // osu-web uses `hitstat`-related header classes but the exact class
     // token isn't consistent across themes/skins, so match by substring.
@@ -421,6 +427,8 @@ function computeColumnMap(templateRow, table, ths) {
       const cellIndex = th.cellIndex;
       hitstatIndices.push(cellIndex);
       hitstatLabelsByIndex[cellIndex] = inferHitstatLabelFromTh(th);
+      const attr = HEADER_HIT_ATTR_RE.exec(th.className)?.[1];
+      if (attr) hitstatAttrsByIndex[cellIndex] = attr;
     }
   });
 
@@ -461,7 +469,7 @@ function computeColumnMap(templateRow, table, ths) {
     if (i >= 0) map.mods = i;
   }
 
-  return { ...map, hitstatIndices, hitstatLabelsByIndex };
+  return { ...map, hitstatIndices, hitstatLabelsByIndex, hitstatAttrsByIndex };
 }
 
 /**
@@ -608,11 +616,13 @@ export function applyApiScoreToBeatmapScoreRow(
 
   for (const i of colMap.hitstatIndices || []) {
     const label = colMap.hitstatLabelsByIndex?.[i] ?? "";
+    const attr = colMap.hitstatAttrsByIndex?.[i];
     const refHit = scoreboardRefTd(templateRow, i);
     applyScoreboardTextCellLikeRef(
       tds[i],
       refHit,
-      hitstatValue(label, score, { ruleset }),
+      (attr ? hitstatValueForAttribute(attr, score, ruleset) : null) ??
+        hitstatValue(label, score, { ruleset }),
     );
   }
 

@@ -11,8 +11,11 @@ function setup(html) {
     "document",
     "location",
     "HTMLElement",
-    "HTMLTableRowElement",
+    "Node",
     "OsuExpertPlus",
+    ...Object.getOwnPropertyNames(window).filter((k) =>
+      /^HTML\w*Element$/.test(k),
+    ),
   ]) {
     Object.defineProperty(globalThis, key, {
       value: key === "window" ? window : window[key],
@@ -105,4 +108,93 @@ test("mod template from the filter strip loses its filter state (B18)", () => {
   );
   // The template button keeps its state.
   assert.equal(template.hasAttribute("disabled"), true);
+});
+
+/**
+ * @param {string[]} attrs  osu-web hit-stat header attributes
+ * @param {string} hash
+ */
+function hitTable(attrs, hash) {
+  const doc = setup(`
+    <table><thead><tr>
+      <th class="beatmap-scoreboard-table__header beatmap-scoreboard-table__header--rank">Rank</th>
+      ${attrs
+        .map(
+          (a) =>
+            `<th class="beatmap-scoreboard-table__header beatmap-scoreboard-table__header--hitstat beatmap-scoreboard-table__header--hit-${a}">${a}</th>`,
+        )
+        .join("")}
+    </tr></thead><tbody>
+      <tr class="beatmap-scoreboard-table__body-row"><td>#1</td>${attrs
+        .map(() => "<td>9</td>")
+        .join("")}</tr>
+    </tbody></table>`);
+  doc.location.hash = hash;
+  return doc;
+}
+
+test("injected hit stats follow osu-web's header attributes (B95)", async () => {
+  const { buildBeatmapScoreboardColumnMap, applyApiScoreToBeatmapScoreRow } =
+    await import("../../src/features/scoreboard/row-builder.js");
+  const fill = (doc, score) => {
+    const table = doc.querySelector("table");
+    const template = table.tBodies[0].rows[0];
+    const tr = template.cloneNode(true);
+    const colMap = buildBeatmapScoreboardColumnMap(template, table);
+    applyApiScoreToBeatmapScoreRow(tr, score, 2, colMap, table, template, null);
+    return [...tr.cells].slice(1).map((c) => c.textContent);
+  };
+
+  // mania lazer statistics leave out zero keys (241526 [7K] Another, OutLast)
+  const mania = ["perfect", "great", "good", "ok", "meh", "miss"];
+  assert.deepEqual(
+    fill(hitTable(mania, "#mania/557819"), {
+      ruleset_id: 3,
+      statistics: { perfect: 2478, great: 125, miss: 1 },
+    }),
+    ["2478", "125", "0", "0", "0", "1"],
+  );
+  // legacy mania counts
+  assert.deepEqual(
+    fill(hitTable(mania, "#mania/557819"), {
+      statistics: {
+        count_geki: 10,
+        count_300: 5,
+        count_katu: 4,
+        count_100: 3,
+        count_50: 2,
+        count_miss: 1,
+      },
+    }),
+    ["10", "5", "4", "3", "2", "1"],
+  );
+
+  // fruits leaderboard: great / l drp / s drp miss / miss (+ large_tick_miss)
+  const fruits = ["great", "large_tick_hit", "small_tick_miss", "miss"];
+  assert.deepEqual(
+    fill(hitTable(fruits, "#fruits/2"), {
+      ruleset_id: 2,
+      statistics: {
+        great: 800,
+        large_tick_hit: 40,
+        small_tick_hit: 300,
+        small_tick_miss: 7,
+        miss: 2,
+        large_tick_miss: 3,
+      },
+    }),
+    ["800", "40", "7", "5"],
+  );
+  assert.deepEqual(
+    fill(hitTable(fruits, "#fruits/2"), {
+      statistics: {
+        count_300: 800,
+        count_100: 40,
+        count_50: 300,
+        count_katu: 7,
+        count_miss: 5,
+      },
+    }),
+    ["800", "40", "7", "5"],
+  );
 });
