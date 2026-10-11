@@ -144,6 +144,25 @@ function replaceNativeRows(tbody) {
 }
 
 /**
+ * While a merged leaderboard is shown, osu-web rows that appear later (a
+ * cached board with more rows, B101) are hidden like the ones that were
+ * there when it was rendered. Runs in every refresh pass.
+ * @param {HTMLElement|null|undefined} scoreboardRoot
+ */
+export function syncMergedNativeRowsHidden(scoreboardRoot) {
+  const found = findScoreboardTable(scoreboardRoot);
+  if (!found) return;
+  const mergedSel = Object.values(MERGED_ROW_ATTRS)
+    .map((attr) => `tr[${attr}]`)
+    .join(", ");
+  if (!found.tbody.querySelector(mergedSel)) return;
+  for (const row of found.tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
+    if (row.matches(mergedSel)) continue;
+    setRowHidden(row, "merged", true);
+  }
+}
+
+/**
  * A merged leaderboard with a message instead of scores (no scores, or the
  * fetch failed): osu-web's rows stay hidden, since they answer a different
  * query.

@@ -4,6 +4,7 @@
  */
 
 import { syncBeatmapScoreboardGlobalRanks } from "./global-rank.js";
+import { syncMergedNativeRowsHidden } from "./merged-leaderboard.js";
 import {
   applyRateEditMarkingToScoreboardRows,
   syncBeatmapRateEditFilterBarVisibility,
@@ -26,6 +27,7 @@ import { refreshBeatmapScoreTopPanel } from "./top-panel.js";
  * @param {HTMLElement|null|undefined} scoreboardRoot
  */
 export function refreshBeatmapScoreboardTableEnhancements(scoreboardRoot) {
+  syncMergedNativeRowsHidden(scoreboardRoot);
   syncBeatmapScoreboardPpDecimals(scoreboardRoot);
   syncBeatmapScoreboardHitstatColors(scoreboardRoot);
   syncBeatmapScoreboardPpValueColor(scoreboardRoot);

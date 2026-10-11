@@ -115,3 +115,41 @@ test("an empty merge shows a notice instead of the previous rows (B11)", () => {
     "osu-web row shown again",
   );
 });
+
+test("osu-web rows added under a merged board stay hidden (B101)", async () => {
+  const { syncMergedNativeRowsHidden } =
+    await import("../../src/features/scoreboard/merged-leaderboard.js");
+  window.document.body.innerHTML = `
+    <div class="beatmapset-scoreboard">
+      <table class="beatmap-scoreboard-table__table">
+        <tbody class="beatmap-scoreboard-table__body">
+          <tr class="beatmap-scoreboard-table__body-row" data-oep-user-search-result="1"><td>lookup</td></tr>
+          <tr class="beatmap-scoreboard-table__body-row" data-oep-hide="merged"><td>native 1</td></tr>
+        </tbody>
+      </table>
+    </div>`;
+  const root = window.document.querySelector(".beatmapset-scoreboard");
+  const tbody = window.document.querySelector("tbody");
+  // A cached board with more rows: osu-web appends one.
+  tbody.insertAdjacentHTML(
+    "beforeend",
+    '<tr class="beatmap-scoreboard-table__body-row"><td>native 2</td></tr>',
+  );
+  syncMergedNativeRowsHidden(root);
+  assert.deepEqual(
+    [...tbody.rows].map((r) => isScoreboardRowHidden(r, "merged")),
+    [false, true, true],
+  );
+
+  // Without merged rows nothing is hidden.
+  clearMergedLeaderboard(root, "lookup");
+  tbody.insertAdjacentHTML(
+    "beforeend",
+    '<tr class="beatmap-scoreboard-table__body-row"><td>native 3</td></tr>',
+  );
+  syncMergedNativeRowsHidden(root);
+  assert.deepEqual(
+    [...tbody.rows].map((r) => isScoreboardRowHidden(r)),
+    [false, false, false],
+  );
+});
