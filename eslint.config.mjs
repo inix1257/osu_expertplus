@@ -34,7 +34,6 @@ export default [
   {
     ignores: [
       "dist/",
-      "web.js",
       "docs/",
       "node_modules/",
       "test/fixtures/legacy/",

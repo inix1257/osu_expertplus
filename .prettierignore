@@ -1,6 +1,5 @@
 dist/
 docs/
 node_modules/
-web.js
 package-lock.json
 test/fixtures/legacy/
