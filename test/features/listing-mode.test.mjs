@@ -102,3 +102,38 @@ test("B67: waits for the React root before applying the saved ruleset", async ()
     stop();
   }
 });
+
+test("B99: applying the saved ruleset replaces the history entry", () => {
+  gmStore.set(KEY, "1");
+  window.document.body.innerHTML = ROOT + GRID;
+  const calls = [];
+  const history = {
+    push(location) {
+      calls.push(["push", String(location)]);
+    },
+    replace(location) {
+      calls.push(["replace", String(location)]);
+    },
+  };
+  window.Turbo = { session: { history } };
+  // osu-web's filter click pushes the new search URL synchronously.
+  for (const a of window.document.querySelectorAll(".mode")) {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      window.Turbo.session.history.push(
+        `/beatmapsets?m=${a.dataset.filterValue}`,
+      );
+    });
+  }
+  try {
+    const stop = startPageBehavior();
+    stop();
+    assert.deepEqual(calls, [["replace", "/beatmapsets?m=1"]]);
+    // Only that click: later filter clicks push as usual.
+    window.document.querySelector(".mode[data-filter-value='3']").click();
+    assert.deepEqual(calls.at(-1), ["push", "/beatmapsets?m=3"]);
+    assert.equal(Object.hasOwn(history, "push"), true);
+  } finally {
+    delete window.Turbo;
+  }
+});

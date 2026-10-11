@@ -4,6 +4,7 @@
  */
 
 import { observe } from "../core/observe.js";
+import { exposeToPage, pageWindow } from "../core/page-window.js";
 import { isBeatmapsetsListing } from "../core/routes.js";
 import { KEYS, getString, setString } from "../core/storage.js";
 
@@ -125,6 +126,38 @@ export function installLinkPatcher() {
  * Listing page: apply saved mode when URL has no `m`, and record filter clicks.
  * @returns {() => void}
  */
+/**
+ * Clicks an osu-web filter link without adding a history entry (B99).
+ * osu-web's filter click pushes the new search URL synchronously
+ * (`updateHistory(url, "push")` → `Turbo.session.history.push`); for this
+ * click it replaces the current entry instead, so Back leaves the listing
+ * in one step. Without Turbo it is a plain click.
+ * @param {HTMLElement} el
+ */
+function clickReplacingHistory(el) {
+  let history = null;
+  try {
+    history = pageWindow()?.Turbo?.session?.history ?? null;
+  } catch {
+    history = null;
+  }
+  const push = history?.push;
+  if (typeof push !== "function" || typeof history.replace !== "function") {
+    el.click();
+    return;
+  }
+  const ownPush = Object.hasOwn(history, "push");
+  history.push = exposeToPage(function (location, restorationIdentifier) {
+    return history.replace(location, restorationIdentifier);
+  }, history);
+  try {
+    el.click();
+  } finally {
+    if (ownPush) history.push = push;
+    else delete history.push;
+  }
+}
+
 export function startPageBehavior() {
   const ac = new AbortController();
   let applied = false;
@@ -152,7 +185,7 @@ export function startPageBehavior() {
     }
     const el = findModeFilterItem(pref);
     if (!el) return;
-    el.click();
+    clickReplacingHistory(el);
     applied = true;
   };
 
