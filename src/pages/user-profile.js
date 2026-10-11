@@ -69,9 +69,24 @@ function init(_match) {
   safeStart(bag, startProfileBadgesCollapseManager, "badges collapse");
   safeStart(bag, startProfileSectionCollapseManager, "section collapse");
   safeStart(bag, startProfileSubsectionCollapseManager, "subsection collapse");
-  safeStart(bag, startBbcodeHelperManager, "BBCode helper");
-  safeStart(bag, startProfileMediaOpenPictureManager, "media buttons");
-  safeStart(bag, startUserpageExpandManager, "userpage expand");
+  mountSettingFeature(
+    bag,
+    settings,
+    settings.IDS.BBCODE_HELPER,
+    startBbcodeHelperManager,
+  );
+  mountSettingFeature(
+    bag,
+    settings,
+    settings.IDS.PROFILE_MEDIA_OPEN_BUTTONS,
+    startProfileMediaOpenPictureManager,
+  );
+  mountSettingFeature(
+    bag,
+    settings,
+    settings.IDS.USERPAGE_EXPAND,
+    startUserpageExpandManager,
+  );
 
   // The router fires on pushState, before the new profile is rendered: wait for
   // the page's own data so scores are never fetched for the previous ruleset.
@@ -84,10 +99,11 @@ function init(_match) {
       if (isOwnProfile) {
         safeStart(bag, startContentsReorderManager, "contents reorder");
       }
-      safeStart(
+      mountSettingFeature(
         bag,
+        settings,
+        settings.IDS.RECENT_SCORES_WITH_FAILS,
         () => startRecentScoresWithFailsObserver(userId, mode),
-        "Recent scores",
       );
       return initScoreFeatures(userId, mode, scoreRun);
     })

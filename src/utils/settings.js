@@ -93,6 +93,38 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
+      id: "userProfile.recentScoresWithFails",
+      label: "Expert+ Recent scores (with failed scores)",
+      description:
+        "On the Historical tab, replaces osu!’s Recent plays with Expert+’s list from the API: failed scores (Show failed scores), hit statistics, pp decimals, place numbers and a score options menu. Turning it off takes full effect after reloading the profile.",
+      group: "User Profile",
+      default: true,
+    },
+    {
+      id: "userProfile.bbcodeHelper",
+      label: "BBCode helper in the me! editor",
+      description:
+        "When editing your me! page: a BBCode toolbar (formatting, colour and size pickers, imagemap editor) and a live preview.",
+      group: "User Profile",
+      default: true,
+    },
+    {
+      id: "userProfile.mediaOpenButtons",
+      label: "Open avatar and banner images",
+      description:
+        "On user profiles, adds buttons over the avatar and the cover banner that open the full-size image in a new tab.",
+      group: "User Profile",
+      default: true,
+    },
+    {
+      id: "userProfile.userpageExpand",
+      label: "Expand long me! pages",
+      description:
+        "On user profiles, lets a long me! page expand to its full height instead of scrolling inside its box.",
+      group: "User Profile",
+      default: true,
+    },
+    {
       id: "userProfile.profileSectionCollapseRemoveFromPage",
       label: "Hide collapsed profile sections",
       description:
@@ -153,6 +185,22 @@ OsuExpertPlus.settings = (() => {
       label: "Gameplay preview on beatmap info",
       description:
         "On beatmapset info pages, adds an expandable osu!standard gameplay preview (osu-beatmap-renderer + PixiJS loaded from jsDelivr when you open it). Uses the site preview MP3.",
+      group: "Beatmap Detail",
+      default: true,
+    },
+    {
+      id: "beatmapDetail.backgroundButton",
+      label: "Open background button on beatmapset pages",
+      description:
+        "On beatmapset pages, adds a square header button that opens the full-size beatmap background (assets.ppy.sh) in a new tab.",
+      group: "Beatmap Detail",
+      default: true,
+    },
+    {
+      id: "beatmapDetail.mp3DownloadButton",
+      label: "MP3 download button on beatmapset pages",
+      description:
+        "On beatmapset pages, adds a square header button that downloads the song as MP3 from osu.ppyd.sh, a third-party site not run by ppy.",
       group: "Beatmap Detail",
       default: true,
     },
@@ -345,6 +393,10 @@ OsuExpertPlus.settings = (() => {
     PROFILE_SECTION_COLLAPSE_REMOVE_FROM_PAGE:
       "userProfile.profileSectionCollapseRemoveFromPage",
     RECENT_SCORES_SHOW_FAILS: "userProfile.recentScoresShowFails",
+    RECENT_SCORES_WITH_FAILS: "userProfile.recentScoresWithFails",
+    BBCODE_HELPER: "userProfile.bbcodeHelper",
+    PROFILE_MEDIA_OPEN_BUTTONS: "userProfile.mediaOpenButtons",
+    USERPAGE_EXPAND: "userProfile.userpageExpand",
     METADATA_DESCRIPTION_MODAL_BUTTONS:
       "beatmapDetail.metadataDescriptionModalButtons",
     DISCUSSION_DEFAULT_TO_TOTAL: "beatmapDetail.discussionDefaultToTotal",
@@ -353,6 +405,8 @@ OsuExpertPlus.settings = (() => {
     BEATMAPSET_PREVIEW_AUDIO_BUTTON:
       "beatmapDetail.beatmapsetPreviewAudioButton",
     BEATCONNECT_DOWNLOAD_BUTTON: "beatmapDetail.beatconnectDownloadButton",
+    BACKGROUND_BUTTON: "beatmapDetail.backgroundButton",
+    MP3_DOWNLOAD_BUTTON: "beatmapDetail.mp3DownloadButton",
     API_EXTENDED_LEADERBOARD: "beatmapDetail.apiExtendedLeaderboard",
     SCOREBOARD_MOD_GRID: "beatmapDetail.scoreboardModGrid",
     SCOREBOARD_HIDE_CUSTOM_RATE_SCORES:

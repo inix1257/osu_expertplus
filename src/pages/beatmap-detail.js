@@ -133,15 +133,13 @@ async function init(match, ctx = {}) {
     /* beatmapset info column not present (layout edge case), or page left */
   }
 
-  safeStart(
-    bag,
-    () => mountBeatmapsetBackgroundButton(header, beatmapsetId),
-    "background button",
+  mountSettingFeature(bag, settings, IDS.BACKGROUND_BUTTON, () =>
+    onPage()
+      ? mountBeatmapsetBackgroundButton(header, beatmapsetId)
+      : undefined,
   );
-  safeStart(
-    bag,
-    () => mountBeatmapsetMp3Button(header, beatmapsetId),
-    "MP3 button",
+  mountSettingFeature(bag, settings, IDS.MP3_DOWNLOAD_BUTTON, () =>
+    onPage() ? mountBeatmapsetMp3Button(header, beatmapsetId) : undefined,
   );
   mountSettingFeature(bag, settings, IDS.BEATMAPSET_PREVIEW_AUDIO_BUTTON, () =>
     onPage()

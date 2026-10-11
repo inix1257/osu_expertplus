@@ -204,7 +204,8 @@ export function mountBeatmapsetBackgroundButton(header, beatmapsetId) {
 
 /**
  * "Download MP3" square after the background one. The link goes to the
- * third-party osu.ppyd.sh (D6, B66).
+ * third-party osu.ppyd.sh, so it has its own setting and says so in its
+ * tooltip (D6, B66).
  * @param {HTMLElement} header  `.beatmapset-header`
  * @param {string} beatmapsetId
  * @returns {(() => void)|undefined}
@@ -216,7 +217,7 @@ export function mountBeatmapsetMp3Button(header, beatmapsetId) {
   const mp3Link = squareLink({
     name: "mp3",
     href: `https://osu.ppyd.sh/beatmapsets/${encodeURIComponent(String(beatmapsetId))}/download`,
-    title: "Download MP3",
+    title: "Download MP3 (osu.ppyd.sh, third-party)",
     icon: "fa-music",
   });
   insertSquare(buttons, mp3Link, ["bg"]);
