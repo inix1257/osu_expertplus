@@ -29,11 +29,15 @@ function setPreferredMode(m) {
   }
 }
 
-function hasAdvancedBeatmapSearch() {
-  const el = document.querySelector(
-    '.js-react[data-react="beatmaps"][data-advanced-search="1"]',
-  );
-  return el != null;
+/**
+ * The listing's React root: `null` until osu-web renders it, then whether it
+ * has the advanced search (which holds the ruleset filter).
+ * @returns {boolean|null}
+ */
+function advancedBeatmapSearch() {
+  const root = document.querySelector('.js-react[data-react="beatmaps"]');
+  if (!root) return null;
+  return root.getAttribute("data-advanced-search") === "1";
 }
 
 const FILTER_ITEM_SEL = "a.beatmapsets-search-filter__item";
@@ -128,7 +132,11 @@ export function startPageBehavior() {
   const tryApplyPreferred = () => {
     if (applied) return;
     if (!isBeatmapsetsListing(location.pathname)) return;
-    if (!hasAdvancedBeatmapSearch()) {
+    // B67: before the root renders there is nothing to decide yet; keep
+    // waiting (up to the cap) instead of giving up.
+    const advanced = advancedBeatmapSearch();
+    if (advanced === null) return;
+    if (!advanced) {
       applied = true;
       return;
     }

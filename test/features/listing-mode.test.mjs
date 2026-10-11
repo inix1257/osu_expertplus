@@ -87,3 +87,18 @@ test("records ruleset clicks, not genre clicks", async () => {
     window.history.replaceState(null, "", "/beatmapsets");
   }
 });
+
+test("B67: waits for the React root before applying the saved ruleset", async () => {
+  gmStore.set(KEY, "1");
+  window.document.body.innerHTML = "";
+  const stop = startPageBehavior();
+  try {
+    await tick();
+    window.document.body.innerHTML = ROOT + GRID;
+    const seen = clicksOn("a.beatmapsets-search-filter__item");
+    await tick();
+    assert.deepEqual(seen, ["beatmapsets-search-filter__item mode:1"]);
+  } finally {
+    stop();
+  }
+});
