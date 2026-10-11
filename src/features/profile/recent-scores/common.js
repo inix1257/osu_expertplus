@@ -137,10 +137,11 @@ export function enrichPlayDetailRowsMaxComboFromAttributes(
         const score = scoreByRow.get(rowEl);
         scoreByRow.delete(rowEl);
         if (!score) continue;
+        const ruleset = rulesetFromId(score.ruleset_id);
         _fetchBeatmapAttributesCached(
           score.beatmap.id,
-          difficultyMods(modAcronyms(score.mods)),
-          rulesetFromId(score.ruleset_id),
+          difficultyMods(modAcronyms(score.mods), ruleset),
+          ruleset,
           { persist: isPermanentBeatmap(score.beatmap) },
         ).then(({ maxCombo }) => {
           if (maxCombo != null && rowEl.isConnected) {

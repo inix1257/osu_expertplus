@@ -259,3 +259,16 @@ test("modIconSuffix", () => {
   assert.equal(modIconSuffix("A-B"), "AB");
   assert.equal(modIconSuffix("--"), "X");
 });
+
+test("difficultyMods keeps ruleset-only difficulty mods for that ruleset (B103)", () => {
+  assert.deepEqual(difficultyMods(["HD", "FL", "TD"], "osu"), [
+    "FL",
+    "HD",
+    "TD",
+  ]);
+  assert.deepEqual(difficultyMods(["HD", "HR"], "taiko"), ["HR"]);
+  assert.deepEqual(difficultyMods(["7K", "MR", "DS"], "mania"), ["7K", "DS"]);
+  assert.deepEqual(difficultyMods(["4K", "HD"], "osu"), ["HD"]);
+  // No ruleset: the shared list only, as before.
+  assert.deepEqual(difficultyMods(["HD", "4K", "DT"]), ["DT"]);
+});

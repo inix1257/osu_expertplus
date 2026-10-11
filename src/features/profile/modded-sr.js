@@ -24,7 +24,7 @@ async function _fetchAndApplySr(rowEl) {
   const { beatmapId, ruleset, mods } = _extractRowData(rowEl);
   if (!beatmapId) return;
 
-  const diffMods = difficultyMods(mods);
+  const diffMods = difficultyMods(mods, ruleset);
   // B37: persist only when the row's score says the map is ranked, approved
   // or loved; Best Performance rows are always ranked or approved.
   const persist =

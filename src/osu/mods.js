@@ -56,6 +56,29 @@ export const DIFFICULTY_MODS = new Set([
 ]);
 
 /**
+ * Mods that change star rating / max combo in one ruleset only (B103), as the
+ * attributes API shows: osu! Hidden (alone and with Flashlight) and Touch
+ * Device; mania key mods (they set a convert's key count) and Dual Stages.
+ * Hidden makes no difference in taiko or catch.
+ */
+const RULESET_DIFFICULTY_MODS = Object.freeze({
+  osu: new Set(["HD", "TD"]),
+  mania: new Set([
+    "1K",
+    "2K",
+    "3K",
+    "4K",
+    "5K",
+    "6K",
+    "7K",
+    "8K",
+    "9K",
+    "10K",
+    "DS",
+  ]),
+});
+
+/**
  * Classic osu!stable mods (beatmap-detail `STABLE_MOD_ACRONYMS`), used to
  * split the scoreboard mod filter into stable and lazer columns. Copied as is:
  * the key mods are listed as `K1`–`K9`, while osu-web acronyms are `1K`–`9K`.
@@ -349,14 +372,16 @@ export function modFullName(acronym) {
 
 /**
  * The difficulty-affecting subset of `acronyms`, upper-cased and sorted
- * (user-profile `_diffMods`).
+ * (user-profile `_diffMods`), plus the mods that matter only in `ruleset`.
  * @param {string[]} acronyms
+ * @param {string} [ruleset]  without it, only the mods every ruleset shares
  * @returns {string[]}
  */
-export function difficultyMods(acronyms) {
+export function difficultyMods(acronyms, ruleset) {
+  const extra = RULESET_DIFFICULTY_MODS[ruleset];
   return (acronyms || [])
     .map((a) => String(a).toUpperCase())
-    .filter((a) => DIFFICULTY_MODS.has(a))
+    .filter((a) => DIFFICULTY_MODS.has(a) || extra?.has(a))
     .sort();
 }
 
