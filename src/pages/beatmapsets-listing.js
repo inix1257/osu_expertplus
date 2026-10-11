@@ -1,4 +1,6 @@
-/** /beatmapsets listing (no set id). */
+/** /beatmapsets listing (no set id): card features and the listing mode. */
+
+import { start as startCardExtra } from "../features/cards/extra.js";
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 OsuExpertPlus.pages = OsuExpertPlus.pages || {};
@@ -24,7 +26,7 @@ OsuExpertPlus.pages.beatmapsetsListing = (() => {
     bag.add(
       OsuExpertPlus.beatmapCardStats.startFullBeatmapStatNumbers(settings),
     );
-    bag.add(OsuExpertPlus.beatmapCardExtra.start(settings));
+    bag.add(startCardExtra(settings));
     bag.add(OsuExpertPlus.beatmapsetsListingMode.startPageBehavior());
 
     return () => bag.dispose();

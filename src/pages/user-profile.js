@@ -6,6 +6,7 @@
 
 import { mountSettingFeature, safeStart } from "../core/lifecycle.js";
 import { startBbcodeHelperManager } from "../editor/bbcode-helper/manager.js";
+import { start as startCardExtra } from "../features/cards/extra.js";
 import { startProfileBadgesCollapseManager } from "../features/profile/badges.js";
 import { mountBwsRanking } from "../features/profile/bws.js";
 import { startContentsReorderManager } from "../features/profile/contents-reorder.js";
@@ -70,7 +71,7 @@ function init(_match) {
   safeStart(
     bag,
     () =>
-      OsuExpertPlus.beatmapCardExtra.start(settings, {
+      startCardExtra(settings, {
         hookProfileExtraPages: true,
       }),
     "card extras",

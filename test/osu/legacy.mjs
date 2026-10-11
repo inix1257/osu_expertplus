@@ -70,5 +70,6 @@ export const LEGACY_BBCODE = "test/fixtures/legacy/user-profile-bbcode.js";
 /** Discussion helpers removed from beatmap-detail by WS-30 (frozen copy). */
 export const LEGACY_DISCUSSION =
   "test/fixtures/legacy/beatmap-detail-discussion.js";
-export const CARD_EXTRA = "src/utils/beatmap-card-extra.js";
+/** Card extras moved to src/features/cards by WS-50 (frozen copy). */
+export const CARD_EXTRA = "test/fixtures/legacy/beatmap-card-extra.js";
 export const BEATMAP_PREVIEW = "src/utils/beatmap-preview.js";

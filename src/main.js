@@ -18,7 +18,6 @@ import "./utils/api.js";
 import "./utils/omdb.js";
 import "./utils/settings.js";
 import "./utils/beatmap-preview.js";
-import "./utils/beatmap-card-extra.js";
 import "./utils/beatmap-card-stats.js";
 import "./utils/mod-icons-as-acronyms.js";
 import "./utils/beatmapsets-listing-mode.js";
