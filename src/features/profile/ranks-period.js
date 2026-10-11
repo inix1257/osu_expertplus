@@ -452,6 +452,17 @@ function getRanksRowBeatmapsetId(rowEl) {
  * @param {HTMLElement} topRanksRoot
  */
 export function applyRanksCardBackgrounds(topRanksRoot) {
+  /** The colour, or "" when it is transparent. */
+  const opaque = (bg) =>
+    !bg ||
+    bg === "transparent" ||
+    /rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)/.test(bg)
+      ? ""
+      : bg;
+  const bgOf = (elCandidate) =>
+    elCandidate instanceof Element
+      ? opaque(getComputedStyle(elCandidate).backgroundColor)
+      : "";
   const pickBaseBg = (rowEl) => {
     const candidates = [
       rowEl,
@@ -461,13 +472,8 @@ export function applyRanksCardBackgrounds(topRanksRoot) {
       rowEl.querySelector(".play-detail__score-detail"),
     ];
     for (const elCandidate of candidates) {
-      if (!(elCandidate instanceof Element)) continue;
-      const bg = getComputedStyle(elCandidate).backgroundColor;
-      if (!bg) continue;
-      if (bg === "transparent") continue;
-      if (/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)/.test(bg))
-        continue;
-      return bg;
+      const bg = bgOf(elCandidate);
+      if (bg) return bg;
     }
     return "";
   };
@@ -494,8 +500,33 @@ export function applyRanksCardBackgrounds(topRanksRoot) {
     );
   }
 
-  queryPlayDetailScoreRows(topRanksRoot).forEach((rowEl) => {
+  // Read every row's colours before writing anything: a write between two
+  // getComputedStyle calls makes the browser recalculate styles per row.
+  // Rows done earlier (same map, image and colours still there) are skipped,
+  // so "Show more" only reads the new rows.
+  const isDone = (rowEl, beatmapsetId) =>
+    rowEl.getAttribute(RANKS_CARD_BG_BEATMAPSET_ATTR) ===
+      String(beatmapsetId) &&
+    rowEl.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`) &&
+    rowEl.style.getPropertyValue(RANKS_CARD_BASE_BG_VAR);
+  const rows = [];
+  for (const rowEl of queryPlayDetailScoreRows(topRanksRoot)) {
     const beatmapsetId = getRanksRowBeatmapsetId(rowEl);
+    if (beatmapsetId && isDone(rowEl, beatmapsetId)) continue;
+    if (!beatmapsetId) {
+      rows.push({ rowEl, beatmapsetId });
+      continue;
+    }
+    rows.push({
+      rowEl,
+      beatmapsetId,
+      baseBg: pickBaseBg(rowEl),
+      ppBg: bgOf(rowEl.querySelector(".play-detail__pp")),
+      statsBg: bgOf(rowEl.querySelector(".play-detail__score-detail")),
+    });
+  }
+
+  rows.forEach(({ rowEl, beatmapsetId, baseBg, ppBg, statsBg }) => {
     if (!beatmapsetId) {
       ranksCardBgObserver?.unobserve(rowEl);
       rowEl.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`)?.remove();
@@ -506,34 +537,11 @@ export function applyRanksCardBackgrounds(topRanksRoot) {
       rowEl.style.removeProperty(RANKS_CARD_STATS_BG_VAR);
       return;
     }
-    const bgCandidate = pickBaseBg(rowEl);
-    const ppEl = rowEl.querySelector(".play-detail__pp");
-    const ppBg =
-      ppEl instanceof Element ? getComputedStyle(ppEl).backgroundColor : "";
-    const scoreDetailEl = rowEl.querySelector(".play-detail__score-detail");
-    const statsBg =
-      scoreDetailEl instanceof Element
-        ? getComputedStyle(scoreDetailEl).backgroundColor
-        : "";
     rowEl.setAttribute(RANKS_CARD_BG_ATTR, "1");
     rowEl.setAttribute(RANKS_CARD_BG_BEATMAPSET_ATTR, beatmapsetId);
-    if (bgCandidate) {
-      rowEl.style.setProperty(RANKS_CARD_BASE_BG_VAR, bgCandidate);
-    }
-    if (
-      ppBg &&
-      ppBg !== "transparent" &&
-      !/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)/.test(ppBg)
-    ) {
-      rowEl.style.setProperty(RANKS_CARD_PP_BG_VAR, ppBg);
-    }
-    if (
-      statsBg &&
-      statsBg !== "transparent" &&
-      !/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)/.test(statsBg)
-    ) {
-      rowEl.style.setProperty(RANKS_CARD_STATS_BG_VAR, statsBg);
-    }
+    if (baseBg) rowEl.style.setProperty(RANKS_CARD_BASE_BG_VAR, baseBg);
+    if (ppBg) rowEl.style.setProperty(RANKS_CARD_PP_BG_VAR, ppBg);
+    if (statsBg) rowEl.style.setProperty(RANKS_CARD_STATS_BG_VAR, statsBg);
     let imgEl = rowEl.querySelector(`.${RANKS_CARD_BG_IMG_CLASS}`);
     if (!imgEl) {
       imgEl = document.createElement("img");
