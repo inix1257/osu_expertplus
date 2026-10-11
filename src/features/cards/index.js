@@ -25,7 +25,7 @@ export function startCardFeatures(settings, manageStyle, options = {}) {
   );
   safeStart(
     bag,
-    () => startFullBeatmapStatNumbers(settings),
+    () => startFullBeatmapStatNumbers(settings, manageStyle),
     "card stat numbers",
   );
   safeStart(bag, () => startCardExtra(settings, options), "card extras");
