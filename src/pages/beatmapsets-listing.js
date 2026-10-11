@@ -1,6 +1,7 @@
 /** /beatmapsets listing (no set id): card features and the listing mode. */
 
 import { startCardFeatures } from "../features/cards/index.js";
+import { startPageBehavior as startListingMode } from "../features/listing-mode.js";
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 OsuExpertPlus.pages = OsuExpertPlus.pages || {};
@@ -18,7 +19,7 @@ OsuExpertPlus.pages.beatmapsetsListing = (() => {
     const bag = createCleanupBag();
 
     bag.add(startCardFeatures(settings, manageStyle));
-    bag.add(OsuExpertPlus.beatmapsetsListingMode.startPageBehavior());
+    bag.add(startListingMode());
 
     return () => bag.dispose();
   }

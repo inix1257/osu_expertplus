@@ -11,6 +11,7 @@
 
 import "./core/bridge.js";
 import { Router } from "./core/router.js";
+import { installLinkPatcher } from "./features/listing-mode.js";
 import "./utils/dom.js";
 import "./utils/difficulty-colours.js";
 import "./utils/auth.js";
@@ -19,7 +20,6 @@ import "./utils/omdb.js";
 import "./utils/settings.js";
 import "./utils/beatmap-preview.js";
 import "./utils/mod-icons-as-acronyms.js";
-import "./utils/beatmapsets-listing-mode.js";
 import "./utils/nav-recent-notification.js";
 import "./pages/beatmapsets-listing.js";
 import "./pages/beatmap-detail.js";
@@ -34,7 +34,7 @@ OsuExpertPlus.pages.beatmapDiscussion = beatmapDiscussion;
 
 OsuExpertPlus.settingsPanel.init();
 OsuExpertPlus.modIconsAsAcronyms.install(OsuExpertPlus.settings);
-OsuExpertPlus.beatmapsetsListingMode.installLinkPatcher();
+installLinkPatcher();
 OsuExpertPlus.navRecentNotification.install(OsuExpertPlus.settings);
 
 new Router(OsuExpertPlus.pages).init();

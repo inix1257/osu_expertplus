@@ -88,7 +88,8 @@ export const KEYS = Object.freeze({
     store: "gm",
     format: "json",
     owner: "features/profile/subsections.js",
-    purpose: "Collapsed profile subsections (older title and index keys migrate here, B47)",
+    purpose:
+      "Collapsed profile subsections (older title and index keys migrate here, B47)",
   },
   PROFILE_SECTIONS_COLLAPSED: {
     key: "userProfile.profileSectionsCollapsed",
@@ -101,7 +102,7 @@ export const KEYS = Object.freeze({
     key: "beatmapsetsListing.preferredMode",
     store: "gm",
     format: "string",
-    owner: "utils/beatmapsets-listing-mode.js",
+    owner: "features/listing-mode.js",
     purpose: "Last ruleset picked on the beatmap listing (`m` param)",
   },
   PREVIEW_MUSIC_VOLUME_LEGACY: {
@@ -189,6 +190,35 @@ export function deleteKey(key) {
 export function setBool(key, value) {
   try {
     GM_setValue(keyName(key), Boolean(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * GM value as a string; `fallback` when missing, not a string or unreadable.
+ * @param {string | StorageKey} key
+ * @param {string|null} [fallback=null]
+ * @returns {string|null}
+ */
+export function getString(key, fallback = null) {
+  try {
+    const v = GM_getValue(keyName(key), undefined);
+    return typeof v === "string" ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Store a string. Returns false when it could not be saved.
+ * @param {string | StorageKey} key
+ * @param {string} value
+ */
+export function setString(key, value) {
+  try {
+    GM_setValue(keyName(key), String(value));
     return true;
   } catch {
     return false;
