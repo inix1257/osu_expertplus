@@ -11,6 +11,10 @@ OsuExpertPlus.pages.accountEdit = (() => {
   const auth = OsuExpertPlus.auth;
 
   const GUIDE_ID = "oep-oauth-guide";
+  /** Fired by the settings panel when credentials are saved or cleared. */
+  const CREDENTIALS_CHANGED_EVENT = "oep-osu-api-credentials-changed";
+  /** How long the success message stays before the guide hides itself. */
+  const DONE_HIDE_DELAY_MS = 3000;
 
   const CSS = `
     #${GUIDE_ID} {
@@ -97,7 +101,12 @@ OsuExpertPlus.pages.accountEdit = (() => {
 
   const guideStyle = manageStyle("oep-account-edit-style", CSS);
 
-  function buildGuide() {
+  /**
+   * The guide, kept in sync with the saved credentials until `signal` aborts.
+   * @param {AbortSignal} signal
+   * @returns {HTMLElement}
+   */
+  function buildGuide(signal) {
     const body = el(
       "div",
       { class: "oep-guide__body" },
@@ -118,7 +127,7 @@ OsuExpertPlus.pages.accountEdit = (() => {
 
     const openBtn = el(
       "button",
-      { class: "oep-guide__open-panel-btn" },
+      { type: "button", class: "oep-guide__open-panel-btn" },
       "⚙ Open Expert+ Settings",
     );
     openBtn.addEventListener("click", () => {
@@ -126,9 +135,11 @@ OsuExpertPlus.pages.accountEdit = (() => {
       document.getElementById("osu-expertplus-fab")?.click();
     });
 
+    // Dismissing lasts for this visit only: the guide shows only while no
+    // credentials are saved, so a stored dismissal could hide it for good.
     const dismissBtn = el(
       "button",
-      { class: "oep-guide__dismiss", title: "Dismiss" },
+      { type: "button", class: "oep-guide__dismiss", title: "Dismiss" },
       "✕",
     );
     dismissBtn.addEventListener("click", () => {
@@ -155,16 +166,22 @@ OsuExpertPlus.pages.accountEdit = (() => {
       footer,
     );
 
-    // React to credential changes without a page reload.
+    let hideTimer = 0;
     function syncState() {
       if (auth.isConfigured()) {
         statusEl.textContent = "✓ Credentials saved — API v2 active!";
         statusEl.className = "oep-guide__status oep-guide__status--ok";
         openBtn.style.display = "none";
-
-        // Auto-hide after a short delay so the user sees the success message.
-        setTimeout(() => guide.classList.add("oep-guide--done"), 3000);
+        // Hide after a short delay so the user sees the success message.
+        if (!hideTimer) {
+          hideTimer = window.setTimeout(
+            () => guide.classList.add("oep-guide--done"),
+            DONE_HIDE_DELAY_MS,
+          );
+        }
       } else {
+        window.clearTimeout(hideTimer);
+        hideTimer = 0;
         statusEl.textContent = "No credentials saved yet.";
         statusEl.className = "oep-guide__status";
         openBtn.style.display = "";
@@ -172,10 +189,22 @@ OsuExpertPlus.pages.accountEdit = (() => {
       }
     }
 
-    // Poll GM storage for credential changes (cross-tab / after panel save).
-    // GM_addValueChangeListener would be ideal but isn't universally available.
-    const pollInterval = setInterval(syncState, 1500);
-    guide._stopPolling = () => clearInterval(pollInterval);
+    // B53: no polling. The panel announces saves in this tab; a save in
+    // another tab is picked up when this one is shown again.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") syncState();
+    };
+    window.addEventListener(CREDENTIALS_CHANGED_EVENT, syncState);
+    document.addEventListener("visibilitychange", onVisible);
+    signal.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(hideTimer);
+        window.removeEventListener(CREDENTIALS_CHANGED_EVENT, syncState);
+        document.removeEventListener("visibilitychange", onVisible);
+      },
+      { once: true },
+    );
 
     syncState();
     return guide;
@@ -211,36 +240,37 @@ OsuExpertPlus.pages.accountEdit = (() => {
     return null;
   }
 
-  let _guide = null;
+  /**
+   * @param {RegExpMatchArray} _match
+   * @param {{ signal?: AbortSignal }} [ctx]
+   */
+  async function init(_match, ctx = {}) {
+    const ac = new AbortController();
+    const cleanup = () => {
+      ac.abort();
+      document.getElementById(GUIDE_ID)?.remove();
+      guideStyle.remove();
+    };
+    // B53: nothing to set up.
+    if (auth.isConfigured()) return cleanup;
 
-  async function init(_match) {
     guideStyle.inject();
 
     // Wait for the React-rendered OAuth section to appear.
     let inputGroups;
     try {
-      await waitForElement(".account-edit__section-title", 10000);
+      await waitForElement(".account-edit__section-title", {
+        timeout: 10000,
+        signal: ctx.signal,
+      });
       inputGroups = findOAuthInputGroups();
     } catch {
       return cleanup;
     }
+    if (!inputGroups || ctx.signal?.aborted) return cleanup;
 
-    if (!inputGroups) {
-      return cleanup;
-    }
-
-    // Build and prepend the guide.
-    _guide = buildGuide();
-    inputGroups.prepend(_guide);
-
+    inputGroups.prepend(buildGuide(ac.signal));
     return cleanup;
-  }
-
-  function cleanup() {
-    _guide?._stopPolling?.();
-    document.getElementById(GUIDE_ID)?.remove();
-    guideStyle.remove();
-    _guide = null;
   }
 
   return { name, init };
