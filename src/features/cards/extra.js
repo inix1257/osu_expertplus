@@ -325,6 +325,15 @@ function ingestorForUrl(url) {
   return null;
 }
 
+/** Whether a card on the page has no set in the cache yet. */
+function pageCardsMissingData() {
+  for (const panel of document.querySelectorAll(".beatmapset-panel")) {
+    const id = parseBeatmapsetId(panel);
+    if (id && !beatmapsetCache.has(id)) return true;
+  }
+  return false;
+}
+
 /**
  * If the site already finished `extra-pages/beatmaps` before our hooks ran, load once with the
  * session cookie (same URL osu uses; not per-card API). Called lazily from `processPanel`.
@@ -333,7 +342,9 @@ function startProfileExtraPagesPrefetchIfNeeded() {
   const wantIngest = profileExtraPrefetchWantIngest;
   if (!wantIngest || !wantIngest()) return;
   if (!profileExtraState.waitForExtraPages) return;
-  if (beatmapsetCache.size > 0) return;
+  // B27: whether this page's cards lack data, not whether the cache has
+  // anything (sets from a listing visited before used to block this).
+  if (!pageCardsMissingData()) return;
   if (profileExtraPrefetchStarted) return;
   const m = location.pathname.match(
     /^\/users\/(\d+)(?:\/(osu|taiko|fruits|mania))?\/?$/i,
