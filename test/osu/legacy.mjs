@@ -72,4 +72,5 @@ export const LEGACY_DISCUSSION =
   "test/fixtures/legacy/beatmap-detail-discussion.js";
 /** Card extras moved to src/features/cards by WS-50 (frozen copy). */
 export const CARD_EXTRA = "test/fixtures/legacy/beatmap-card-extra.js";
-export const BEATMAP_PREVIEW = "src/utils/beatmap-preview.js";
+/** Gameplay preview moved to src/features/beatmap-preview by WS-51 (frozen copy). */
+export const BEATMAP_PREVIEW = "test/fixtures/legacy/beatmap-preview.js";

@@ -1,9 +1,10 @@
 /**
  * Gameplay preview section between the beatmapset header and the info
  * column (WS-33, moved out of beatmap-detail init). The preview itself is
- * `OsuExpertPlus.beatmapPreview` (src/utils/beatmap-preview.js).
+ * src/features/beatmap-preview/ (WS-51).
  */
 
+import { mountBeatmapsetInfoPreview } from "../beatmap-preview/widget.js";
 import {
   getBeatmapPageBeatmapId,
   getBeatmapPageRuleset,
@@ -21,12 +22,7 @@ const BEATMAP_PREVIEW_STYLE_ID = "osu-expertplus-beatmap-preview-css";
  * @returns {(() => void)|undefined}
  */
 export function mountBeatmapPreviewSection(header, pathRe) {
-  const beatmapPreview = OsuExpertPlus.beatmapPreview;
-  if (
-    !pathRe.test(location.pathname) ||
-    !document.body.contains(header) ||
-    !beatmapPreview
-  ) {
+  if (!pathRe.test(location.pathname) || !document.body.contains(header)) {
     return undefined;
   }
   const infoEl = document.querySelector(".beatmapset-info");
@@ -35,7 +31,7 @@ export function mountBeatmapPreviewSection(header, pathRe) {
     return undefined;
   }
 
-  const previewUi = beatmapPreview.mountBeatmapsetInfoPreview({
+  const previewUi = mountBeatmapsetInfoPreview({
     el,
     manageStyle: OsuExpertPlus.dom.manageStyle,
     pathRe,
