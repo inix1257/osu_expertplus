@@ -8,6 +8,7 @@ import {
   fetchOsuFileText,
   revokeBeatmapCoverObjectUrl,
 } from "./files.js";
+import { observe } from "../../core/observe.js";
 import { pageLocalStorage } from "../../core/page-window.js";
 import { readOsuSiteAudioVolume } from "./prefs.js";
 import {
@@ -273,7 +274,8 @@ export function mountBeatmapsetInfoPreview({
   let seekPointerActive = false;
   /** `ruleset:beatmapId` while preview is expanded; used to detect difficulty / mode changes (SPA). */
   let previewContextKey = "";
-  let contextPollId = 0;
+  /** @type {AbortController|null} the picker watch while expanded */
+  let contextWatch = null;
 
   function previewContextKeyFromPage() {
     if (!pathRe.test(location.pathname)) return "";
@@ -282,22 +284,31 @@ export function mountBeatmapsetInfoPreview({
     return `${rs}:${id || ""}`;
   }
 
-  function stopContextPoll() {
-    if (contextPollId) {
-      window.clearInterval(contextPollId);
-      contextPollId = 0;
-    }
+  function stopContextWatch() {
+    contextWatch?.abort();
+    contextWatch = null;
   }
 
-  function startContextPoll() {
-    stopContextPoll();
-    contextPollId = window.setInterval(() => {
-      if (!pathRe.test(location.pathname) || !expanded || busy) return;
-      const k = previewContextKeyFromPage();
-      if (previewContextKey && k !== previewContextKey) {
-        collapsePreviewAndResetEngine();
-      }
-    }, 200);
+  /**
+   * Collapse the preview when the page shows another difficulty or ruleset.
+   * osu-web switches difficulties with `replaceState` (no hashchange) and
+   * marks the active picker item, so watch the picker (it replaces a 200 ms
+   * poll); hashchange and popstate are handled below.
+   */
+  function startContextWatch() {
+    stopContextWatch();
+    contextWatch = new AbortController();
+    observe.subscribe(
+      {
+        selector:
+          ".beatmapset-beatmap-picker, .beatmapset-beatmap-picker__beatmap",
+        attributes: ["class"],
+        schedule: "sync",
+        signal: contextWatch.signal,
+        label: "beatmap-preview/context",
+      },
+      onPossiblePreviewContextChange,
+    );
   }
 
   function collapsePreviewAndResetEngine() {
@@ -309,7 +320,7 @@ export function mountBeatmapsetInfoPreview({
     if (top) {
       top.textContent = "Beatmap Preview";
     }
-    stopContextPoll();
+    stopContextWatch();
     previewContextKey = "";
     stopSeekAnimationLoop();
     lastLoadedKey = "";
@@ -1225,7 +1236,11 @@ export function mountBeatmapsetInfoPreview({
       invalidateLoadState();
     } finally {
       // A newer load in this widget keeps it busy.
-      if (seq === loadSeq) busy = false;
+      if (seq === loadSeq) {
+        busy = false;
+        // A difficulty switch while loading was ignored (busy): check now.
+        if (!disposed) onPossiblePreviewContextChange();
+      }
     }
   }
 
@@ -1314,13 +1329,13 @@ export function mountBeatmapsetInfoPreview({
     }
     if (expanded) {
       previewContextKey = previewContextKeyFromPage();
-      startContextPoll();
+      startContextWatch();
       startSeekAnimationLoop();
       if (!busy) {
         await loadCurrentBeatmap();
       }
     } else {
-      stopContextPoll();
+      stopContextWatch();
       previewContextKey = "";
       panel.classList.remove(`${wrapClass}__panel--unsupported`);
       stopSeekAnimationLoop();
@@ -1347,7 +1362,7 @@ export function mountBeatmapsetInfoPreview({
     dispose: () => {
       disposed = true;
       loadSeq += 1;
-      stopContextPoll();
+      stopContextWatch();
       window.removeEventListener("hashchange", onPossiblePreviewContextChange);
       window.removeEventListener("popstate", onPossiblePreviewContextChange);
       panel.removeEventListener("keydown", onPreviewPanelKeydown);
