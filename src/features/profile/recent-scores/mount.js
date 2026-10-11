@@ -47,13 +47,10 @@ import {
   SCORE_LIST_LAYOUT_CLASS,
   SCORE_PLACE_NUMBER_ID,
   SCORE_PP_DECIMALS_ID,
-  applyPlaceNumbers,
-  applyPpDecimals,
-  revertPlaceNumbers,
-  scorePlaceNumberStyle,
   syncScoreListPpDecimalsWidthClass,
 } from "../score-rows.js";
-import { applyHideWeightedPp, fillStatsRows } from "../score-stats.js";
+import { RECENT_SECTION_TYPE, decorateScoreList } from "../list-decorations.js";
+import { fillStatsRows } from "../score-stats.js";
 import { playDetailStyle } from "../styles.js";
 /** Inject only: the shared play-detail style is removed by profile `init` (B07). */
 function ensurePlayDetailStylesForRecent() {
@@ -110,10 +107,10 @@ function populateRecentScoresInnerList(
 
     innerList.appendChild(r);
   });
-  applyHideWeightedPp(innerList);
-  if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) {
-    applyPpDecimals(innerList);
-  }
+  decorateScoreList(
+    { listEl: innerList, type: RECENT_SECTION_TYPE },
+    { revertOff: true },
+  );
   if (settings().isEnabled(SCORE_HIT_STATISTICS_ID)) {
     fillStatsRows(rows, scores);
     enrichPlayDetailRowsMaxComboFromAttributes(rows, scores, innerList);
@@ -129,12 +126,6 @@ function populateRecentScoresInnerList(
   if (settings().isEnabled(RANKS_CARD_BG_FEATURE_ID)) {
     injectRanksCardBgLayoutStyles();
     applyRanksCardBackgrounds(innerList);
-  }
-  if (settings().isEnabled(SCORE_PLACE_NUMBER_ID)) {
-    scorePlaceNumberStyle.inject();
-    applyPlaceNumbers(innerList);
-  } else {
-    revertPlaceNumbers(innerList);
   }
 }
 

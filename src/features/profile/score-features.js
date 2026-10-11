@@ -1,16 +1,24 @@
 /**
  * Applies the score row features to every profile score list (WS-41).
+ *
+ * Every list goes through the same pipeline wherever it comes from (the
+ * first pass, rows osu! adds later, a list that renders late, a setting
+ * change): the synchronous decorations (`list-decorations.js`), then the
+ * features that need the list's scores from the API ({@link LIST_DATA_FEATURES}).
  */
 
 import { observe } from "../../core/observe.js";
 import {
-  formatDecimalPp,
-  parseLocaleNumber,
   settings,
   waitForElement,
   waitForStaleElementToLeave,
 } from "../legacy.js";
 import { MODDED_SR_ID } from "./beatmap-attributes.js";
+import {
+  decorateScoreList,
+  decorationsStale,
+  watchDecorationSettings,
+} from "./list-decorations.js";
 import { initSrObserver, revertModdedStarRatings } from "./modded-sr.js";
 import {
   _scoreListComplete,
@@ -25,29 +33,67 @@ import {
   SCORE_HIT_STATISTICS_ID,
   SCORE_LIST_LAYOUT_CLASS,
   SCORE_LIST_PP_DECIMALS_CLASS,
-  SCORE_PLACE_NUMBER_ID,
-  SCORE_PLACE_SECTION_TYPE,
   SCORE_PP_DECIMALS_ID,
   SCORE_SECTION_TYPES,
-  _beatmapIdFromRow,
-  _buildScoresByBeatmapId,
   _getSectionType,
-  applyPlaceNumbers,
   applyPpDecimals,
   revertPlaceNumbers,
-  revertPpDecimals,
-  scorePlaceNumberStyle,
   setScoreListLayoutClass,
   syncScoreListPpDecimalsWidthClass,
 } from "./score-rows.js";
 import {
-  applyHideWeightedPp,
   applyMostWatchedPp,
-  injectMostWatchedPpRow,
   fillStatsRows,
   revertMostWatchedPp,
   revertStatsRows,
 } from "./score-stats.js";
+
+/** @typedef {{ listEl: HTMLElement, type: string }} ScoreSection */
+
+/** @param {HTMLElement} listEl */
+const rowsOf = (listEl) => Array.from(listEl.querySelectorAll(".play-detail"));
+
+/**
+ * Features that need the list's scores. `fill` matches rows to scores by
+ * beatmap and only changes rows that lack the feature, so it serves the first
+ * pass and every later row change. `isStale`: osu! re-rendered rows without
+ * it.
+ * @type {{
+ *   name: string,
+ *   applies: (section: ScoreSection) => boolean,
+ *   fill: (listEl: HTMLElement, scores: Object[]) => void,
+ *   isStale?: (listEl: HTMLElement, mutations: MutationRecord[]) => boolean,
+ * }[]}
+ */
+const LIST_DATA_FEATURES = [
+  {
+    // Shown whatever the hit statistics setting says.
+    name: "most-watched-pp",
+    applies: ({ type }) => type === "most_watched",
+    fill: applyMostWatchedPp,
+    isStale: (listEl, mutations) =>
+      mutations.some((m) => m.type === "childList") &&
+      rowsOf(listEl).some((r) => !r.querySelector(`.${MW_PP_CLASS}`)),
+  },
+  {
+    name: "hit-statistics",
+    applies: () => settings().isEnabled(SCORE_HIT_STATISTICS_ID),
+    fill: (listEl, scores) => fillStatsRows(rowsOf(listEl), scores),
+  },
+];
+
+/** @param {MutationRecord[]} mutations */
+function mutationsAddRows(mutations) {
+  return mutations.some((m) => {
+    for (const node of m.addedNodes) {
+      if (!(node instanceof Element)) continue;
+      if (node.matches(".play-detail") || node.querySelector(".play-detail"))
+        return true;
+    }
+    return false;
+  });
+}
+
 /**
  * Ownership / cancellation rules (B07):
  * - `run` belongs to the profile `init` call. Every observer, listener and DOM
@@ -63,49 +109,6 @@ import {
  * @param {{ isDisposed: () => boolean, cleanupFns: function[] }} run
  * @returns {Promise<void>}
  */
-/**
- * The synchronous per-list decorations, in the order they were applied by
- * the four copies of this block (initial pass, per-list observer, late
- * sections). `applies(section)` says whether the decoration is on for that
- * list; `revert` is only used by the initial pass (`revertOff`).
- * @type {{ name: string,
- *   applies: (section: { listEl: HTMLElement, type: string }) => boolean,
- *   apply: (listEl: HTMLElement) => void,
- *   revert?: (listEl: HTMLElement) => void }[]}
- */
-const LIST_DECORATIONS = [
-  {
-    name: "pp-decimals",
-    applies: () => settings().isEnabled(SCORE_PP_DECIMALS_ID),
-    apply: applyPpDecimals,
-  },
-  {
-    name: "hide-weighted-pp",
-    applies: () => true,
-    apply: applyHideWeightedPp,
-  },
-  {
-    name: "place-numbers",
-    applies: ({ type }) =>
-      settings().isEnabled(SCORE_PLACE_NUMBER_ID) &&
-      type === SCORE_PLACE_SECTION_TYPE,
-    apply: applyPlaceNumbers,
-    revert: revertPlaceNumbers,
-  },
-];
-
-/**
- * Apply every decoration that is on for `section`.
- * @param {{ listEl: HTMLElement, type: string }} section
- * @param {{ revertOff?: boolean }} [options]  also revert the ones that are off
- */
-function decorateScoreList(section, { revertOff = false } = {}) {
-  for (const d of LIST_DECORATIONS) {
-    if (d.applies(section)) d.apply(section.listEl);
-    else if (revertOff) d.revert?.(section.listEl);
-  }
-}
-
 export async function initScoreFeatures(userId, mode, run) {
   const { isDisposed, cleanupFns } = run;
   beginScoreListVisit();
@@ -119,6 +122,7 @@ export async function initScoreFeatures(userId, mode, run) {
   ).catch(() => {});
   if (isDisposed()) return;
 
+  /** @type {ScoreSection[]} grows as late lists are adopted */
   const scoreSections = Array.from(
     document.querySelectorAll(".play-detail-list"),
   )
@@ -138,6 +142,11 @@ export async function initScoreFeatures(userId, mode, run) {
   cleanupFns.push(() =>
     scoreSections.forEach(({ listEl }) => revertPlaceNumbers(listEl)),
   );
+  cleanupFns.push(() =>
+    scoreSections.forEach(({ listEl, type }) => {
+      if (type === "most_watched") revertMostWatchedPp(listEl);
+    }),
+  );
   scoreSections.forEach(({ listEl }) =>
     syncScoreListPpDecimalsWidthClass(listEl),
   );
@@ -145,178 +154,90 @@ export async function initScoreFeatures(userId, mode, run) {
   scoreSections.forEach((section) =>
     decorateScoreList(section, { revertOff: true }),
   );
-  if (
-    settings().isEnabled(SCORE_PLACE_NUMBER_ID) &&
-    scoreSections.some((s) => s.type === SCORE_PLACE_SECTION_TYPE)
-  ) {
-    scorePlaceNumberStyle.inject();
-  }
 
   // The module-level SR observer is torn down by init's cleanup (B38).
   if (settings().isEnabled(MODDED_SR_ID)) initSrObserver();
 
+  /** @type {Map<string, Object[]>} section type -> scores loaded so far */
   const scoresMap = new Map();
+  /** @type {WeakMap<ScoreSection, Promise<void>>} loads in flight */
+  const loading = new WeakMap();
 
-  async function _loadAndApplyStats(section) {
+  /**
+   * Fill the rows of `section` from the scores loaded so far, then put pp
+   * decimals back on (Most Watched pp is a new pp span).
+   * @param {ScoreSection} section
+   */
+  function fillSection(section) {
+    const scores = scoresMap.get(section.type);
+    if (!scores) return;
+    for (const f of LIST_DATA_FEATURES) {
+      if (f.applies(section)) f.fill(section.listEl, scores);
+    }
+    if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) {
+      applyPpDecimals(section.listEl);
+    }
+  }
+
+  /**
+   * Run the data features of `section`: fill from what is loaded, and load
+   * its scores first (or further pages, once "Show more" revealed more rows
+   * than were fetched). The fetchers share cached and in-flight results.
+   * @param {ScoreSection} section
+   * @returns {Promise<void>}
+   */
+  function syncSectionData(section) {
     const { listEl, type } = section;
-    // Both fetchers share in-flight/cached results, so calling again is cheap;
-    // fetchScores only loads further pages when more rows are rendered.
-    const scores =
+    if (!LIST_DATA_FEATURES.some((f) => f.applies(section))) {
+      return Promise.resolve();
+    }
+    const scores = scoresMap.get(type);
+    if (scores) fillSection(section);
+    const pending = loading.get(section);
+    if (pending) return pending;
+    const rowCount = listEl.querySelectorAll(".play-detail").length;
+    const needsMore =
+      !scores ||
+      (type !== "most_watched" &&
+        rowCount > scores.length &&
+        !_scoreListComplete(userId, mode, type));
+    if (!needsMore) return Promise.resolve();
+
+    const load = (
       type === "most_watched"
-        ? await fetchMostWatchedScores(userId, mode)
-        : await fetchScores(
-            userId,
-            mode,
-            type,
-            listEl.querySelectorAll(".play-detail").length,
-          );
-    if (isDisposed()) return;
-    scoresMap.set(type, scores);
-    fillStatsRows(
-      Array.from(listEl.querySelectorAll(".play-detail")),
-      scoresMap.get(type),
-    );
+        ? fetchMostWatchedScores(userId, mode)
+        : fetchScores(userId, mode, type, rowCount)
+    )
+      .then((loaded) => {
+        if (isDisposed()) return;
+        scoresMap.set(type, loaded);
+        fillSection(section);
+      })
+      .finally(() => loading.delete(section));
+    loading.set(section, load);
+    return load;
   }
 
-  // Inject PP for Most Watched Replays regardless of the hit statistics setting.
-  const mostWatchedSections = scoreSections.filter(
-    (s) => s.type === "most_watched",
-  );
-  cleanupFns.push(() =>
-    mostWatchedSections.forEach(({ listEl }) => revertMostWatchedPp(listEl)),
-  );
-  if (mostWatchedSections.length > 0) {
-    if (!scoresMap.has("most_watched")) {
-      const mw = await fetchMostWatchedScores(userId, mode);
-      if (isDisposed()) return;
-      scoresMap.set("most_watched", mw);
-    }
-    const mwScores = scoresMap.get("most_watched");
-    mostWatchedSections.forEach(({ listEl }) =>
-      applyMostWatchedPp(listEl, mwScores),
-    );
-    if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) {
-      mostWatchedSections.forEach(({ listEl }) => applyPpDecimals(listEl));
-    }
-  }
+  await Promise.all(scoreSections.map(syncSectionData));
+  if (isDisposed()) return;
 
-  if (settings().isEnabled(SCORE_HIT_STATISTICS_ID)) {
-    await Promise.all(scoreSections.map(_loadAndApplyStats));
-    if (isDisposed()) return;
-    if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) {
-      scoreSections.forEach(({ listEl }) => applyPpDecimals(listEl));
-    }
-  }
-
+  /** @param {ScoreSection} section */
   function mountScoreListObserver(section) {
-    const { listEl, type } = section;
-    let statsFetchPending = false;
+    const { listEl } = section;
 
     const obs = new MutationObserver((mutations) => {
-      const hasNewRows = mutations.some((m) => {
-        for (const node of m.addedNodes) {
-          if (!(node instanceof Element)) continue;
-          if (
-            node.matches(".play-detail") ||
-            node.querySelector(".play-detail")
-          )
-            return true;
-        }
-        return false;
-      });
-
-      // Detect when the site re-renders (e.g. after async locale load) and
-      // patches pp text nodes back to integer values via characterData mutations,
-      // bypassing the childList check above.
-      const hasPpDecimalOverwrite =
-        !hasNewRows &&
-        settings().isEnabled(SCORE_PP_DECIMALS_ID) &&
-        mutations.some((m) => {
-          if (m.type !== "characterData") return false;
-          const span = m.target.parentElement;
-          if (!(span instanceof HTMLSpanElement)) return false;
-          const titleAttr = span.getAttribute("title");
-          if (!titleAttr || !span.parentElement?.matches(".play-detail__pp"))
-            return false;
-          const n = parseLocaleNumber(titleAttr);
-          if (!Number.isFinite(n)) return false;
-          return m.target.nodeValue !== formatDecimalPp(n) + "\u200A";
-        });
-
-      // Detect re-rendered Most Watched Replays rows that lost their PP span.
-      const hasMwPpMissing =
-        !hasNewRows &&
-        type === "most_watched" &&
-        scoresMap.has(type) &&
-        mutations.some((m) => m.type === "childList") &&
-        Array.from(listEl.querySelectorAll(".play-detail")).some(
-          (r) => !r.querySelector(`.${MW_PP_CLASS}`),
+      const changed =
+        mutationsAddRows(mutations) ||
+        decorationsStale(mutations) ||
+        LIST_DATA_FEATURES.some(
+          (f) =>
+            f.applies(section) &&
+            scoresMap.has(section.type) &&
+            f.isStale?.(listEl, mutations),
         );
-
-      if (!hasNewRows && !hasPpDecimalOverwrite && !hasMwPpMissing) return;
-
+      if (!changed) return;
       decorateScoreList(section);
-
-      const allEls = Array.from(listEl.querySelectorAll(".play-detail"));
-      if (settings().isEnabled(SCORE_HIT_STATISTICS_ID)) {
-        if (!scoresMap.has(type) && !statsFetchPending) {
-          // Rows appeared before the initial fetch completed (e.g. list was
-          // adopted while empty). Fetch now, then re-apply.
-          statsFetchPending = true;
-          _loadAndApplyStats(section).then(() => {
-            statsFetchPending = false;
-            if (isDisposed()) return;
-            if (settings().isEnabled(SCORE_PP_DECIMALS_ID))
-              applyPpDecimals(listEl);
-          });
-        } else if (scoresMap.has(type)) {
-          const scores = scoresMap.get(type);
-          fillStatsRows(allEls, scores);
-          if (
-            type !== "most_watched" &&
-            allEls.length > scores.length &&
-            !statsFetchPending &&
-            !_scoreListComplete(userId, mode, type)
-          ) {
-            // "Show more" revealed rows past the pages fetched so far.
-            statsFetchPending = true;
-            fetchScores(userId, mode, type, allEls.length).then((more) => {
-              statsFetchPending = false;
-              if (isDisposed()) return;
-              scoresMap.set(type, more);
-              fillStatsRows(
-                Array.from(listEl.querySelectorAll(".play-detail")),
-                more,
-              );
-              if (settings().isEnabled(SCORE_PP_DECIMALS_ID))
-                applyPpDecimals(listEl);
-            });
-          }
-        }
-      }
-
-      if (type === "most_watched" && scoresMap.has(type)) {
-        const scores = scoresMap.get(type);
-        const byBeatmap = _buildScoresByBeatmapId(scores);
-        const usageCount = new Map();
-        allEls.forEach((rowEl) => {
-          if (rowEl.querySelector(`.${MW_PP_CLASS}`)) {
-            const bmId = _beatmapIdFromRow(rowEl);
-            if (bmId) usageCount.set(bmId, (usageCount.get(bmId) ?? 0) + 1);
-            return;
-          }
-          const bmId = _beatmapIdFromRow(rowEl);
-          if (!bmId) return;
-          const candidates = byBeatmap.get(bmId);
-          if (!candidates) return;
-          const idx = usageCount.get(bmId) ?? 0;
-          const score = candidates[idx];
-          if (!score) return;
-          usageCount.set(bmId, idx + 1);
-          injectMostWatchedPpRow(rowEl, score);
-        });
-        if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
-      }
+      syncSectionData(section);
     });
 
     obs.observe(listEl, {
@@ -345,12 +266,12 @@ export async function initScoreFeatures(userId, mode, run) {
   scoreSections.forEach(mountScoreListObserver);
 
   /**
-   * Apply all score features to a .play-detail-list that appeared after the
-   * initial `initScoreFeatures` snapshot (e.g. Historical tab opened for the
-   * first time, or a score section that was lazy-rendered by osu! later).
+   * Run the pipeline on a .play-detail-list that appeared after the first
+   * pass (e.g. Historical opened for the first time, or a score section osu!
+   * rendered lazily).
    * @param {HTMLElement} listEl
    */
-  async function adoptLateSection(listEl) {
+  function adoptLateSection(listEl) {
     const type = _getSectionType(listEl);
     if (!SCORE_SECTION_TYPES.includes(type)) return;
     // Mark immediately to prevent a second adoption while we're async.
@@ -368,36 +289,9 @@ export async function initScoreFeatures(userId, mode, run) {
     // rows are always caught, even if the list is empty right now.
     mountScoreListObserver(section);
 
-    const hasRows = listEl.querySelector(".play-detail") != null;
-
-    if (hasRows) {
-      decorateScoreList(section);
-      if (
-        settings().isEnabled(SCORE_PLACE_NUMBER_ID) &&
-        type === SCORE_PLACE_SECTION_TYPE
-      ) {
-        scorePlaceNumberStyle.inject();
-      }
-
-      if (type === "most_watched") {
-        mostWatchedSections.push(section);
-        if (!scoresMap.has("most_watched")) {
-          const mw = await fetchMostWatchedScores(userId, mode);
-          if (isDisposed()) return;
-          scoresMap.set("most_watched", mw);
-        }
-        applyMostWatchedPp(listEl, scoresMap.get("most_watched"));
-        if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
-      }
-
-      if (settings().isEnabled(SCORE_HIT_STATISTICS_ID)) {
-        await _loadAndApplyStats(section);
-        if (isDisposed()) return;
-        if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) applyPpDecimals(listEl);
-      }
-    } else if (type === "most_watched") {
-      mostWatchedSections.push(section);
-    }
+    if (listEl.querySelector(".play-detail") == null) return;
+    decorateScoreList(section);
+    syncSectionData(section);
   }
 
   // Lists that render after init (lazy sections). The per-list observers
@@ -424,19 +318,14 @@ export async function initScoreFeatures(userId, mode, run) {
   cleanupFns.push(() => lateSectionAc.abort());
 
   cleanupFns.push(
-    settings().onChange(SCORE_PP_DECIMALS_ID, (enabled) => {
-      scoreSections.forEach(({ listEl }) => {
-        syncScoreListPpDecimalsWidthClass(listEl);
-        enabled ? applyPpDecimals(listEl) : revertPpDecimals(listEl);
-      });
-    }),
+    ...watchDecorationSettings(() => scoreSections),
     settings().onChange(SCORE_HIT_STATISTICS_ID, async (enabled) => {
       if (enabled) {
         setScoreListLayoutClass(scoreSections, true);
         scoreSections.forEach(({ listEl }) =>
           syncScoreListPpDecimalsWidthClass(listEl),
         );
-        await Promise.all(scoreSections.map(_loadAndApplyStats));
+        await Promise.all(scoreSections.map(syncSectionData));
       } else {
         scoreSections.forEach(({ listEl }) => revertStatsRows(listEl));
         setScoreListLayoutClass(scoreSections, false);
@@ -448,23 +337,6 @@ export async function initScoreFeatures(userId, mode, run) {
     settings().onChange(MODDED_SR_ID, (enabled) => {
       if (enabled) initSrObserver();
       else revertModdedStarRatings();
-    }),
-    settings().onChange(SCORE_PLACE_NUMBER_ID, (enabled) => {
-      if (enabled) {
-        if (scoreSections.some((s) => s.type === SCORE_PLACE_SECTION_TYPE)) {
-          scorePlaceNumberStyle.inject();
-        }
-        scoreSections.forEach(({ listEl, type }) => {
-          if (type === SCORE_PLACE_SECTION_TYPE) {
-            applyPlaceNumbers(listEl);
-          } else {
-            revertPlaceNumbers(listEl);
-          }
-        });
-      } else {
-        scoreSections.forEach(({ listEl }) => revertPlaceNumbers(listEl));
-        scorePlaceNumberStyle.remove();
-      }
     }),
   );
 }
