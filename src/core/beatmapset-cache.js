@@ -39,7 +39,14 @@ export function createBeatmapsetCache({ maxEntries = 2000 } = {}) {
         const rawId = /** @type {Beatmapset} */ (item).id;
         if (rawId == null) continue;
         const id = String(rawId);
-        const data = /** @type {Beatmapset} */ (item);
+        const prev = entries.get(id)?.data;
+        // A compact set (no `beatmaps`, e.g. Most Played "load more") must not
+        // wipe the difficulties a full copy already brought (B106).
+        const data = /** @type {Beatmapset} */ (
+          prev && !Array.isArray(/** @type {Beatmapset} */ (item).beatmaps)
+            ? { ...prev, ...item }
+            : item
+        );
         entries.delete(id);
         entries.set(id, { data, version: nextVersion++ });
         changed.push(id);

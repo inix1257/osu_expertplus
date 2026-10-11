@@ -91,3 +91,19 @@ test("payload shapes", () => {
     { id: 4 },
   ]);
 });
+
+test("a compact set does not wipe the difficulties of a full copy (B106)", () => {
+  const cache = createBeatmapsetCache();
+  const beatmaps = [{ id: 10, bpm: 180, difficulty_rating: 5.5 }];
+  cache.put([{ id: 1, play_count: 5, beatmaps }]);
+  // Most Played "load more": the set nested without beatmaps.
+  cache.put(
+    beatmapsetsFromUserList([
+      { beatmap_id: 10, count: 3, beatmapset: { id: 1, play_count: 6 } },
+    ]),
+  );
+  assert.deepEqual(cache.get(1), { id: 1, play_count: 6, beatmaps });
+  // A full copy still replaces the entry.
+  cache.put([{ id: 1, beatmaps: [] }]);
+  assert.deepEqual(cache.get(1), { id: 1, beatmaps: [] });
+});
