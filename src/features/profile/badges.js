@@ -2,13 +2,13 @@
  * Profile badges strip: collapse toggle (WS-42).
  */
 
+import { observe } from "../../core/observe.js";
+import { KEYS, getBool, setBool } from "../../core/storage.js";
 import { el, manageStyle } from "../legacy.js";
-import { mutationsIncludeSelector } from "./mutations.js";
 const PROFILE_BADGES_COLLAPSE_STYLE_ID =
   "osu-expertplus-profile-badges-collapse";
 const PROFILE_BADGES_WRAP_CLASS = "oep-profile-badges-wrap";
 const PROFILE_BADGES_DONE_ATTR = "data-oep-profile-badges-done";
-const PROFILE_BADGES_COLLAPSED_GM_KEY = "userProfile.profileBadgesCollapsed";
 
 const PROFILE_BADGES_COLLAPSE_CSS = `
   .${PROFILE_BADGES_WRAP_CLASS} {
@@ -54,9 +54,7 @@ function enhanceProfileBadgesStrip(badgesRoot) {
   parent.insertBefore(shell, badgesRoot);
   shell.appendChild(badgesRoot);
 
-  const collapsedStored = Boolean(
-    GM_getValue(PROFILE_BADGES_COLLAPSED_GM_KEY, false),
-  );
+  const collapsedStored = getBool(KEYS.PROFILE_BADGES_COLLAPSED);
   if (collapsedStored) {
     shell.classList.add(`${PROFILE_BADGES_WRAP_CLASS}--collapsed`);
   }
@@ -90,7 +88,7 @@ function enhanceProfileBadgesStrip(badgesRoot) {
     const collapsed = shell.classList.toggle(
       `${PROFILE_BADGES_WRAP_CLASS}--collapsed`,
     );
-    GM_setValue(PROFILE_BADGES_COLLAPSED_GM_KEY, collapsed);
+    setBool(KEYS.PROFILE_BADGES_COLLAPSED, collapsed);
     applyToggleUi(collapsed);
   });
 }
@@ -128,13 +126,19 @@ export function startProfileBadgesCollapseManager() {
   };
 
   scan();
-  const obs = new MutationObserver((mutations) => {
-    if (mutationsIncludeSelector(mutations, ".profile-badges")) scan();
-  });
-  obs.observe(document.documentElement, { childList: true, subtree: true });
+  const ac = new AbortController();
+  observe.subscribe(
+    {
+      selector: ".profile-badges",
+      schedule: "sync",
+      signal: ac.signal,
+      label: "profile/badges",
+    },
+    scan,
+  );
 
   return () => {
-    obs.disconnect();
+    ac.abort();
     teardownProfileBadgesCollapse();
   };
 }

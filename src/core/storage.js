@@ -169,6 +169,20 @@ export function getBool(key, fallback = false) {
 }
 
 /**
+ * Store a boolean. Returns false when it could not be saved.
+ * @param {string | StorageKey} key
+ * @param {boolean} value
+ */
+export function setBool(key, value) {
+  try {
+    GM_setValue(keyName(key), Boolean(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * GM value stored as a JSON string (or a structured value); `fallback` when
  * missing, unreadable or invalid JSON.
  * @template T
