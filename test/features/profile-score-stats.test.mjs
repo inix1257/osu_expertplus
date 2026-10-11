@@ -146,3 +146,27 @@ test("mania max combo comes from maximum_statistics.perfect (B68)", () => {
     { text: "120", full: true },
   ]);
 });
+
+test("pp decimals read API pp as API numbers in any locale (B109)", async () => {
+  const { injectMostWatchedPpRow } =
+    await import("../../src/features/profile/score-stats.js");
+  const { applyPpDecimals } =
+    await import("../../src/features/profile/score-rows.js");
+  const doc = window.document;
+  doc.documentElement.lang = "de";
+  try {
+    const list = doc.createElement("div");
+    list.innerHTML = `
+      <div class="play-detail"><div class="play-detail__pp"></div></div>
+      <div class="play-detail"><div class="play-detail__pp"><span title="1.234,5">1.235</span></div></div>`;
+    injectMostWatchedPpRow(list.children[0], { pp: 441.746 });
+    applyPpDecimals(list);
+    const texts = [...list.querySelectorAll(".play-detail__pp > span")].map(
+      (s) => s.firstChild.textContent,
+    );
+    // Expert+'s span from the API, then osu-web's own title (page locale).
+    assert.deepEqual(texts, ["441,75 ", "1.234,50 "]);
+  } finally {
+    doc.documentElement.lang = "";
+  }
+});

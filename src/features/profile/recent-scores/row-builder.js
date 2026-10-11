@@ -17,7 +17,7 @@ import {
 import { beatmapHrefFromScore } from "./common.js";
 import { buildApiScoreModsInner } from "./mods.js";
 import { scoreTimestampIso } from "./options-menu.js";
-import { SCORE_PP_DECIMALS_ID } from "../score-rows.js";
+import { PP_RAW_ATTR, SCORE_PP_DECIMALS_ID } from "../score-rows.js";
 /**
  * @param {Object} score  osu API v2 score object
  * @param {HTMLElement|null} [modTemplateEl]
@@ -51,7 +51,7 @@ export function buildPlayDetailRowFromApiScore(score, modTemplateEl = null) {
       : raw;
     ppInner = el(
       "span",
-      { title: raw },
+      { title: raw, [PP_RAW_ATTR]: raw },
       shown,
       el("span", { class: `${bn}__pp-unit` }, "pp"),
     );

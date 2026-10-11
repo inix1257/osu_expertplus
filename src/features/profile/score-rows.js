@@ -11,6 +11,7 @@ import {
   settingIds,
   settings,
 } from "../legacy.js";
+import { parseApiNumber } from "../../osu/format.js";
 import { RECENT_FAILS_WRAP_CLASS } from "./recent-scores/common.js";
 // Score lists: PP from span title → 2dp; hit-stat row from API (fetchScores)
 export const SCORE_PP_DECIMALS_ID = settingIds().SCORE_PP_DECIMALS;
@@ -21,6 +22,11 @@ export const RECENT_SCORES_SHOW_FAILS_ID =
 export const PROFILE_SECTION_COLLAPSE_REMOVE_FROM_PAGE_ID =
   settingIds().PROFILE_SECTION_COLLAPSE_REMOVE_FROM_PAGE;
 const PP_DECIMALS_ATTR = "data-oep-pp-original";
+/**
+ * On pp spans Expert+ builds from the API: the raw pp (`441.746`), read with
+ * `parseApiNumber`; the page-locale parse is only for osu-web's titles (B109).
+ */
+export const PP_RAW_ATTR = "data-oep-pp-raw";
 
 export function applyPpDecimals(listEl) {
   listEl.querySelectorAll(".play-detail__pp > span[title]").forEach((span) => {
@@ -32,7 +38,8 @@ export function applyPpDecimals(listEl) {
     );
     if (!textNode) return;
 
-    const n = parseLocaleNumber(full);
+    const raw = span.getAttribute(PP_RAW_ATTR);
+    const n = raw != null ? parseApiNumber(raw) : parseLocaleNumber(full);
     if (!Number.isFinite(n)) return;
 
     const expected = formatDecimalPp(n) + "\u200A"; // hair space

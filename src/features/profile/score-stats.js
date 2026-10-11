@@ -14,6 +14,7 @@ import { el } from "../legacy.js";
 import { rememberRowBeatmap } from "./beatmap-attributes.js";
 import {
   MW_PP_CLASS,
+  PP_RAW_ATTR,
   SCORE_STATS_ATTR,
   _applyByBeatmapId,
   _buildScoresByBeatmapId,
@@ -204,7 +205,11 @@ export function injectMostWatchedPpRow(rowEl, score) {
   ppEl.appendChild(
     el(
       "span",
-      { class: MW_PP_CLASS, title: String(score.pp) },
+      {
+        class: MW_PP_CLASS,
+        title: String(score.pp),
+        [PP_RAW_ATTR]: String(score.pp),
+      },
       String(Math.round(pp)),
       el("span", { class: "play-detail__pp-unit" }, "pp"),
     ),
