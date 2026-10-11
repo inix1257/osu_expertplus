@@ -105,6 +105,14 @@ export const KEYS = Object.freeze({
     owner: "features/listing-mode.js",
     purpose: "Last ruleset picked on the beatmap listing (`m` param)",
   },
+  RANKS_PERIOD: {
+    key: "oep.profile.ranksPeriod",
+    store: "gm",
+    format: "json",
+    owner: "features/profile/ranks-period.js",
+    purpose:
+      "Last Ranks period highlight, `{ period, reversed }`, restored on the next profile",
+  },
   PREVIEW_MUSIC_VOLUME_LEGACY: {
     key: "beatmapPreview.musicVolume",
     store: "gm",

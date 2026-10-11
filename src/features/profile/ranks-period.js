@@ -6,6 +6,7 @@
 import { beatmapsetIdFromHref } from "../../osu/beatmapset-data.js";
 import { el, manageStyle, settingIds, settings } from "../legacy.js";
 import { observe } from "../../core/observe.js";
+import { KEYS, getJSON, setJSON } from "../../core/storage.js";
 import {
   RECENT_FAILS_WRAP_CLASS,
   findMostWatchedReplaysListRoot,
@@ -331,6 +332,29 @@ function clampRanksPeriodIndex(n) {
 }
 
 /**
+ * The period and Reverse last chosen on any profile.
+ * @returns {{ period: number, reversed: boolean }}
+ */
+export function readRanksPeriodState() {
+  const stored = getJSON(KEYS.RANKS_PERIOD, null);
+  return {
+    period: clampRanksPeriodIndex(stored?.period ?? RANKS_PERIOD_IDX_DEFAULT),
+    reversed: stored?.reversed === true,
+  };
+}
+
+/**
+ * @param {number} period
+ * @param {boolean} reversed
+ */
+function saveRanksPeriodState(period, reversed) {
+  setJSON(KEYS.RANKS_PERIOD, {
+    period: clampRanksPeriodIndex(period),
+    reversed: Boolean(reversed),
+  });
+}
+
+/**
  * @param {number} idx
  * @returns {number} ms to subtract from “now” for the highlight window
  */
@@ -600,11 +624,11 @@ function insertRanksDateFilterBar(topRanksRoot, wrap) {
 function ensureRanksDateFilterBar(topRanksRoot) {
   if (topRanksRoot.querySelector(`.${RANKS_DATE_FILTER_CLASS}`)) return;
 
-  const periodIdx = RANKS_PERIOD_IDX_DEFAULT;
+  const { period: periodIdx, reversed } = readRanksPeriodState();
 
   const statusEl = el("strong", { class: "oep-ranks-date-filter__period" });
   const tailEl = el("span", { class: "oep-ranks-date-filter__tail" });
-  setRanksFilterBarLabels(statusEl, tailEl, periodIdx, false);
+  setRanksFilterBarLabels(statusEl, tailEl, periodIdx, reversed);
 
   const resetBtn = el(
     "button",
@@ -620,8 +644,8 @@ function ensureRanksDateFilterBar(topRanksRoot) {
     "button",
     {
       type: "button",
-      class: "oep-ranks-date-filter__btn oep-ranks-date-filter__reverse",
-      "aria-pressed": "false",
+      class: `oep-ranks-date-filter__btn oep-ranks-date-filter__reverse${reversed ? " oep-ranks-date-filter__reverse--on" : ""}`,
+      "aria-pressed": reversed ? "true" : "false",
       "aria-label": "Reverse highlight to older scores outside the period",
     },
     "Reverse",
@@ -660,6 +684,10 @@ function ensureRanksDateFilterBar(topRanksRoot) {
     setRanksFilterBarLabels(statusEl, tailEl, idx, readReversed());
     applyRanksDateHighlights(topRanksRoot, idx, readReversed());
   });
+  // Saved when the drag ends, not on every step.
+  range.addEventListener("change", () => {
+    saveRanksPeriodState(range.value, readReversed());
+  });
 
   revBtn.addEventListener("click", () => {
     const next = revBtn.getAttribute("aria-pressed") !== "true";
@@ -668,6 +696,7 @@ function ensureRanksDateFilterBar(topRanksRoot) {
     const idx = clampRanksPeriodIndex(range.value);
     setRanksFilterBarLabels(statusEl, tailEl, idx, next);
     applyRanksDateHighlights(topRanksRoot, idx, next);
+    saveRanksPeriodState(idx, next);
   });
 
   resetBtn.addEventListener("click", () => {
@@ -676,6 +705,7 @@ function ensureRanksDateFilterBar(topRanksRoot) {
     revBtn.classList.remove("oep-ranks-date-filter__reverse--on");
     setRanksFilterBarLabels(statusEl, tailEl, RANKS_PERIOD_IDX_DEFAULT, false);
     applyRanksDateHighlights(topRanksRoot, RANKS_PERIOD_IDX_DEFAULT, false);
+    saveRanksPeriodState(RANKS_PERIOD_IDX_DEFAULT, false);
   });
 }
 
