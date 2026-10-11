@@ -137,6 +137,56 @@ function apiHitValue(name, score) {
   );
 }
 
+const TOP_PERFECT_CLASS = "beatmap-score-top__stat-value--perfect";
+const ROW_PERFECT_CLASS = "beatmap-scoreboard-table__cell-content--perfect";
+
+/**
+ * The parts of a cloned #1 card that still show the native #1 score: its
+ * position, team flag and perfect accuracy/combo colours (B96). They are
+ * taken from the row the card now stands for, which the table already shows
+ * correctly. Like osu-web's top card, an unknown position is `-`.
+ * @param {HTMLElement} item
+ * @param {HTMLTableRowElement} row
+ */
+function syncTopItemFromRow(item, row) {
+  const posEl = item.querySelector(".beatmap-score-top__position-number");
+  if (posEl) {
+    const rankText =
+      row
+        .querySelector("a.beatmap-scoreboard-table__cell-content--rank")
+        ?.textContent?.trim() ?? "";
+    posEl.textContent = /\d/.test(rankText) ? rankText : "-";
+  }
+
+  const flags = item.querySelector(".beatmap-score-top__flags");
+  if (flags) {
+    for (const a of flags.querySelectorAll('a[href*="/teams/"]')) a.remove();
+    const rowTeam = row.querySelector('a[href*="/teams/"]');
+    if (rowTeam?.querySelector(".flag-team")) {
+      const teamA = /** @type {HTMLElement} */ (rowTeam.cloneNode(true));
+      teamA.className = "u-hover";
+      flags.appendChild(teamA);
+    }
+  }
+
+  /** @type {Record<string, boolean>} */
+  const perfect = {};
+  for (const a of row.querySelectorAll(
+    ".beatmap-scoreboard-table__cell-content",
+  )) {
+    const t = a.textContent?.trim() ?? "";
+    const on = a.classList.contains(ROW_PERFECT_CLASS);
+    if (perfect.accuracy == null && t.endsWith("%")) perfect.accuracy = on;
+    else if (perfect.combo == null && /^\d[\d,.\s]*x$/.test(t)) {
+      perfect.combo = on;
+    }
+  }
+  for (const { valueEl, kind } of topItemStats(item)) {
+    if (kind !== "accuracy" && kind !== "combo") continue;
+    valueEl.classList.toggle(TOP_PERFECT_CLASS, perfect[kind] === true);
+  }
+}
+
 /**
  * Returns the first visible leaderboard row that is not the original native rank-#1 entry.
  * Returns null when no override is needed (the native panel already shows the correct score).
@@ -278,6 +328,7 @@ export function applyApiScoreToTopItem(item, apiScore, row) {
       valueEl.textContent = apiHitValue(kind.slice(HIT_KIND.length), score);
     }
   }
+  if (row) syncTopItemFromRow(item, row);
 }
 
 /**
@@ -417,6 +468,7 @@ export function applyNativeRowToTopItem(item, row) {
       valueEl.textContent = hitByName.get(kind.slice(HIT_KIND.length)) ?? "-";
     }
   }
+  syncTopItemFromRow(item, row);
 }
 
 /**
