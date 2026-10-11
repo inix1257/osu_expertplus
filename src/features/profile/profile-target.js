@@ -95,6 +95,19 @@ function profileDataMatchesUrl(data) {
 }
 
 /**
+ * Whether the initial data belongs to the profile in the URL and shows the
+ * ruleset the URL asks for. A URL without a ruleset shows the user's default
+ * (`playmode`), so data with another `current_mode` is the previous page
+ * still in the DOM, e.g. right after Back from `/users/1/mania` (B92).
+ * @param {Object|null} data
+ */
+function profileDataMatchesLocation(data) {
+  if (!profileDataMatchesUrl(data)) return false;
+  const want = getModeFromUrl() ?? data.user.playmode;
+  return !want || (data.current_mode ?? "osu") === want;
+}
+
+/**
  * The initial data, only when it belongs to the profile in the URL (B43):
  * right after an SPA move the DOM can still hold the previous profile.
  * @returns {Object|null}
@@ -109,8 +122,12 @@ export function getCurrentMode() {
   if (fromUrl) return fromUrl;
 
   const data = parseProfileInitialData();
-  if (data?.current_mode && profileDataMatchesUrl(data)) {
+  if (data?.current_mode && profileDataMatchesLocation(data)) {
     return data.current_mode;
+  }
+  // The previous page is still in the DOM: the user's default, if known.
+  if (profileDataMatchesUrl(data) && data.user.playmode) {
+    return data.user.playmode;
   }
   return "osu";
 }
@@ -145,7 +162,7 @@ export async function resolveProfileTarget(timeoutMs = 8000) {
 
   for (;;) {
     const data = parseProfileInitialData();
-    if (data && profileDataMatchesUrl(data)) {
+    if (data && profileDataMatchesLocation(data)) {
       return profileTarget(
         String(data.user.id),
         urlMode ?? data.current_mode ?? "osu",
