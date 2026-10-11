@@ -4,10 +4,10 @@
  * per visit and the cleanup it returns on navigation.
  */
 
-import { safeStart } from "../core/lifecycle.js";
+import { mountSettingFeature, safeStart } from "../core/lifecycle.js";
 import { startBbcodeHelperManager } from "../editor/bbcode-helper/manager.js";
 import { startProfileBadgesCollapseManager } from "../features/profile/badges.js";
-import { startBwsRankingManager } from "../features/profile/bws.js";
+import { mountBwsRanking } from "../features/profile/bws.js";
 import { startContentsReorderManager } from "../features/profile/contents-reorder.js";
 import { startProfileMediaOpenPictureManager } from "../features/profile/media-buttons.js";
 import { teardownSrObserver } from "../features/profile/modded-sr.js";
@@ -77,7 +77,7 @@ function init(_match) {
   );
 
   safeStart(bag, startRanksDateHighlightManager, "ranks period");
-  safeStart(bag, startBwsRankingManager, "BWS rank");
+  mountSettingFeature(bag, settings, settings.IDS.BWS_RANKING, mountBwsRanking);
   safeStart(bag, startProfileBadgesCollapseManager, "badges collapse");
   safeStart(bag, startProfileSectionCollapseManager, "section collapse");
   safeStart(bag, startProfileSubsectionCollapseManager, "subsection collapse");
