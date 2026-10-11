@@ -4,7 +4,7 @@
  * src/features/beatmap-preview/ (WS-51).
  */
 
-import { mountBeatmapsetInfoPreview } from "../beatmap-preview/widget.js";
+import { mountBeatmapsetInfoPreview } from "../beatmap-preview/widget/index.js";
 import {
   getBeatmapPageBeatmapId,
   getBeatmapPageRuleset,
