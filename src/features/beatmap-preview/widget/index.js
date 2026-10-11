@@ -16,11 +16,7 @@ import {
   musicVolumePref,
   readStoredOffsetMs,
 } from "../prefs.js";
-import {
-  destroySharedEngineHard,
-  parkSharedEngineRoot,
-  sharedEngine,
-} from "../shared-engine.js";
+import { destroySharedEngineHard, sharedEngine } from "../shared-engine.js";
 import { buildPreviewDom, setStatus, setToggleLabel } from "./dom.js";
 import { createPreviewKeydown } from "./keyboard.js";
 import { createBeatmapLoader } from "./load.js";
@@ -201,7 +197,7 @@ export function mountBeatmapsetInfoPreview({
       transport.stopSeekAnimationLoop();
       transport.hideTransportOverlay();
       revokeBeatmapCoverObjectUrl();
-      parkSharedEngineRoot();
+      destroySharedEngineHard();
       row.remove();
       styles.remove();
     },

@@ -1,13 +1,13 @@
 /**
  * The one BeatmapEngine (Pixi app) shared by every preview on the page:
- * acquire, park, place and destroy (WS-51).
+ * acquire, place and destroy (WS-51).
  */
 
 import { loadBeatmapEngineClass } from "./loader.js";
 /**
- * One BeatmapEngine / Pixi Application per tab. Pixi v8 registers extension handlers
- * (e.g. batcher) globally; destroying and creating a second Application throws
- * "Extension type batcher already has a handler".
+ * At most one BeatmapEngine / Pixi Application at a time. It is created on
+ * the first load and destroyed when the preview leaves the page or switches
+ * difficulty or ruleset; the next load creates a new one (B86).
  */
 /** @type {HTMLDivElement|null} */
 let sharedEngineRoot = null;
@@ -19,28 +19,11 @@ let acquireMutex = Promise.resolve();
 /** The running `init()` of a new engine, so a destroy can wait for it (B31). */
 let engineInitializing = null;
 
-const ENGINE_ROOT_PARK_STYLE =
-  "position:fixed!important;left:-9999px!important;top:0!important;width:512px!important;height:288px!important;opacity:0!important;pointer-events:none!important;overflow:hidden!important;";
-
-export function parkSharedEngineRoot() {
-  if (!sharedEngineRoot) return;
-  try {
-    sharedEngine?.pause?.();
-  } catch (_) {
-    void 0;
-  }
-  sharedEngineRoot.setAttribute("style", ENGINE_ROOT_PARK_STYLE);
-  if (document.body) {
-    document.body.appendChild(sharedEngineRoot);
-  }
-}
-
 /**
  * @param {HTMLElement} hostEl  Visible canvas container (e.g. `.oep-beatmap-preview__canvas-host`).
  */
 export function placeSharedEngineRoot(hostEl) {
   if (!sharedEngineRoot) return;
-  sharedEngineRoot.removeAttribute("style");
   hostEl.replaceChildren(sharedEngineRoot);
 }
 
@@ -98,8 +81,11 @@ export function runEngineLoad(task) {
 }
 
 /**
- * Destroys the shared engine and its root. Used when the preview is collapsed
- * and when switching to a non-osu! ruleset; SPA navigation only parks it.
+ * Destroys the shared engine and its root: the Pixi ticker, the WebGL context
+ * (Pixi's destroy calls `loseContext`), the hitsound AudioContext and the
+ * preview `<audio>`. Used when the preview leaves the page (dispose) and when
+ * the page switches difficulty or ruleset while the preview is expanded;
+ * collapsing with the toggle only pauses.
  */
 export function destroySharedEngineHard() {
   const engine = sharedEngine;
