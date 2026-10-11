@@ -4,9 +4,15 @@
  */
 
 import { pageWindow } from "../../core/page-window.js";
-import { patchBeatmapEnginePreviewAudio } from "./engine-patches.js";
+import {
+  patchBeatmapEngineBackgroundContain,
+  patchBeatmapEnginePreviewAudio,
+} from "./engine-patches.js";
+
 const READY_EVENT = "oep-beatmap-renderer-esm-ready";
 const GLOBAL_KEY = "__oepBeatmapEngine";
+/** `PIXI.Texture.EMPTY`, for the background patch (the userscript has no Pixi). */
+const PIXI_EMPTY_TEXTURE_KEY = "__oepPixiTextureEmpty";
 const LOADER_ATTR = "data-oep-beatmap-renderer-loader";
 const IMPORTMAP_ATTR = "data-oep-pixi-importmap";
 
@@ -15,38 +21,108 @@ const PIXI_ESM_URL =
 const RENDERER_ESM_URL =
   "https://cdn.jsdelivr.net/npm/osu-beatmap-renderer@0.1.2/dist/osu-beatmap-renderer.js";
 
+/**
+ * D11: SHA-384 of the exact files above, checked by the browser through the
+ * import map (Chrome 127+, Firefox 138+; older browsers ignore it). A changed
+ * file makes the load fail with an error instead of running.
+ */
+const MODULE_INTEGRITY = Object.freeze({
+  pixi: "sha384-MryiqCBUxcjngKGCQBH2iYL6sT10lbGoVbtkle1ZUBC6z4PbaCEVaLfSGjyzURwZ",
+  renderer:
+    "sha384-64fRocbh7EKo2zRcbgh78V8aYtE1syju4KIvnYlIYWpgHiGf79P8DVw5NImYIbQ1",
+});
+
+/** A load that has not finished by then is reported as failed (B29). */
+const LOAD_TIMEOUT_MS = 20000;
+
 /** @type {Promise<any>|null} */
 let engineClassPromise = null;
+/** Failed attempts so far; each retry loads fresh URLs (B29). */
+let attempt = 0;
 
 /**
+ * `url` for load attempt `n`. A module that failed to load stays failed for
+ * the document's lifetime, so a retry needs a URL the page has not seen.
+ * @param {string} url
+ * @param {number} n
+ */
+function attemptUrl(url, n) {
+  return n === 0 ? url : `${url}?oep-retry=${n}`;
+}
+
+/**
+ * The import map for attempt `n`: the bare `pixi.js` the renderer imports,
+ * and the integrity of both files. Retries map `pixi.js` again under a scope
+ * for that attempt's renderer URL; browsers that accept only one import map
+ * ignore it, and then only the renderer is fetched fresh.
+ * @param {number} n
+ */
+function importMapFor(n) {
+  const pixi = attemptUrl(PIXI_ESM_URL, n);
+  const renderer = attemptUrl(RENDERER_ESM_URL, n);
+  const integrity = {
+    [pixi]: MODULE_INTEGRITY.pixi,
+    [renderer]: MODULE_INTEGRITY.renderer,
+  };
+  return n === 0
+    ? { imports: { "pixi.js": pixi }, integrity }
+    : { scopes: { [renderer]: { "pixi.js": pixi } }, integrity };
+}
+
+/**
+ * @param {number} n
+ * @returns {string} the inline module that imports the engine for attempt `n`
+ */
+function loaderSource(n) {
+  return `
+import { BeatmapEngine } from ${JSON.stringify(attemptUrl(RENDERER_ESM_URL, n))};
+import * as PIXI from "pixi.js";
+window[${JSON.stringify(PIXI_EMPTY_TEXTURE_KEY)}] = PIXI.Texture.EMPTY;
+window[${JSON.stringify(GLOBAL_KEY)}] = BeatmapEngine;
+window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
+`;
+}
+
+/** @param {any} Cls  the page's BeatmapEngine class */
+function patchEngineClass(Cls) {
+  patchBeatmapEnginePreviewAudio(Cls);
+  patchBeatmapEngineBackgroundContain(
+    Cls,
+    pageWindow()[PIXI_EMPTY_TEXTURE_KEY],
+  );
+}
+
+/**
+ * Load the engine class once per page. A failed load (network, integrity,
+ * timeout) rejects right away and the next call tries again with fresh
+ * URLs (B29).
  * @returns {Promise<any>} BeatmapEngine constructor
  */
 export function loadBeatmapEngineClass() {
   const pw = pageWindow();
   const existing = pw[GLOBAL_KEY];
   if (existing && typeof existing === "function") {
-    patchBeatmapEnginePreviewAudio(existing);
+    patchEngineClass(existing);
     return Promise.resolve(existing);
   }
   if (engineClassPromise) return engineClassPromise;
 
+  const n = attempt;
   engineClassPromise = new Promise((resolve, reject) => {
+    /** @type {HTMLScriptElement|null} */
+    let script = null;
     let tid = 0;
     const finish = (err, Cls) => {
       pw.removeEventListener(READY_EVENT, onReady);
-      if (tid) window.clearTimeout(tid);
+      window.clearTimeout(tid);
       if (err || !Cls) {
         engineClassPromise = null;
-        document.querySelector(`script[${LOADER_ATTR}]`)?.remove();
-        try {
-          delete pw[GLOBAL_KEY];
-        } catch (_) {
-          pw[GLOBAL_KEY] = undefined;
-        }
+        attempt = n + 1;
+        script?.remove();
         reject(err || new Error("BeatmapEngine missing"));
         return;
       }
-      patchBeatmapEnginePreviewAudio(Cls);
+      patchEngineClass(Cls);
       resolve(Cls);
     };
 
@@ -62,80 +138,28 @@ export function loadBeatmapEngineClass() {
 
     pw.addEventListener(READY_EVENT, onReady, { once: true });
     tid = window.setTimeout(() => {
-      finish(new Error("Beatmap renderer load timeout"), null);
-    }, 60000);
-
-    const ClsNow = pw[GLOBAL_KEY];
-    if (ClsNow && typeof ClsNow === "function") {
-      finish(null, ClsNow);
-      return;
-    }
+      finish(new Error("The preview engine took too long to load."), null);
+    }, LOAD_TIMEOUT_MS);
 
     try {
-      if (!document.querySelector(`script[${LOADER_ATTR}]`)) {
-        if (!document.querySelector(`script[${IMPORTMAP_ATTR}]`)) {
-          const map = document.createElement("script");
-          map.type = "importmap";
-          map.setAttribute(IMPORTMAP_ATTR, "");
-          map.textContent = JSON.stringify({
-            imports: { "pixi.js": PIXI_ESM_URL },
-          });
-          document.head.appendChild(map);
-        }
-
-        const script = document.createElement("script");
-        script.type = "module";
-        script.setAttribute(LOADER_ATTR, "");
-        script.textContent = `
-import { BeatmapEngine } from ${JSON.stringify(RENDERER_ESM_URL)};
-import * as PIXI from "pixi.js";
-
-const OEP_BG_CONTAIN_PATCH = "__oepBeatmapEngineBgContain";
-{
-const p = BeatmapEngine.prototype;
-if (!p[OEP_BG_CONTAIN_PATCH]) {
-  function reflowBackgroundContain(self) {
-    try {
-      const sp = self.backgroundSprite;
-      const tex = sp?.texture;
-      if (!sp || !tex || tex === PIXI.Texture.EMPTY || !tex.width || !tex.height) {
-        return;
+      if (!document.querySelector(`script[${IMPORTMAP_ATTR}="${n}"]`)) {
+        const map = document.createElement("script");
+        map.type = "importmap";
+        map.setAttribute(IMPORTMAP_ATTR, String(n));
+        map.textContent = JSON.stringify(importMapFor(n));
+        document.head.appendChild(map);
       }
-      const { width, height } = self.getDisplayDimensions();
-      const scaleX = width / tex.width;
-      const scaleY = height / tex.height;
-      const scale = Math.min(scaleX, scaleY);
-      sp.scale.set(scale);
-      sp.x = (width - tex.width * scale) / 2;
-      sp.y = (height - tex.height * scale) / 2;
-      // Darken cover art so objects/readability match typical in-game dimming.
-      sp.tint = 0x5a5a5a;
-    } catch (_e) {
-      void 0;
-    }
-  }
-
-  const origUpdateBg = p.updateBackgroundFromUrl;
-  p.updateBackgroundFromUrl = async function oepUpdateBackgroundFromUrl(imageUrl) {
-    await origUpdateBg.call(this, imageUrl);
-    reflowBackgroundContain(this);
-  };
-
-  const origResize = p.resize;
-  p.resize = function oepResize() {
-    origResize.call(this);
-    reflowBackgroundContain(this);
-  };
-
-  p[OEP_BG_CONTAIN_PATCH] = true;
-}
-}
-
-window[${JSON.stringify(GLOBAL_KEY)}] = BeatmapEngine;
-window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
-`;
-        document.head.appendChild(script);
-      }
+      document.querySelector(`script[${LOADER_ATTR}]`)?.remove();
+      script = document.createElement("script");
+      script.type = "module";
+      script.setAttribute(LOADER_ATTR, String(n));
+      // A module that fails to fetch, parse or match its integrity fires
+      // `error` on the script (B29: it used to wait 60 s for a timeout).
+      script.addEventListener("error", () => {
+        finish(new Error("Could not load the preview engine."), null);
+      });
+      script.textContent = loaderSource(n);
+      document.head.appendChild(script);
     } catch (e) {
       finish(e, null);
     }

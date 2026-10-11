@@ -1,12 +1,21 @@
 /**
  * Patches to osu-beatmap-renderer's BeatmapEngine prototype for the site's
- * ~10 s preview MP3 (WS-51).
+ * ~10 s preview MP3 and for the cover background (WS-51).
+ *
+ * They are tied to osu-beatmap-renderer@0.1.2: besides its public methods
+ * they read or write these internals, which a new version may rename or
+ * drop. Check them before bumping the version in loader.js.
+ *   previewAudio, musicVolume, isPlaying, currentTime, transportStartMs,
+ *   transportStartPerfTime, audioSyncOffsetMs, lastAudioSyncSamplePerfMs,
+ *   hitsoundPlayer, backgroundSprite, getDisplayDimensions(),
+ *   getPreviewAudioTimeMsForBeatmapTime(), getTransportCurrentTimeMs()
  */
 const BEATMAP_ENGINE_AUDIO_PATCH = "__oepBeatmapEngineNoPreviewAudioCors";
 const BEATMAP_ENGINE_SEEK_PATCH = "__oepBeatmapEngineSeekBeforePreview";
 const BEATMAP_ENGINE_PLAY_PATCH = "__oepBeatmapEnginePlayOutsidePreview";
 const BEATMAP_ENGINE_TRANSPORT_PATCH = "__oepBeatmapEngineTransportPreview";
 const BEATMAP_ENGINE_PAUSE_PATCH = "__oepBeatmapEnginePauseSnapshot";
+const BEATMAP_ENGINE_BG_CONTAIN_PATCH = "__oepBeatmapEngineBgContain";
 /** Same cap as site preview MP3 handling in {@link mountBeatmapsetInfoPreview}. */
 const OEP_PREVIEW_CLIP_CAP_MS = 10000;
 
@@ -194,4 +203,54 @@ function patchBeatmapEnginePauseCleanSnapshot(BeatmapEngine) {
     this.hitsoundPlayer?.clearScheduledSources();
   };
   proto[BEATMAP_ENGINE_PAUSE_PATCH] = true;
+}
+
+/**
+ * Fit the cover inside the canvas (contain, centred) and dim it like the game
+ * does, after every background load and resize. This patch used to live in
+ * the loader's inline module source.
+ * @param {any} BeatmapEngine
+ * @param {unknown} emptyTexture  `PIXI.Texture.EMPTY` of the page's Pixi
+ */
+export function patchBeatmapEngineBackgroundContain(
+  BeatmapEngine,
+  emptyTexture,
+) {
+  const proto = BeatmapEngine?.prototype;
+  if (!proto || proto[BEATMAP_ENGINE_BG_CONTAIN_PATCH]) return;
+
+  function reflowBackgroundContain(self) {
+    try {
+      const sp = self.backgroundSprite;
+      const tex = sp?.texture;
+      if (!sp || !tex || tex === emptyTexture || !tex.width || !tex.height) {
+        return;
+      }
+      const { width, height } = self.getDisplayDimensions();
+      const scale = Math.min(width / tex.width, height / tex.height);
+      sp.scale.set(scale);
+      sp.x = (width - tex.width * scale) / 2;
+      sp.y = (height - tex.height * scale) / 2;
+      // Darken cover art so objects/readability match typical in-game dimming.
+      sp.tint = 0x5a5a5a;
+    } catch (_e) {
+      void 0;
+    }
+  }
+
+  const origUpdateBg = proto.updateBackgroundFromUrl;
+  proto.updateBackgroundFromUrl = async function oepUpdateBackgroundFromUrl(
+    imageUrl,
+  ) {
+    await origUpdateBg.call(this, imageUrl);
+    reflowBackgroundContain(this);
+  };
+
+  const origResize = proto.resize;
+  proto.resize = function oepResize() {
+    origResize.call(this);
+    reflowBackgroundContain(this);
+  };
+
+  proto[BEATMAP_ENGINE_BG_CONTAIN_PATCH] = true;
 }
