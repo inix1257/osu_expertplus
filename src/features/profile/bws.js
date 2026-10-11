@@ -14,6 +14,12 @@ const BWS_STYLE_ID = "osu-expertplus-bws-ranking";
 const BWS_VALUES_ROW_CLASS = "oep-bws-rank-values";
 const BWS_ATTR = "data-oep-bws";
 const BWS_KIRINO_COL_ATTR = "data-oep-bws-rank-col";
+/**
+ * The Kirino score rank column. Off since api.kirino.sh stopped resolving
+ * (B77): no request is made and the column is not shown. The code stays so a
+ * new endpoint only needs `src/api/kirino.js` and this switch.
+ */
+const KIRINO_SCORE_RANK_COLUMN = false;
 
 const BWS_BADGE_EXCLUSION_PHRASES = [
   "mapping",
@@ -474,8 +480,10 @@ function syncBwsRankingDisplay() {
       wireBwsAdjustInput(inp);
     }
   }
-  bwsEnsureKirinoScoreRankColumn(valuesRow, bwsRow);
-  bwsSyncKirinoScoreRankColumn(valuesRow);
+  if (KIRINO_SCORE_RANK_COLUMN) {
+    bwsEnsureKirinoScoreRankColumn(valuesRow, bwsRow);
+    bwsSyncKirinoScoreRankColumn(valuesRow);
+  }
 }
 
 export function startBwsRankingManager() {
