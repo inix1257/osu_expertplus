@@ -3,7 +3,7 @@
  */
 
 import { el } from "../../features/legacy.js";
-import { isSafeColor } from "../sanitize.js";
+import { isBbcodeColor } from "../bbcode-render.js";
 import { toggleWrap } from "../textarea.js";
 import { BBHELP_MODAL_CLASS } from "./constants.js";
 import {
@@ -57,10 +57,10 @@ export function openColorPicker(textarea) {
   const apply = () => {
     const value = String(textInput.value || "").trim();
     if (!value) return;
-    // Only what the preview (and the old sanitizer) accept as a colour.
-    if (!isSafeColor(value)) {
+    // Only what osu-web renders; anything else stays text once saved (B98).
+    if (!isBbcodeColor(value)) {
       textInput.setAttribute("aria-invalid", "true");
-      hint.textContent = "Use #RGB, #RRGGBB or a color name (letters only).";
+      hint.textContent = "Use #RRGGBB or a color name (letters only).";
       textInput.focus();
       return;
     }
@@ -132,10 +132,11 @@ export function openSizePicker(textarea) {
   const presetSelect = el(
     "select",
     {},
-    el("option", { value: "tiny" }, "tiny"),
-    el("option", { value: "small" }, "small"),
-    el("option", { value: "normal", selected: "selected" }, "normal"),
-    el("option", { value: "large" }, "large"),
+    // osu-web's editor presets; [size=] takes only numbers (B98).
+    el("option", { value: "50" }, "tiny (50)"),
+    el("option", { value: "85" }, "small (85)"),
+    el("option", { value: "100", selected: "selected" }, "normal (100)"),
+    el("option", { value: "150" }, "large (150)"),
   );
   presetField.appendChild(presetSelect);
 

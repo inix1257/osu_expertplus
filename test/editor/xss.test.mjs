@@ -175,15 +175,17 @@ test("bbcode: rejected URLs and styles", () => {
   const color = check(
     renderBbcode('[color=red" onmouseover="alert(1)]x[/color]', { document }),
   );
-  assert.equal(color.querySelector("span").getAttribute("style"), null);
+  assert.equal(color.querySelector("span"), null);
+  assert.equal(
+    color.textContent,
+    '[color=red" onmouseover="alert(1)]x[/color]',
+  );
 
   const size = check(
     renderBbcode("[size=100;position:fixed]x[/size]", { document }),
   );
-  assert.equal(
-    size.querySelector("span").getAttribute("style"),
-    "font-size:1em;",
-  );
+  assert.equal(size.querySelector("span"), null);
+  assert.equal(size.textContent, "[size=100;position:fixed]x[/size]");
 
   const attr = check(
     renderBbcode('[url=https://evil.example/" onmouseover="alert(1)]x[/url]', {

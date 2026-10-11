@@ -292,10 +292,50 @@ test("colour picker: Enter on Cancel cancels, only hex or names apply", async ()
   assert.equal(text.getAttribute("aria-invalid"), "true");
   assert.ok(doc.querySelector(".oep-bbhelp-modal"), "stays open");
 
-  text.value = "#abc";
+  // osu-web renders only #RRGGBB or a name (B98)
+  for (const bad of ["#abc", "#aabbccdd"]) {
+    text.value = bad;
+    text.dispatchEvent(new window.Event("input", { bubbles: true }));
+    assert.equal(text.hasAttribute("aria-invalid"), false);
+    key(window, text, "Enter");
+    assert.equal(ta.value, "hi", bad);
+    assert.equal(text.getAttribute("aria-invalid"), "true");
+  }
+
+  text.value = "#aabbcc";
   text.dispatchEvent(new window.Event("input", { bubbles: true }));
-  assert.equal(text.hasAttribute("aria-invalid"), false);
   key(window, text, "Enter");
-  assert.equal(ta.value, "[color=#abc]hi[/color]");
+  assert.equal(ta.value, "[color=#aabbcc]hi[/color]");
   assert.equal(doc.querySelector(".oep-bbhelp-modal"), null);
+});
+
+test("size picker: presets insert osu-web's numeric sizes (B98)", async () => {
+  const window = setup(EDITOR);
+  const { openSizePicker } =
+    await import("../../src/editor/bbcode-helper/pickers.js");
+  const doc = window.document;
+  const ta = doc.querySelector("textarea");
+  const apply = () =>
+    [...doc.querySelectorAll(".oep-bbhelp-modal button")]
+      .find((b) => b.textContent === "Apply")
+      .click();
+
+  ta.value = "hi";
+  ta.setSelectionRange(0, 2);
+  openSizePicker(ta);
+  const select = doc.querySelector(".oep-bbhelp-modal select");
+  assert.deepEqual(
+    [...select.options].map((o) => o.value),
+    ["50", "85", "100", "150"],
+  );
+  assert.equal(select.value, "100");
+  apply();
+  assert.equal(ta.value, "[size=100]hi[/size]");
+
+  ta.value = "hi";
+  ta.setSelectionRange(0, 2);
+  openSizePicker(ta);
+  doc.querySelector(".oep-bbhelp-modal select").value = "150";
+  apply();
+  assert.equal(ta.value, "[size=150]hi[/size]");
 });

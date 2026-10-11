@@ -12,8 +12,9 @@
  * HTML parsing anywhere, so input can never become markup).
  *
  * Rules:
- * - Tag names are case-insensitive. Unknown tags, tags with a parameter they
- *   do not take, unclosed tags and stray closing tags are shown literally,
+ * - Tag names are lower case, as osu-web matches them (`[B]` is text) (B98).
+ *   Unknown tags, tags with a parameter they do not take or a parameter
+ *   osu-web rejects, unclosed tags and stray closing tags are shown literally,
  *   and everything after them keeps working (B44). A closing tag closes the
  *   nearest open tag of the same name; tags opened in between are shown
  *   literally (`[/list]` closes its `[*]` items normally).
@@ -24,8 +25,9 @@
  *   literally. Unpaired opening tags never occupy a level. Searches for
  *   closing tags and `]` are memoized, so every pass is linear in the input
  *   length, and recursion depth is bounded by the cap (B65).
- * - URLs must be absolute http(s) (`absoluteHttpUrl`); colours `#hex` or a
- *   name (`isSafeColor`); sizes a preset or a percentage clamped to 30–200.
+ * - URLs must be absolute http(s) (`absoluteHttpUrl`). Colours and sizes
+ *   follow osu-web's BBCodeForDB (B98): `#` + 6 hex digits or a name of
+ *   letters, and a whole number shown as a percentage clamped to 30–200.
  * - Paragraphs follow the old `_finishBbcodePreviewParagraphs`: runs of 2+
  *   newlines split paragraphs, single newlines become `<br>`, a paragraph is
  *   wrapped in `<p>` unless it starts with a block (div/heading/quote/list/
@@ -89,12 +91,25 @@ const TAGS = {
   email: { kind: RAW, param: "optional" },
 };
 
-const SIZE_PRESETS = {
-  tiny: "0.75em",
-  small: "0.88em",
-  normal: "1em",
-  large: "1.2em",
+/**
+ * Parameters osu-web accepts (BBCodeForDB `parseColour`, `parseSize`); any
+ * other value leaves the tag as text on the saved page (B98).
+ * @type {Record<string, RegExp>}
+ */
+const PARAM_RE = {
+  color: /^(?:#[0-9A-Fa-f]{6}|[A-Za-z]+)$/,
+  size: /^\d+$/,
 };
+
+/**
+ * Whether osu-web renders `[color=value]` (B98): `#` + 6 hex digits or a
+ * name of letters, exactly as typed.
+ * @param {string} value
+ * @returns {boolean}
+ */
+export function isBbcodeColor(value) {
+  return PARAM_RE.color.test(String(value));
+}
 
 const ALIGN = { centre: "center", left: "left", right: "right" };
 
@@ -111,15 +126,6 @@ const PARSE_CONTENT = Symbol("parse-content");
 
 // ---------------------------------------------------------------------------
 // Scanning
-
-/**
- * ASCII-only lower-casing keeps indexes aligned with the source (full
- * Unicode lower-casing can change the string length).
- * @param {string} s
- */
-function asciiLower(s) {
-  return s.replace(/[A-Z]+/g, (m) => m.toLowerCase());
-}
 
 /**
  * `indexOf` with a per-needle memo. Queries for one needle come with
@@ -171,7 +177,7 @@ function scanTag(src, i, find) {
     k += 1;
   }
   if (k === j || k - j > MAX_NAME_LENGTH) return null;
-  const name = asciiLower(src.slice(j, k));
+  const name = src.slice(j, k);
   const def = Object.hasOwn(TAGS, name) ? TAGS[name] : null;
   if (!def) return null;
   const next = src[k];
@@ -187,6 +193,13 @@ function scanTag(src, i, find) {
   if (lb >= 0 && lb < rb) return null;
   const nl = find("\n", k + 1);
   if (nl >= 0 && nl < rb) return null;
+  if (
+    next === "=" &&
+    Object.hasOwn(PARAM_RE, name) &&
+    !PARAM_RE[name].test(src.slice(k + 1, rb))
+  ) {
+    return null;
+  }
   if (next === "(") {
     // `[imagemap(url)]`: the first `)` must sit right before the `]`.
     const rp = find(")", k + 1);
@@ -327,7 +340,6 @@ function makeRaw(name, tag, content) {
  */
 function tokenize(src) {
   const find = createFinder(src);
-  const findLower = createFinder(asciiLower(src));
   /** @type {Token[]} */
   const tokens = [];
   let pos = 0;
@@ -354,7 +366,7 @@ function tokenize(src) {
     const def = TAGS[tag.name];
     if (def.kind === RAW || (def.rawWithoutParam && tag.param === null)) {
       const closeText = `[/${tag.name}]`;
-      const q = findLower(closeText, tag.end);
+      const q = find(closeText, tag.end);
       if (q < 0) continue;
       const node = makeRaw(tag.name, tag, src.slice(tag.end, q));
       if (node === undefined) continue;
@@ -694,11 +706,7 @@ function linkAttrs(href) {
 }
 
 function sizeValue(raw) {
-  const size = String(raw || "")
-    .trim()
-    .toLowerCase();
-  if (Object.hasOwn(SIZE_PRESETS, size)) return SIZE_PRESETS[size];
-  const pct = Number(size);
+  const pct = Number(raw);
   return Number.isFinite(pct) ? `${Math.max(30, Math.min(200, pct))}%` : "1em";
 }
 

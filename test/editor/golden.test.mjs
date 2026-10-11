@@ -56,7 +56,7 @@ https://i.imgur.com/nav.png
 0 0 33.3 100 https://osu.ppy.sh/users/2 Profile
 33.3 0 33.3 100 # Nothing
 [/imagemap]
-[centre][size=tiny]tiny[/size] [size=small]small[/size] [size=normal]normal[/size] [size=large]large[/size][/centre]
+[centre][size=50]tiny[/size] [size=85]small[/size] [size=100]normal[/size] [size=150]large[/size][/centre]
 
 [notice]
 [b]Rules[/b]
@@ -78,9 +78,6 @@ const BBCODE_SAME = [
   "  leading and trailing  \n\n  spaces  ",
   "a\n \nb",
   "[b]bold[/b] [i]italic[/i] [u]under[/u] [s]strike[/s] [strike]strike2[/strike]",
-  "[B]upper[/B] [I]case[/i]",
-  "[color=#ff66aa]pink[/color] [color=red]red[/color] [color=bad;x]bad[/color] [color=]empty[/color]",
-  "[size=150]big[/size] [size=50]small[/size] [size=tiny]tiny[/size] [size=large]large[/size] [size=999]clamped[/size] [size=abc]bad[/size]",
   "[centre]centered[/centre]\n[right]right[/right]",
   "[heading]Heading[/heading]\ntext after",
   "[heading]a[/heading]\n\n[heading]b[/heading]",
@@ -115,7 +112,7 @@ const BBCODE_SAME = [
   "[spoilerbox]\n[img]https://a.com/x.png[/img]\n[/spoilerbox]",
   "[centre][box=x]in centre box[/box][/centre]",
   "[b]bold [i]bold italic[/i][/b]",
-  "[size=85][color=#aaa]small grey[/color][/size]",
+  "[size=85][color=#aaaaaa]small grey[/color][/size]",
   "text\n[centre]c[/centre]\nmore",
   "[centre]\nline\n[/centre]",
   "[centre]a\n\nb[/centre]",

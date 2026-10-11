@@ -174,6 +174,24 @@ export const BBCODE_DIFFS = [
     old: '<p>" target="_blank" rel="noopener noreferrer"&gt;https://osu.ppy.sh/<img alt="preview image" loading="lazy" referrerpolicy="no-referrer" src="https://a.com/x.png"></p>',
     new: '<p><img alt="preview image" loading="lazy" referrerpolicy="no-referrer" src="https://a.com/x.png"></p>',
   },
+  {
+    why: "B98: osu-web tag names are case-sensitive; upper-case tags stay text",
+    src: "[B]upper[/B] [I]case[/i]",
+    old: "<p><strong>upper</strong> <em>case</em></p>",
+    new: "<p>[B]upper[/B] [I]case[/i]</p>",
+  },
+  {
+    why: "B98: a colour osu-web rejects leaves the tags as text (BBCodeForDB parseColour)",
+    src: "[color=#ff66aa]pink[/color] [color=red]red[/color] [color=bad;x]bad[/color] [color=]empty[/color]",
+    old: '<p><span style="color:#ff66aa;">pink</span> <span style="color:red;">red</span> <span>bad</span> <span>empty</span></p>',
+    new: '<p><span style="color:#ff66aa;">pink</span> <span style="color:red;">red</span> [color=bad;x]bad[/color] [color=]empty[/color]</p>',
+  },
+  {
+    why: "B98: osu-web takes only numeric sizes; size names stay text (BBCodeForDB parseSize)",
+    src: "[size=150]big[/size] [size=50]small[/size] [size=tiny]tiny[/size] [size=large]large[/size] [size=999]clamped[/size] [size=abc]bad[/size]",
+    old: '<p><span style="font-size:150%;">big</span> <span style="font-size:50%;">small</span> <span style="font-size:0.75em;">tiny</span> <span style="font-size:1.2em;">large</span> <span style="font-size:200%;">clamped</span> <span style="font-size:1em;">bad</span></p>',
+    new: '<p><span style="font-size:150%;">big</span> <span style="font-size:50%;">small</span> [size=tiny]tiny[/size] [size=large]large[/size] <span style="font-size:200%;">clamped</span> [size=abc]bad[/size]</p>',
+  },
 ];
 
 export const MARKDOWN_DIFFS = [

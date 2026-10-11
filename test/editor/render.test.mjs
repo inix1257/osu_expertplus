@@ -26,8 +26,12 @@ test("B44: an unclosed box/spoilerbox/notice/spoiler does not hide later boxes",
   }
 });
 
-test("tags: case-insensitive, raw content, \\r\\n", () => {
-  assert.equal(bb("[CODE]x[/code]"), "<pre><code>x</code></pre>");
+test("tags: lower case only (B98), raw content, \\r\\n", () => {
+  assert.equal(bb("[code]x[/code]"), "<pre><code>x</code></pre>");
+  // osu-web matches tag names case-sensitively (B98)
+  assert.equal(bb("[CODE]x[/code]"), "<p>[CODE]x[/code]</p>");
+  assert.equal(bb("[code]x[/CODE]"), "<p>[code]x[/CODE]</p>");
+  assert.equal(bb("[b]x[/B]"), "<p>[b]x[/B]</p>");
   assert.equal(bb("[b]a\r\nb[/b]"), "<p><strong>a<br>b</strong></p>");
   assert.equal(
     bb("[code][url=https://a.com]x[/url][/code]"),
@@ -85,18 +89,41 @@ test("depth cap: BBCODE_MAX_DEPTH levels, then literal", () => {
 });
 
 test("values: colours, sizes, quotes, extra tags", () => {
+  // osu-web BBCodeForDB: `#` + 6 hex digits or letters, untrimmed (B98)
   assert.equal(
-    bb("[color= #abc ]x[/color]"),
-    '<p><span style="color:#abc;">x</span></p>',
+    bb("[color=#AbC123]x[/color] [color=DarkRed]y[/color]"),
+    '<p><span style="color:#AbC123;">x</span> <span style="color:DarkRed;">y</span></p>',
   );
+  for (const bad of [
+    "#abc",
+    "#abc12345",
+    " #abc123",
+    "red ",
+    "red2",
+    "#ggg000",
+  ]) {
+    assert.equal(
+      bb(`[color=${bad}]x[/color]`),
+      `<p>[color=${bad}]x[/color]</p>`,
+      bad,
+    );
+  }
+  // whole numbers only, clamped to 30–200 like BBCodeFromDB
   assert.equal(
     bb("[size=10]x[/size]"),
     '<p><span style="font-size:30%;">x</span></p>',
   );
   assert.equal(
-    bb("[size=Large]x[/size]"),
-    '<p><span style="font-size:1.2em;">x</span></p>',
+    bb("[size=250]x[/size]"),
+    '<p><span style="font-size:200%;">x</span></p>',
   );
+  for (const bad of ["Large", "normal", "1.5", "-5", " 100", "100%"]) {
+    assert.equal(
+      bb(`[size=${bad}]x[/size]`),
+      `<p>[size=${bad}]x[/size]</p>`,
+      bad,
+    );
+  }
   assert.equal(bb("[quote=peppy]x[/quote]"), "<p>[quote=peppy]x[/quote]</p>");
   assert.equal(
     bb('[quote="a"]x[/quote]'),
