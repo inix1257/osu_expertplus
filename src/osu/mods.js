@@ -354,6 +354,43 @@ export function modTypeClass(acronym) {
   return "mod--type-Fun";
 }
 
+/** osu!lazer `ModType` order (osu-web `mod-names-generator.js`). */
+const MOD_TYPE_ORDER = [
+  "mod--type-DifficultyReduction",
+  "mod--type-DifficultyIncrease",
+  "mod--type-Conversion",
+  "mod--type-Automation",
+  "mod--type-Fun",
+  "mod--type-System",
+];
+
+/**
+ * Mods in the order osu-web shows them (`displayMods`, B111): by lazer mod
+ * type, then by acronym with numbers compared as numbers. Returns a new
+ * array; entries without an acronym keep their place at the end.
+ * @template T
+ * @param {T[]|null|undefined} mods  acronym strings or lazer mod objects
+ * @returns {T[]}
+ */
+export function sortModsForDisplay(mods) {
+  const list = Array.isArray(mods) ? mods : [];
+  const key = (m) => {
+    const ac = modAcronym(m);
+    return ac ? [MOD_TYPE_ORDER.indexOf(modTypeClass(ac)), ac] : null;
+  };
+  return list
+    .map((mod, i) => ({ mod, i, k: key(mod) }))
+    .sort((a, b) => {
+      if (!a.k || !b.k) return (a.k ? 0 : 1) - (b.k ? 0 : 1) || a.i - b.i;
+      return (
+        a.k[0] - b.k[0] ||
+        a.k[1].localeCompare(b.k[1], "en", { numeric: true }) ||
+        a.i - b.i
+      );
+    })
+    .map((x) => x.mod);
+}
+
 /**
  * Full lazer name for tooltips (`"DT"` → `"Double Time"`, `"4K"` →
  * `"4 Key Mod"`); unknown acronyms come back upper-cased.

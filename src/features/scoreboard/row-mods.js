@@ -7,6 +7,7 @@ import {
   formatSpeedChange,
   isNonDefaultSpeed,
   modFullName,
+  sortModsForDisplay,
   speedChangeFromMod,
 } from "../../osu/mods.js";
 import { el } from "../legacy.js";
@@ -189,7 +190,7 @@ export function applyScoreboardModsCell(td, score, modTemplateBtn) {
   const wrap = td.querySelector(".beatmap-scoreboard-table__mods");
   if (!wrap) return;
   wrap.replaceChildren();
-  const list = score.mods || [];
+  const list = sortModsForDisplay(score.mods);
   const mi = OsuExpertPlus.modIconsAsAcronyms;
   if (modTemplateBtn instanceof HTMLElement) {
     for (const m of list) {

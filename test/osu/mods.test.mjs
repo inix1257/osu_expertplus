@@ -272,3 +272,30 @@ test("difficultyMods keeps ruleset-only difficulty mods for that ruleset (B103)"
   // No ruleset: the shared list only, as before.
   assert.deepEqual(difficultyMods(["HD", "4K", "DT"]), ["DT"]);
 });
+
+test("sortModsForDisplay orders like osu-web's displayMods (B111)", async () => {
+  const { sortModsForDisplay } = await import("../../src/osu/mods.js");
+  const ac = (mods) =>
+    sortModsForDisplay(mods).map((m) =>
+      typeof m === "string" ? m : m.acronym,
+    );
+  // 39804 FOUR DIMENSIONS, mrekk: API HR,HD,CL; osu-web HD,HR,CL
+  assert.deepEqual(
+    ac([{ acronym: "HR" }, { acronym: "HD" }, { acronym: "CL" }]),
+    ["HD", "HR", "CL"],
+  );
+  assert.deepEqual(ac(["DT", "HD", "NF", "CL"]), ["NF", "DT", "HD", "CL"]);
+  // numeric acronyms: 4K before 10K; System last, Fun before it
+  assert.deepEqual(ac(["10K", "TD", "WU", "4K", "AT"]), [
+    "4K",
+    "10K",
+    "AT",
+    "WU",
+    "TD",
+  ]);
+  // no acronym: kept at the end; input not mutated
+  const input = [{}, "HR", "EZ"];
+  assert.deepEqual(sortModsForDisplay(input), ["EZ", "HR", {}]);
+  assert.deepEqual(input, [{}, "HR", "EZ"]);
+  assert.deepEqual(sortModsForDisplay(null), []);
+});

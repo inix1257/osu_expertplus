@@ -7,6 +7,7 @@ import {
   formatSpeedChange,
   modAcronym,
   modIconSuffix,
+  sortModsForDisplay,
 } from "../../../osu/mods.js";
 import {
   el,
@@ -93,7 +94,7 @@ function patchClonedModForAcronym(modRoot, acronym) {
  */
 export function buildApiScoreModsInner(modsList, templateModEl) {
   const modsInner = el("div", { class: "mods" });
-  for (const mod of modsList || []) {
+  for (const mod of sortModsForDisplay(modsList)) {
     const ac = modAcronym(mod);
     if (!ac) continue;
     let chip;
