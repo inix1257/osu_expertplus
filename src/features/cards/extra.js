@@ -156,14 +156,23 @@ const PROFILE_EXTRA_HOOK_GRACE_MS = 1000;
 const LISTING_CACHE_WAIT_MS = 1500;
 
 /**
+ * @param {typeof OsuExpertPlus.settings} settings
+ * @returns {{ wantMeta: boolean, wantStars: boolean }}
+ */
+function wantedExtras(settings) {
+  return {
+    wantMeta: settings.isEnabled(settings.IDS.BEATMAP_CARD_EXTRA_INFO),
+    wantStars: settings.isEnabled(settings.IDS.BEATMAP_CARD_DIFFICULTY_RANGE),
+  };
+}
+
+/**
  * @param {Element} panel
  * @param {typeof OsuExpertPlus.settings} settings
+ * @param {AbortSignal} [signal]  the feature's run; stops waiting on cleanup
  */
-async function processPanel(panel, settings) {
-  const wantMeta = settings.isEnabled(settings.IDS.BEATMAP_CARD_EXTRA_INFO);
-  const wantStars = settings.isEnabled(
-    settings.IDS.BEATMAP_CARD_DIFFICULTY_RANGE,
-  );
+export async function processPanel(panel, settings, signal) {
+  const { wantMeta, wantStars } = wantedExtras(settings);
   if (!wantMeta && !wantStars) {
     return;
   }
@@ -198,55 +207,69 @@ async function processPanel(panel, settings) {
   panel.removeAttribute(PANEL_RENDERED_STARS_ATTR);
   panel.setAttribute(PANEL_STATE_ATTR, "loading");
 
-  let data = beatmapsetCache.get(id);
-  if (!data && profileExtraState.waitForExtraPages) {
-    // Profile cards are rendered from the site's own extra-pages response, which the
-    // hooks normally ingest; only fetch it ourselves if that response was missed.
-    data = await beatmapsetCache.waitFor(id, {
-      timeout: PROFILE_EXTRA_HOOK_GRACE_MS,
-    });
-    if (!data) {
-      startProfileExtraPagesPrefetchIfNeeded();
+  // B28: whatever happens below, the panel must not stay "loading" (a later
+  // pass skips loading panels).
+  let drawn = false;
+  try {
+    let data = beatmapsetCache.get(id);
+    if (!data && profileExtraState.waitForExtraPages) {
+      // Profile cards are rendered from the site's own extra-pages response, which the
+      // hooks normally ingest; only fetch it ourselves if that response was missed.
       data = await beatmapsetCache.waitFor(id, {
-        timeout: PROFILE_EXTRA_CACHE_WAIT_MS,
+        timeout: PROFILE_EXTRA_HOOK_GRACE_MS,
+        signal,
+      });
+      if (!data && !signal?.aborted) {
+        startProfileExtraPagesPrefetchIfNeeded();
+        data = await beatmapsetCache.waitFor(id, {
+          timeout: PROFILE_EXTRA_CACHE_WAIT_MS,
+          signal,
+        });
+      }
+    } else if (!data) {
+      data = await beatmapsetCache.waitFor(id, {
+        timeout: LISTING_CACHE_WAIT_MS,
+        signal,
       });
     }
-  } else if (!data) {
-    data = await beatmapsetCache.waitFor(id, {
-      timeout: LISTING_CACHE_WAIT_MS,
-    });
-  }
 
-  if (!data) {
-    if (document.body.contains(panel)) panel.removeAttribute(PANEL_STATE_ATTR);
-    return;
-  }
+    if (!data || signal?.aborted) return;
+    if (!document.body.contains(panel)) return;
+    // B28: the wait can outlast a setting change, or React reusing the panel
+    // for another set; the next pass draws what is wanted now.
+    const now = wantedExtras(settings);
+    if (parseBeatmapsetId(panel) !== id) return;
+    if (now.wantMeta !== wantMeta || now.wantStars !== wantStars) return;
 
-  if (!document.body.contains(panel)) return;
+    if (wantMeta) {
+      const sourceTrimmed = String(data.source ?? "").trim();
+      mountSourceSlot(panel, sourceTrimmed);
 
-  if (wantMeta) {
-    const sourceTrimmed = String(data.source ?? "").trim();
-    mountSourceSlot(panel, sourceTrimmed);
-
-    const block = buildMetaBlock(data);
-    if (block) {
-      const { anchor, mode } = insertTargetMeta(panel);
-      if (mode === "after") anchor.insertAdjacentElement("afterend", block);
-      else anchor.appendChild(block);
+      const block = buildMetaBlock(data);
+      if (block) {
+        const { anchor, mode } = insertTargetMeta(panel);
+        if (mode === "after") anchor.insertAdjacentElement("afterend", block);
+        else anchor.appendChild(block);
+      }
+      panel.setAttribute(PANEL_RENDERED_META_ATTR, "1");
     }
-    panel.setAttribute(PANEL_RENDERED_META_ATTR, "1");
-  }
 
-  if (wantStars) {
-    mountStarRanges(panel, data);
-    panel.setAttribute(PANEL_RENDERED_STARS_ATTR, "1");
-  }
+    if (wantStars) {
+      mountStarRanges(panel, data);
+      panel.setAttribute(PANEL_RENDERED_STARS_ATTR, "1");
+    }
 
-  panel.setAttribute(PANEL_STATE_ATTR, id);
-  panel.setAttribute(
-    PANEL_CACHE_EPOCH_ATTR,
-    String(beatmapsetCache.version(id)),
-  );
+    panel.setAttribute(PANEL_STATE_ATTR, id);
+    panel.setAttribute(
+      PANEL_CACHE_EPOCH_ATTR,
+      String(beatmapsetCache.version(id)),
+    );
+    drawn = true;
+  } finally {
+    if (!drawn && panel.getAttribute(PANEL_STATE_ATTR) === "loading") {
+      panel.removeAttribute(PANEL_STATE_ATTR);
+    }
+  }
 }
 
 /**
@@ -262,8 +285,9 @@ function stripAllPanels(root) {
 /**
  * @param {ParentNode} root
  * @param {typeof OsuExpertPlus.settings} settings
+ * @param {AbortSignal} signal
  */
-function scheduleAllPanels(root, settings) {
+function scheduleAllPanels(root, settings, signal) {
   const panels = Array.from(root.querySelectorAll(".beatmapset-panel"));
   if (panels.length === 0) {
     return;
@@ -276,7 +300,7 @@ function scheduleAllPanels(root, settings) {
     }
     const end = Math.min(index + PANEL_SCHEDULE_CHUNK, panels.length);
     while (index < end) {
-      void processPanel(panels[index++], settings);
+      processPanel(panels[index++], settings, signal).catch(() => {});
     }
     if (index < panels.length) {
       requestAnimationFrame(step);
@@ -376,6 +400,7 @@ function startListingSearchPrefetchIfNeeded(wantIngest, nativeFetch) {
  * @returns {() => void}
  */
 export function start(settings, options = {}) {
+  const ac = new AbortController();
   const ID_META = settings.IDS.BEATMAP_CARD_EXTRA_INFO;
   const ID_STARS = settings.IDS.BEATMAP_CARD_DIFFICULTY_RANGE;
   const wantIngest = () =>
@@ -456,7 +481,7 @@ export function start(settings, options = {}) {
       profileExtraPrefetchWantIngest = wantIngest;
       startListingSearchPrefetchIfNeeded(wantIngest, pageHooks.nativeFetch());
       connectJsonBeatmapsObserver();
-      scheduleAllPanels(document, settings);
+      scheduleAllPanels(document, settings, ac.signal);
     } else {
       disconnectJsonBeatmapsObserver();
     }
@@ -577,7 +602,7 @@ export function start(settings, options = {}) {
     }
     connectJsonBeatmapsObserver();
     ingestFromJsonBeatmapsScript();
-    scheduleAllPanels(document, settings);
+    scheduleAllPanels(document, settings, ac.signal);
     syncPopupHighlightHeight();
     scheduleBeatmapsetsListingLayoutSync();
   };
@@ -632,7 +657,7 @@ export function start(settings, options = {}) {
       if (!wantIngest()) return;
       requestAnimationFrame(() => {
         if (!wantIngest()) return;
-        scheduleAllPanels(document, settings);
+        scheduleAllPanels(document, settings, ac.signal);
         scheduleBeatmapsetsListingLayoutSync();
       });
     }, 0);
@@ -647,6 +672,7 @@ export function start(settings, options = {}) {
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
   return () => {
+    ac.abort();
     window.clearTimeout(moDebounceId);
     window.clearTimeout(moMaxWaitId);
     window.clearTimeout(ingestPanelsId);
