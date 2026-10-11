@@ -3,8 +3,10 @@
  * (WS-42).
  */
 
-import { el, manageStyle, settings } from "../legacy.js";
+import { listen } from "../../core/lifecycle.js";
+import { observe } from "../../core/observe.js";
 import { KEYS } from "../../core/storage.js";
+import { el, manageStyle, settings } from "../legacy.js";
 import {
   HASH_LINK_SEL,
   SECTION_PAGE_SEL,
@@ -17,7 +19,6 @@ import {
   writeCollapsedSet,
 } from "./sections-dom.js";
 import { applyProfileSubsectionCollapseState } from "./subsections.js";
-import { mutationsIncludeSelector } from "./mutations.js";
 import { PROFILE_SECTION_COLLAPSE_REMOVE_FROM_PAGE_ID } from "./score-rows.js";
 const SECTION_COLLAPSE_PAGE_CLASS = "oep-profile-section--collapsed";
 const SECTION_COLLAPSE_BODY_HIDDEN_CLASS =
@@ -36,6 +37,11 @@ const SECTION_PAGE_TITLE_COLLAPSED_SUFFIX_CLASS =
   "oep-profile-section-page-title__collapsed-suffix";
 const SECTION_COLLAPSE_STYLE_ID = "osu-expertplus-profile-section-collapse";
 const SECTION_COLLAPSE_HARD_MODE_CLASS = "oep-profile-section-collapse--hard";
+/**
+ * The contents tabs (`#me`, `#top_ranks`, …), not bare `#` links such as
+ * spoilerbox toggles, whose rendering used to rebuild everything.
+ */
+const SECTION_TAB_LINK_SEL = `${HASH_LINK_SEL}:not([href="#"])`;
 
 const SECTION_COLLAPSE_CSS = `
   .${SECTION_COLLAPSE_BODY_HIDDEN_CLASS} {
@@ -208,6 +214,10 @@ function syncProfileSectionPageTitleCollapsedSuffix(pageEl, isCollapsed) {
   const h2 = pageEl.querySelector(SECTION_COLLAPSE_MAIN_TITLE_SELECTOR);
   if (!(h2 instanceof HTMLElement)) return;
   if (!h2.classList.contains(SECTION_PAGE_TITLE_TOGGLE_CLASS)) return;
+  h2.querySelector(`:scope > .${SECTION_PAGE_TITLE_LABEL_CLASS}`)?.setAttribute(
+    "aria-expanded",
+    isCollapsed ? "false" : "true",
+  );
   const existing = h2.querySelector(
     `:scope > .${SECTION_PAGE_TITLE_COLLAPSED_SUFFIX_CLASS}`,
   );
@@ -315,12 +325,6 @@ function teardownProfileSectionPageTitleClick() {
     .querySelectorAll(`h2[${SECTION_PAGE_TITLE_CLICK_ATTR}]`)
     .forEach((h2) => {
       if (!(h2 instanceof HTMLElement)) return;
-      const wrap =
-        /** @type {HTMLElement & { _oepSectionPageTitleAc?: AbortController }} */ (
-          h2
-        );
-      wrap._oepSectionPageTitleAc?.abort();
-      delete wrap._oepSectionPageTitleAc;
       h2.querySelectorAll(
         `:scope > .${SECTION_PAGE_TITLE_COLLAPSED_SUFFIX_CLASS}`,
       ).forEach((n) => n.remove());
@@ -380,8 +384,14 @@ function toggleProfileSectionCollapsedId(sectionId) {
   applyProfileSectionCollapseToTabAnchors(set);
 }
 
-/** @param {HTMLElement} pageEl  div.js-sortable--page[data-page-id] */
-function bindProfileSectionPageTitleClickOnPage(pageEl) {
+/**
+ * Make the page title toggle its section: a click anywhere on it, or Enter /
+ * Space on its label, which is a focusable button for keyboards and screen
+ * readers.
+ * @param {HTMLElement} pageEl  div.js-sortable--page[data-page-id]
+ * @param {AbortSignal} signal  the manager's listeners
+ */
+function bindProfileSectionPageTitleClickOnPage(pageEl, signal) {
   const sectionId = pageEl.getAttribute("data-page-id");
   if (!sectionId) return;
   const h2 = pageEl.querySelector(SECTION_COLLAPSE_MAIN_TITLE_SELECTOR);
@@ -391,16 +401,17 @@ function bindProfileSectionPageTitleClickOnPage(pageEl) {
   h2.classList.add(SECTION_PAGE_TITLE_TOGGLE_CLASS);
   h2.setAttribute(SECTION_PAGE_TITLE_CLICK_ATTR, sectionId);
 
-  if (!h2.querySelector(`:scope > .${SECTION_PAGE_TITLE_LABEL_CLASS}`)) {
-    const label = el("span", { class: SECTION_PAGE_TITLE_LABEL_CLASS });
+  let label = h2.querySelector(`:scope > .${SECTION_PAGE_TITLE_LABEL_CLASS}`);
+  if (!label) {
+    label = el("span", { class: SECTION_PAGE_TITLE_LABEL_CLASS });
     while (h2.firstChild) label.appendChild(h2.firstChild);
     h2.appendChild(label);
   }
+  label.setAttribute("role", "button");
+  label.setAttribute("tabindex", "0");
 
-  const ac = new AbortController();
-  /** @type {HTMLElement & { _oepSectionPageTitleAc?: AbortController }} */
-  (h2)._oepSectionPageTitleAc = ac;
-  h2.addEventListener(
+  listen(
+    h2,
     "click",
     (ev) => {
       const t = ev.target;
@@ -410,23 +421,33 @@ function bindProfileSectionPageTitleClickOnPage(pageEl) {
       if (t.closest("input, select, textarea, label")) return;
       toggleProfileSectionCollapsedId(sectionId);
     },
-    { signal: ac.signal },
+    signal,
+  );
+  listen(
+    label,
+    "keydown",
+    (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      if (ev.target !== label) return;
+      ev.preventDefault();
+      toggleProfileSectionCollapsedId(sectionId);
+    },
+    signal,
   );
 }
 
-function bindProfileSectionPageTitleClicks() {
-  getSectionPageNodes().forEach((page) => {
-    if (page instanceof HTMLElement)
-      bindProfileSectionPageTitleClickOnPage(page);
-  });
+/** @param {AbortSignal} signal */
+function bindProfileSectionPageTitleClicks(signal) {
+  getSectionPageNodes().forEach((page) =>
+    bindProfileSectionPageTitleClickOnPage(page, signal),
+  );
 }
 
 /** @returns {function} */
 export function startProfileSectionCollapseManager() {
   sectionCollapseStyle.inject();
 
-  let rebindTimer = 0;
-  let obs = null;
+  const ac = new AbortController();
   const unsubRemoveMode = settings().onChange(
     PROFILE_SECTION_COLLAPSE_REMOVE_FROM_PAGE_ID,
     () => {
@@ -435,16 +456,13 @@ export function startProfileSectionCollapseManager() {
     },
   );
 
+  // Idempotent: titles and tabs already bound are left as they are.
   const bind = () => {
-    clearTimeout(rebindTimer);
-    teardownProfileSectionPageTitleClick();
-    teardownProfileContentsTabChevrons();
-
     const collapsed = readCollapsedSet(KEYS.PROFILE_SECTIONS_COLLAPSED);
     applyProfileSectionCollapseToPages(collapsed);
     applyProfileSectionCollapseToTabAnchors(collapsed);
 
-    bindProfileSectionPageTitleClicks();
+    bindProfileSectionPageTitleClicks(ac.signal);
 
     getSectionPageNodes().forEach((node) => {
       const id = node.getAttribute("data-page-id");
@@ -454,25 +472,20 @@ export function startProfileSectionCollapseManager() {
   };
 
   bind();
-  document.addEventListener("click", onContentsTabChevronClick, true);
-  obs = new MutationObserver((mutations) => {
-    const needsRebind = mutationsIncludeSelector(
-      mutations,
-      `${SECTION_PAGE_SEL}, ${HASH_LINK_SEL}, ${SECTION_TITLE_SEL}`,
-    );
-
-    if (needsRebind) {
-      clearTimeout(rebindTimer);
-      rebindTimer = setTimeout(bind, 80);
-    }
-  });
-  obs.observe(document.documentElement, { childList: true, subtree: true });
+  listen(document, "click", onContentsTabChevronClick, ac.signal, true);
+  observe.subscribe(
+    {
+      selector: `${SECTION_PAGE_SEL}, ${SECTION_TAB_LINK_SEL}, ${SECTION_TITLE_SEL}`,
+      schedule: 80,
+      signal: ac.signal,
+      label: "profile/sections",
+    },
+    bind,
+  );
 
   return () => {
     unsubRemoveMode();
-    clearTimeout(rebindTimer);
-    obs?.disconnect();
-    document.removeEventListener("click", onContentsTabChevronClick, true);
+    ac.abort();
     teardownProfileSectionPageTitleClick();
     teardownProfileContentsTabChevrons();
     getSectionPageNodes().forEach((node) => {
