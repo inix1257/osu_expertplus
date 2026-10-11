@@ -70,14 +70,23 @@ function scoreboardRowUserId(row) {
   return null;
 }
 
+/** The player a badge was painted for: osu-web reuses rows for other scores (B93). */
+const BADGE_USER_ATTR = "data-oep-rank-user";
+
+/** @param {HTMLElement} userLink */
+function rankBadgeOf(userLink) {
+  const host = userLink.parentElement || userLink;
+  return host.querySelector(`.${SCOREBOARD_GLOBAL_RANK_BADGE_CLASS}`);
+}
+
 /**
  * @param {HTMLElement} userLink  the username `<a>` to badge
+ * @param {number} userId  the player the rank belongs to
  * @param {number|null} rank
  */
-function paintScoreboardGlobalRankBadge(userLink, rank) {
+function paintScoreboardGlobalRankBadge(userLink, userId, rank) {
   if (!(userLink instanceof HTMLElement)) return;
-  const host = userLink.parentElement || userLink;
-  let badge = host.querySelector(`.${SCOREBOARD_GLOBAL_RANK_BADGE_CLASS}`);
+  let badge = rankBadgeOf(userLink);
   if (rank == null) {
     badge?.remove();
     return;
@@ -90,7 +99,18 @@ function paintScoreboardGlobalRankBadge(userLink, rank) {
     });
     userLink.insertAdjacentElement("afterend", badge);
   }
+  badge.setAttribute(BADGE_USER_ATTR, String(userId));
   if (badge.textContent !== text) badge.textContent = text;
+}
+
+/**
+ * The player a username link shows now (the row may have been refilled).
+ * @param {HTMLElement} userLink
+ * @returns {number|null}
+ */
+function userLinkUserId(userLink) {
+  const row = userLink.closest("tr");
+  return row instanceof HTMLElement ? scoreboardRowUserId(row) : null;
 }
 
 /**
@@ -137,9 +157,13 @@ function flushScoreboardGlobalRankLookups() {
         }
         const waiters = _scoreboardGlobalRankInFlight.get(id) || [];
         for (const { userLink, mode } of waiters) {
-          if (!userLink.isConnected) continue;
+          // Skip links whose row now shows another player (B93).
+          if (!userLink.isConnected || userLinkUserId(userLink) !== id) {
+            continue;
+          }
           paintScoreboardGlobalRankBadge(
             userLink,
+            id,
             getCachedScoreboardGlobalRank(mode, id) ?? null,
           );
         }
@@ -165,7 +189,7 @@ function requestScoreboardGlobalRank(row) {
 
   const cached = getCachedScoreboardGlobalRank(mode, userId);
   if (cached !== undefined) {
-    paintScoreboardGlobalRankBadge(userLink, cached);
+    paintScoreboardGlobalRankBadge(userLink, userId, cached);
     return;
   }
   const waiting =
@@ -246,8 +270,13 @@ export function syncBeatmapScoreboardGlobalRanks(scoreboardRoot) {
 
     const cached = getCachedScoreboardGlobalRank(mode, userId);
     if (cached !== undefined) {
-      paintScoreboardGlobalRankBadge(userLink, cached);
+      paintScoreboardGlobalRankBadge(userLink, userId, cached);
       continue;
+    }
+    // A badge left from the score this row showed before (B93).
+    const stale = rankBadgeOf(userLink);
+    if (stale && stale.getAttribute(BADGE_USER_ATTR) !== String(userId)) {
+      stale.remove();
     }
     if (!_scoreboardGlobalRankObserved.has(row)) {
       _scoreboardGlobalRankObserved.add(row);

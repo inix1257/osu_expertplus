@@ -189,17 +189,56 @@ export function syncBeatmapScoreboardPpValueColor(scoreboardRoot) {
 }
 
 /**
+ * Which score each table row shows, in table order: the player id and the
+ * row's osu-web `title` values (full pp, ISO time, mods). Expert+ elements
+ * (the rank badge) are left out, so the pass's own edits do not change it.
+ * @param {HTMLElement} root
+ * @returns {string}
+ */
+function scoreboardRowsKey(root) {
+  return Array.from(
+    root.querySelectorAll(
+      "tbody.beatmap-scoreboard-table__body > tr.beatmap-scoreboard-table__body-row",
+    ),
+    (row) =>
+      [
+        row.querySelector("[data-user-id]")?.getAttribute("data-user-id"),
+        ...Array.from(
+          row.querySelectorAll("[title]:not([class*='oep'])"),
+          (n) => n.getAttribute("title"),
+        ),
+      ].join("|"),
+  ).join("\n");
+}
+
+/**
  * React injects leaderboard rows after first paint (and re-injects on every mod change /
  * difficulty switch). Re-apply styling whenever actual scoreboard body rows are added.
+ *
+ * osu-web keys rows by index, so switching to a board it already has (a mod
+ * filter turned off again, a cached tab) refills the same rows without adding
+ * any. Text changes in the table then also run the pass when the rows show
+ * other scores than after the last pass (B93), which re-sorts them and
+ * refreshes everything drawn from the old scores.
  * @param {RegExp} pathRe
  * @returns {() => void}
  */
 export function startBeatmapScoreboardTableEnhancementsLive(pathRe) {
+  /** Rows key after the last pass; the pass's own edits do not change it. */
+  let lastKey = "";
   const run = () => {
     if (!pathRe.test(location.pathname)) return;
     const root = findBeatmapScoreboardRoot();
     if (root instanceof HTMLElement) {
       refreshBeatmapScoreboardTableEnhancements(root);
+      lastKey = scoreboardRowsKey(root);
+    }
+  };
+  const runIfRowsRefilled = () => {
+    if (!pathRe.test(location.pathname)) return;
+    const root = findBeatmapScoreboardRoot();
+    if (root instanceof HTMLElement && scoreboardRowsKey(root) !== lastKey) {
+      run();
     }
   };
   // Not inside observe.mutate: the pass clones mod icons (top panel) that
@@ -212,6 +251,16 @@ export function startBeatmapScoreboardTableEnhancementsLive(pathRe) {
     },
     run,
   );
+  const unsubscribeRefill = observe.subscribe(
+    {
+      selector: "tbody.beatmap-scoreboard-table__body",
+      characterData: true,
+      attributes: ["data-user-id", "title"],
+      schedule: 32,
+      label: "scoreboard/table-enhance/refill",
+    },
+    runIfRowsRefilled,
+  );
   const first = window.setTimeout(run, 32);
   // Settings the pass reads: apply them without waiting for a table change.
   const unsubSettings = [
@@ -221,6 +270,7 @@ export function startBeatmapScoreboardTableEnhancementsLive(pathRe) {
   return () => {
     window.clearTimeout(first);
     unsubscribe();
+    unsubscribeRefill();
     unsubSettings.forEach((off) => off());
   };
 }

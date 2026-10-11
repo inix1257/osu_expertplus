@@ -90,3 +90,43 @@ test("disposeScoreboardGlobalRanks drops the observer and the queued batch (B21)
   assert.notEqual(FakeIO.all.at(-1), io);
   disposeScoreboardGlobalRanks();
 });
+
+test("a row refilled with another player drops the old badge and ignores the old lookup (B93)", async () => {
+  /** @type {(users: object[]) => void} */
+  let answer;
+  const window = setup(
+    () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  );
+  const { syncBeatmapScoreboardGlobalRanks, disposeScoreboardGlobalRanks } =
+    await import("../../src/features/scoreboard/global-rank.js");
+  const root = window.document.getElementById("root");
+  const badges = () =>
+    [...root.querySelectorAll(".oep-scoreboard-rank-badge")].map(
+      (b) => `${b.getAttribute("data-oep-rank-user")}:${b.textContent}`,
+    );
+  const rank = (id, r) => ({
+    id,
+    statistics_rulesets: { osu: { global_rank: r } },
+  });
+
+  syncBeatmapScoreboardGlobalRanks(root);
+  FakeIO.all.at(-1).showAll();
+  await new Promise((r) => setTimeout(r, 150)); // batch of 11 and 22 sent
+
+  // osu-web refills the first row with player 33 while the lookup runs.
+  const link = root.querySelector('a[data-user-id="11"]');
+  link.setAttribute("data-user-id", "33");
+  link.setAttribute("href", "/users/33");
+  answer([rank(11, 5), rank(22, 7)]);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(badges(), ["22:#7"], "11's rank is not painted on 33's row");
+
+  // A row that had a badge and now shows an uncached player loses it.
+  root.querySelector('a[data-user-id="22"]').setAttribute("data-user-id", "44");
+  syncBeatmapScoreboardGlobalRanks(root);
+  assert.deepEqual(badges(), []);
+  disposeScoreboardGlobalRanks();
+});
