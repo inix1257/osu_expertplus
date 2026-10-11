@@ -11,7 +11,8 @@ import {
 } from "../features/beatmapset/favourites.js";
 import {
   mountBeatconnectDownloadSplit,
-  mountBeatmapsetBackgroundButtons,
+  mountBeatmapsetBackgroundButton,
+  mountBeatmapsetMp3Button,
   mountBeatmapsetPreviewAudioButton,
 } from "../features/beatmapset/header-buttons.js";
 import { startBeatmapsetInfoModals } from "../features/beatmapset/info-modals.js";
@@ -134,8 +135,13 @@ async function init(match, ctx = {}) {
 
   safeStart(
     bag,
-    () => mountBeatmapsetBackgroundButtons(header, beatmapsetId),
-    "background buttons",
+    () => mountBeatmapsetBackgroundButton(header, beatmapsetId),
+    "background button",
+  );
+  safeStart(
+    bag,
+    () => mountBeatmapsetMp3Button(header, beatmapsetId),
+    "MP3 button",
   );
   mountSettingFeature(bag, settings, IDS.BEATMAPSET_PREVIEW_AUDIO_BUTTON, () =>
     onPage()

@@ -85,6 +85,22 @@ function squareLink({ name, href, title, icon }) {
 }
 
 /**
+ * Insert `link` after the first header button in `afterNames` that is in the
+ * bar, else after the osu!direct button, else at the end.
+ * @param {HTMLElement} buttons
+ * @param {HTMLElement} link
+ * @param {string[]} afterNames  header button names, in order of preference
+ */
+function insertSquare(buttons, link, afterNames) {
+  const after =
+    afterNames
+      .map((name) => buttons.querySelector(`[${markerAttr(name)}]`))
+      .find(Boolean) ?? findBeatmapsetOsuDirectButton(buttons);
+  if (after) after.insertAdjacentElement("afterend", link);
+  else buttons.appendChild(link);
+}
+
+/**
  * Beatconnect mirror next to the primary `.osz` download (the first link to
  * `/beatmapsets/{id}/download`, not osu!direct or the supporter link).
  * @param {HTMLElement} header  `.beatmapset-header`
@@ -162,24 +178,17 @@ export function mountBeatmapsetPreviewAudioButton(header, beatmapsetId) {
     icon: "fa-volume-up",
   });
 
-  const after =
-    buttons.querySelector(`[${markerAttr("mp3")}]`) ??
-    buttons.querySelector(`[${markerAttr("bg")}]`) ??
-    findBeatmapsetOsuDirectButton(buttons);
-  if (after) after.insertAdjacentElement("afterend", previewLink);
-  else buttons.appendChild(previewLink);
-
+  insertSquare(buttons, previewLink, ["mp3", "bg"]);
   return () => previewLink.remove();
 }
 
 /**
- * "Open background" and "Download MP3" squares after the osu!direct button.
- * The MP3 link goes to the third-party osu.ppyd.sh (D6, B66).
+ * "Open background" square after the osu!direct button.
  * @param {HTMLElement} header  `.beatmapset-header`
  * @param {string} beatmapsetId
  * @returns {(() => void)|undefined}
  */
-export function mountBeatmapsetBackgroundButtons(header, beatmapsetId) {
+export function mountBeatmapsetBackgroundButton(header, beatmapsetId) {
   const buttons = buttonBarWithout(header, "bg");
   if (!buttons) return undefined;
 
@@ -189,20 +198,27 @@ export function mountBeatmapsetBackgroundButtons(header, beatmapsetId) {
     title: "Open background",
     icon: "fa-image",
   });
+  insertSquare(buttons, bgLink, []);
+  return () => bgLink.remove();
+}
+
+/**
+ * "Download MP3" square after the background one. The link goes to the
+ * third-party osu.ppyd.sh (D6, B66).
+ * @param {HTMLElement} header  `.beatmapset-header`
+ * @param {string} beatmapsetId
+ * @returns {(() => void)|undefined}
+ */
+export function mountBeatmapsetMp3Button(header, beatmapsetId) {
+  const buttons = buttonBarWithout(header, "mp3");
+  if (!buttons) return undefined;
+
   const mp3Link = squareLink({
     name: "mp3",
     href: `https://osu.ppyd.sh/beatmapsets/${encodeURIComponent(String(beatmapsetId))}/download`,
     title: "Download MP3",
     icon: "fa-music",
   });
-
-  const directBtn = findBeatmapsetOsuDirectButton(buttons);
-  if (directBtn) directBtn.insertAdjacentElement("afterend", bgLink);
-  else buttons.appendChild(bgLink);
-  bgLink.insertAdjacentElement("afterend", mp3Link);
-
-  return () => {
-    mp3Link.remove();
-    bgLink.remove();
-  };
+  insertSquare(buttons, mp3Link, ["bg"]);
+  return () => mp3Link.remove();
 }
