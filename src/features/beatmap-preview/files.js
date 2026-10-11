@@ -26,40 +26,42 @@ export function absoluteUrl(url) {
   return s;
 }
 
-/** Revoked when loading another map or disposing the preview UI. */
-let beatmapCoverObjectUrl = null;
+/**
+ * The cover blob URL the preview uses, and the cover it was made from.
+ * Revoked when another cover replaces it or the preview is reset.
+ * @type {{ src: string, objectUrl: string } | null}
+ */
+let currentCover = null;
+/** The cover asked for last; results for older requests are dropped (B32). */
+let latestCoverSrc = "";
+/** @type {Map<string, Promise<string>>} cover URL -> blob URL being made */
+const coverInFlight = new Map();
 
-export function revokeBeatmapCoverObjectUrl() {
-  if (beatmapCoverObjectUrl) {
-    try {
-      URL.revokeObjectURL(beatmapCoverObjectUrl);
-    } catch (_) {
-      void 0;
-    }
-    beatmapCoverObjectUrl = null;
+/** @param {string} objectUrl */
+function revokeObjectUrl(objectUrl) {
+  try {
+    URL.revokeObjectURL(objectUrl);
+  } catch (_) {
+    void 0;
   }
 }
 
-/**
- * Cross-origin cover URLs taint pixels; Pixi WebGL upload then throws "The operation is insecure".
- * Load bytes into a blob: URL (same-origin for WebGL).
- * Prefer GM_xmlhttpRequest first when available so we do not hit `fetch` on hosts without ACAO
- * (avoids a failed CORS request and console noise before the GM fallback).
- *
- * @param {string} absUrl
- * @returns {Promise<string>} object URL or "" if unavailable
- */
-export async function fetchBeatmapCoverObjectUrl(absUrl) {
-  if (!absUrl) return "";
-  revokeBeatmapCoverObjectUrl();
+export function revokeBeatmapCoverObjectUrl() {
+  latestCoverSrc = "";
+  if (currentCover) revokeObjectUrl(currentCover.objectUrl);
+  currentCover = null;
+}
 
+/**
+ * The cover's bytes: GM_xmlhttpRequest when available (no CORS request that
+ * would fail without ACAO), else `fetch`. assets.ppy.sh needs no cookies.
+ * @param {string} absUrl
+ * @returns {Promise<ArrayBuffer>}
+ */
+async function fetchCoverBytes(absUrl) {
   /** @returns {Promise<ArrayBuffer>} */
   function gmGetArrayBuffer() {
     return new Promise((resolve, reject) => {
-      if (typeof GM_xmlhttpRequest !== "function") {
-        reject(new Error("no-gm"));
-        return;
-      }
       GM_xmlhttpRequest({
         method: "GET",
         url: absUrl,
@@ -75,32 +77,50 @@ export async function fetchBeatmapCoverObjectUrl(absUrl) {
       });
     });
   }
-
-  try {
-    let buf;
-    if (typeof GM_xmlhttpRequest === "function") {
-      try {
-        buf = await gmGetArrayBuffer();
-      } catch (gmErr) {
-        const res = await fetch(absUrl, {
-          credentials: "include",
-          mode: "cors",
-        });
-        if (!res.ok) throw new Error(String(res.status), { cause: gmErr });
-        buf = await res.arrayBuffer();
-      }
-    } else {
-      const res = await fetch(absUrl, {
-        credentials: "include",
-        mode: "cors",
-      });
-      if (!res.ok) throw new Error(String(res.status));
-      buf = await res.arrayBuffer();
+  const viaFetch = async (cause) => {
+    const res = await fetch(absUrl, { credentials: "omit", mode: "cors" });
+    if (!res.ok) throw new Error(String(res.status), { cause });
+    return res.arrayBuffer();
+  };
+  if (typeof GM_xmlhttpRequest === "function") {
+    try {
+      return await gmGetArrayBuffer();
+    } catch (gmErr) {
+      return viaFetch(gmErr);
     }
-    const blob = new Blob([buf]);
-    beatmapCoverObjectUrl = URL.createObjectURL(blob);
-    return beatmapCoverObjectUrl;
-  } catch (_) {
+  }
+  return viaFetch(undefined);
+}
+
+/**
+ * Cross-origin cover URLs taint pixels; Pixi WebGL upload then throws "The
+ * operation is insecure". Load the bytes into a blob: URL (same-origin for
+ * WebGL). Requests for the same cover share one download, and a result that
+ * is no longer the latest request is revoked instead of leaking (B32).
+ * @param {string} absUrl
+ * @returns {Promise<string>} object URL, or "" if unavailable or superseded
+ */
+export async function fetchBeatmapCoverObjectUrl(absUrl) {
+  if (!absUrl) return "";
+  latestCoverSrc = absUrl;
+  if (currentCover?.src === absUrl) return currentCover.objectUrl;
+
+  let pending = coverInFlight.get(absUrl);
+  if (!pending) {
+    pending = fetchCoverBytes(absUrl)
+      .then((buf) => URL.createObjectURL(new Blob([buf])))
+      .catch(() => "")
+      .finally(() => coverInFlight.delete(absUrl));
+    coverInFlight.set(absUrl, pending);
+  }
+  const objectUrl = await pending;
+  if (!objectUrl) return "";
+  if (currentCover?.objectUrl === objectUrl) return objectUrl;
+  if (latestCoverSrc !== absUrl) {
+    revokeObjectUrl(objectUrl);
     return "";
   }
+  if (currentCover) revokeObjectUrl(currentCover.objectUrl);
+  currentCover = { src: absUrl, objectUrl };
+  return objectUrl;
 }
