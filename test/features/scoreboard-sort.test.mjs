@@ -275,4 +275,9 @@ test("injected rows sort by their plain numbers in any locale (B97)", async () =
     Math.abs(beatmapScoreboardRowSortPrimary(tr, map, "accuracy") - 99.66) <
       1e-9,
   );
+  // and show them like osu-web's formatNumber in the page locale (B112)
+  const text = (i) => tr.cells[i].textContent.trim();
+  assert.equal(text(map.score), "141.639.015");
+  assert.equal(text(map.accuracy), "99,66%");
+  assert.equal(text(map.combo), "2.384x");
 });

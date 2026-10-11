@@ -152,7 +152,7 @@ test("injected hit stats follow osu-web's header attributes (B95)", async () => 
       ruleset_id: 3,
       statistics: { perfect: 2478, great: 125, miss: 1 },
     }),
-    ["2478", "125", "0", "0", "0", "1"],
+    ["2,478", "125", "0", "0", "0", "1"],
   );
   // legacy mania counts
   assert.deepEqual(

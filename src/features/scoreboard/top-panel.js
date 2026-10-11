@@ -5,9 +5,6 @@
 
 import { flagFilename, formatRelativeShort } from "../../osu/format.js";
 import {
-  ACCURACY_FORMAT,
-  formatAccuracy,
-  formatCombo,
   hitstatValue,
   hitstatValueForAttribute,
   leaderboardScoreId,
@@ -24,7 +21,11 @@ import {
   SCOREBOARD_TBODY_SEL,
   WILDCARD_MERGED_ROW_ATTR,
 } from "./context.js";
-import { scoreAsDisplayed } from "./row-builder.js";
+import {
+  formatScoreboardAccuracy,
+  formatScoreboardInt,
+  scoreAsDisplayed,
+} from "./row-builder.js";
 
 /** Marks an OEP-managed `.beatmap-scoreboard-top__item` that overrides the native panel. */
 export const SCORE_TOP_OVERRIDE_ATTR = "data-oep-score-top-override";
@@ -277,9 +278,9 @@ export function applyApiScoreToTopItem(item, apiScore, row) {
     flagSpan.title = countryName;
   }
 
-  const scoreStr = Number(score.oepDisplayTotal).toLocaleString("en-US");
-  const accStr = formatAccuracy(score.accuracy, ACCURACY_FORMAT.scoreboard);
-  const comboStr = formatCombo(score.max_combo);
+  const scoreStr = formatScoreboardInt(score.oepDisplayTotal);
+  const accStr = formatScoreboardAccuracy(score.accuracy);
+  const comboStr = `${formatScoreboardInt(score.max_combo ?? 0)}x`;
   const ppNum =
     score.pp != null && Number.isFinite(Number(score.pp))
       ? Number(score.pp)
@@ -325,7 +326,9 @@ export function applyApiScoreToTopItem(item, apiScore, row) {
         else modsValueEl.appendChild(clone);
       }
     } else if (kind.startsWith(HIT_KIND)) {
-      valueEl.textContent = apiHitValue(kind.slice(HIT_KIND.length), score);
+      valueEl.textContent = formatScoreboardInt(
+        apiHitValue(kind.slice(HIT_KIND.length), score),
+      );
     }
   }
   if (row) syncTopItemFromRow(item, row);

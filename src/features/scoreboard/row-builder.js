@@ -5,13 +5,11 @@
 
 import {
   flagFilename,
+  formatDecimal,
   formatRelativeShort,
   pageLocale,
 } from "../../osu/format.js";
 import {
-  ACCURACY_FORMAT,
-  formatAccuracy,
-  formatCombo,
   hitstatValue,
   hitstatValueForAttribute,
   isFullCombo,
@@ -33,6 +31,31 @@ import {
   WILDCARD_MERGED_ROW_ATTR,
 } from "./context.js";
 import { applyScoreboardModsCell } from "./row-mods.js";
+
+/**
+ * A whole number as osu-web's `formatNumber` writes it: page locale grouping
+ * (`1,234` / `1.234`) (B112). Non-numbers are returned as text.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function formatScoreboardInt(value) {
+  const n = value != null && value !== "" ? Number(value) : NaN;
+  return Number.isFinite(n)
+    ? formatDecimal(n, { digits: 0 })
+    : String(value ?? "");
+}
+
+/**
+ * Accuracy as osu-web's scoreboard writes it: two decimals in the page
+ * locale (`99.66%` / `99,66%`) (B112), or "" when missing.
+ * @param {unknown} accuracy  fraction (or percentage above 1)
+ * @returns {string}
+ */
+export function formatScoreboardAccuracy(accuracy) {
+  const n = accuracy != null && accuracy !== "" ? Number(accuracy) : NaN;
+  if (!Number.isFinite(n)) return "";
+  return `${formatDecimal(n <= 1 ? n * 100 : n, { digits: 2 })}%`;
+}
 
 /** osu-web's hit-stat header class: `…__header--hit-<statistic>`. */
 const HEADER_HIT_ATTR_RE = /\bbeatmap-scoreboard-table__header--hit-([a-z_]+)/;
@@ -116,7 +139,7 @@ export function toggleScoreboardCellPerfectClass(cls, on) {
  */
 export function applyScoreboardComboCell(td, refTd, score, mapFullCombo) {
   if (!td) return;
-  const comboStr = formatCombo(score.max_combo);
+  const comboStr = `${formatScoreboardInt(score.max_combo ?? 0)}x`;
   const a = td.querySelector(SCOREBOARD_CELL_LINK_SEL);
   const refA = refTd?.querySelector(SCOREBOARD_CELL_LINK_SEL);
   if (!a || !refA) return;
@@ -139,7 +162,7 @@ export function applyScoreboardComboCell(td, refTd, score, mapFullCombo) {
  */
 export function applyScoreboardAccuracyCell(td, refTd, score) {
   if (!td) return;
-  const accStr = formatAccuracy(score.accuracy, ACCURACY_FORMAT.scoreboard);
+  const accStr = formatScoreboardAccuracy(score.accuracy);
   const a = td.querySelector(SCOREBOARD_CELL_LINK_SEL);
   const refA = refTd?.querySelector(SCOREBOARD_CELL_LINK_SEL);
   if (!a || !refA) return;
@@ -549,7 +572,7 @@ export function applyApiScoreToBeatmapScoreRow(
   const iso = score.ended_at ?? score.created_at ?? "";
   const ruleset = getBeatmapPageRuleset();
 
-  const scoreStr = Number(score.oepDisplayTotal).toLocaleString("en-US");
+  const scoreStr = formatScoreboardInt(score.oepDisplayTotal);
 
   if (colMap.rank != null) {
     applyScoreboardTextCellLikeRef(
@@ -622,8 +645,10 @@ export function applyApiScoreToBeatmapScoreRow(
     applyScoreboardTextCellLikeRef(
       tds[i],
       refHit,
-      (attr ? hitstatValueForAttribute(attr, score, ruleset) : null) ??
-        hitstatValue(label, score, { ruleset }),
+      formatScoreboardInt(
+        (attr ? hitstatValueForAttribute(attr, score, ruleset) : null) ??
+          hitstatValue(label, score, { ruleset }),
+      ),
     );
   }
 
