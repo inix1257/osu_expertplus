@@ -740,15 +740,20 @@ export function mountBeatmapsetInfoPreview({
     }
   }
 
+  /**
+   * Follow playback on the seek bar, one frame at a time while playing; when
+   * playback is not running it syncs once and stops (started again on play).
+   */
   function startSeekAnimationLoop() {
     stopSeekAnimationLoop();
     const tick = () => {
+      seekRafId = 0;
       if (!expanded) return;
       syncSeekUiFromEngine();
       if (sharedEngine && lastLoadedKey) {
         syncPreviewMusicToWindow(sharedEngine);
       }
-      seekRafId = requestAnimationFrame(tick);
+      if (sharedEngine?.isPlaying) seekRafId = requestAnimationFrame(tick);
     };
     seekRafId = requestAnimationFrame(tick);
   }
@@ -975,6 +980,7 @@ export function mountBeatmapsetInfoPreview({
           enableHitsounds: true,
         });
         syncPreviewMusicToWindow(sharedEngine);
+        startSeekAnimationLoop();
       }
       updateCanvasPlayStateAria();
       flashTransportOverlay(!!sharedEngine.isPlaying);
