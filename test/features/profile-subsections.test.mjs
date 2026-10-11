@@ -122,3 +122,36 @@ test("rescans keep the existing toggles and do not nest the title", async () => 
     stop();
   }
 });
+
+test("B85: a subsection's body stops at our Recent list", async () => {
+  reset(`<div class="js-sortable--page" data-page-id="historical">
+      <h3 class="title title--page-extra-small">Most Played Beatmaps</h3>
+      <div class="most-played">x</div>
+      <div class="oep-recent-scores-with-fails">
+        <div class="oep-recent-fails-header"><h3 class="title title--page-extra-small">Recent scores</h3></div>
+        <div class="play-detail-list">r</div>
+      </div>
+    </div>`);
+  const stop = startProfileSubsectionCollapseManager();
+  try {
+    const [mostPlayed, recent] = toggles();
+    assert.equal(
+      doc.querySelector(".most-played").getAttribute("data-oep-subsection-for"),
+      mostPlayed,
+    );
+    assert.equal(
+      doc
+        .querySelector(".oep-recent-scores-with-fails")
+        .getAttribute("data-oep-subsection-for"),
+      null,
+    );
+    assert.equal(
+      doc
+        .querySelector(".oep-recent-scores-with-fails .play-detail-list")
+        .getAttribute("data-oep-subsection-for"),
+      recent,
+    );
+  } finally {
+    stop();
+  }
+});

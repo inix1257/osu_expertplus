@@ -254,9 +254,12 @@ function collectSubsectionBodyElements(h3) {
 
   const bodies = [];
   let n = h3.nextElementSibling;
+  // Stop at the next title, also one inside a sibling (our Recent list's
+  // header): that block is the next subsection (B85).
   while (
     n instanceof HTMLElement &&
-    !n.matches(PROFILE_PAGE_SUBTITLE_H3_SELECTOR)
+    !n.matches(PROFILE_PAGE_SUBTITLE_H3_SELECTOR) &&
+    !n.querySelector(PROFILE_PAGE_SUBTITLE_H3_SELECTOR)
   ) {
     bodies.push(n);
     n = n.nextElementSibling;
