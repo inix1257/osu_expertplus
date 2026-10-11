@@ -12,7 +12,7 @@ export const STAR_RANGE_CLASS = "oep-beatmap-card-extra__star-range";
 export const SOURCE_SLOT_CLASS = "oep-beatmap-card-extra__source-slot";
 /** Set to beatmapset id when done, or "loading" while fetching. */
 export const PANEL_STATE_ATTR = "data-oep-card-extra";
-/** Bumped whenever cache ingest runs; panel re-renders when this differs from the epoch stored on the panel. */
+/** Cache version of the panel's set when it was drawn; it is redrawn when the set's version changes. */
 export const PANEL_CACHE_EPOCH_ATTR = "data-oep-card-extra-epoch";
 /** Present when source + BPM/length (extra metadata) was applied for current epoch. */
 export const PANEL_RENDERED_META_ATTR = "data-oep-card-extra-meta";

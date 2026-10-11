@@ -13,6 +13,12 @@
  * `core/page-hooks` (osu-web's jQuery.ajax uses the page XHR).
  */
 
+import {
+  beatmapsetCache,
+  beatmapsetsFromExtraPages,
+  beatmapsetsFromSearch,
+  beatmapsetsFromUserList,
+} from "../../core/beatmapset-cache.js";
 import * as pageHooks from "../../core/page-hooks.js";
 import {
   buildMetaBlock,
@@ -32,124 +38,14 @@ import {
   STAR_RANGE_CLASS,
   style,
 } from "./extra-styles.js";
-/** @type {Map<string, object>} */
-const cache = new Map();
-
-/** Debounced refresh after cache ingest (fetch hook or json-beatmaps). Set by `start()`. */
-let scheduleAfterIngest = () => {};
-
-/** Incremented on each ingest that writes to `cache`, so panels re-apply metadata when site data updates. */
-let cacheEpoch = 0;
-
 /** Bumped when a new `scheduleAllPanels` run starts; stale rAF chunks exit without work. */
 let schedulePanelsToken = 0;
 
 /** Max `.beatmapset-panel` processed per frame so toggles / MO don’t freeze the main thread. */
 const PANEL_SCHEDULE_CHUNK = 28;
 
-function touchCacheFromIngest() {
-  cacheEpoch++;
-  scheduleAfterIngest();
-}
-
-/**
- * Merge beatmapset objects from `…/extra-pages/beatmaps` into `cache` (keyed by set id).
- * Payload shape: each top-level value with `.items` is treated as a section bucket (ranked, loved, …).
- * @param {unknown} json
- */
-function ingestExtraPagesBeatmapsPayload(json) {
-  if (!json || typeof json !== "object") {
-    return;
-  }
-  let added = false;
-  for (const key of Object.keys(
-    /** @type {Record<string, unknown>} */ (json),
-  )) {
-    const bucket = /** @type {Record<string, unknown>} */ (json)[key];
-    if (!bucket || typeof bucket !== "object") continue;
-    const items = bucket.items;
-    if (!Array.isArray(items)) continue;
-    for (const item of items) {
-      if (item && item.id != null) {
-        cache.set(String(item.id), item);
-        added = true;
-      }
-    }
-  }
-  if (added) touchCacheFromIngest();
-}
-
-/**
- * @param {unknown} item
- * @returns {boolean}
- */
-function cacheBeatmapsetFromListItem(item) {
-  if (!item || typeof item !== "object") return false;
-  const nested = /** @type {Record<string, unknown>} */ (item).beatmapset;
-  if (nested && typeof nested === "object" && nested.id != null) {
-    cache.set(String(nested.id), nested);
-    return true;
-  }
-  if (/** @type {Record<string, unknown>} */ (item).id != null) {
-    cache.set(String(item.id), item);
-    return true;
-  }
-  return false;
-}
-
-/**
- * `GET /users/{id}/beatmapsets/{type}` (profile “load more”) returns a JSON **array** of
- * beatmapsets, or `{ beatmapsets: [...] }`. `most_played` entries may nest under `.beatmapset`.
- * @param {unknown} json
- */
-function ingestUserBeatmapsetsPaginatedPayload(json) {
-  if (json == null) return;
-  /** @type {unknown[]|null} */
-  let list = null;
-  if (Array.isArray(json)) list = json;
-  else if (typeof json === "object") {
-    const b = /** @type {Record<string, unknown>} */ (json).beatmapsets;
-    if (Array.isArray(b)) list = b;
-  }
-  if (!list) return;
-  let added = false;
-  for (const item of list) {
-    if (cacheBeatmapsetFromListItem(item)) added = true;
-  }
-  if (added) touchCacheFromIngest();
-}
-
-/**
- * `/beatmapsets/search` and `/api/v2/beatmapsets/search` return `{ beatmapsets: [...] }`.
- * @param {unknown} json
- */
-function ingestBeatmapsetsSearchPayload(json) {
-  if (!json || typeof json !== "object") {
-    return;
-  }
-  const list = /** @type {Record<string, unknown>} */ (json).beatmapsets;
-  if (!Array.isArray(list)) {
-    return;
-  }
-  let added = false;
-  for (const item of list) {
-    if (item && item.id != null) {
-      cache.set(String(item.id), item);
-      added = true;
-    }
-  }
-  if (added) touchCacheFromIngest();
-}
-
-/**
- * @param {string} s
- * @returns {string}
- */
-function shortHash(s) {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = (h * 33) ^ s.charCodeAt(i);
-  return (h >>> 0).toString(36);
-}
+/** `#json-beatmaps` text last ingested, per script node. */
+const ingestedJsonBeatmaps = new WeakMap();
 
 /**
  * Initial listing data: `<script id="json-beatmaps" type="application/json">`.
@@ -165,13 +61,10 @@ function ingestFromJsonBeatmapsScript() {
     return;
   }
   const raw = n.textContent.trim();
-  const sig = `${raw.length}:${shortHash(raw)}`;
-  if (n.getAttribute("data-oep-beatmaps-sig") === sig) {
-    return;
-  }
+  if (ingestedJsonBeatmaps.get(n) === raw) return;
   try {
-    ingestBeatmapsetsSearchPayload(JSON.parse(raw));
-    n.setAttribute("data-oep-beatmaps-sig", sig);
+    beatmapsetCache.put(beatmapsetsFromSearch(JSON.parse(raw)));
+    ingestedJsonBeatmaps.set(n, raw);
   } catch (_) {
     void 0;
   }
@@ -242,33 +135,6 @@ function isApiV2BeatmapsetsSearchUrl(url) {
   }
 }
 
-/**
- * @param {string} id
- * @param {number} maxMs
- * @param {number} stepMs
- * @returns {Promise<object|undefined>}
- */
-function waitForCachedBeatmapset(id, maxMs, stepMs) {
-  const hit = cache.get(id);
-  if (hit) return Promise.resolve(hit);
-  const deadline = Date.now() + maxMs;
-  return new Promise((resolve) => {
-    const tick = () => {
-      const h = cache.get(id);
-      if (h) {
-        resolve(h);
-        return;
-      }
-      if (Date.now() >= deadline) {
-        resolve(undefined);
-        return;
-      }
-      window.setTimeout(tick, stepMs);
-    };
-    tick();
-  });
-}
-
 /** When true, `processPanel` waits longer for profile extra-pages before giving up. */
 const profileExtraState = { waitForExtraPages: false };
 
@@ -283,12 +149,11 @@ let profileExtraPrefetchWantIngest = null;
  */
 let listingSearchPrefetchStarted = false;
 
-/** ms to wait for site JSON/fetch to populate `cache` after panels appear. */
+/** ms to wait for site JSON/fetch to populate the cache after panels appear. */
 const PROFILE_EXTRA_CACHE_WAIT_MS = 2000;
 /** How long a profile card waits for the hooked site response before we fetch it ourselves. */
 const PROFILE_EXTRA_HOOK_GRACE_MS = 1000;
 const LISTING_CACHE_WAIT_MS = 1500;
-const CACHE_POLL_MS = 40;
 
 /**
  * @param {Element} panel
@@ -317,7 +182,7 @@ async function processPanel(panel, settings) {
   if (
     state === id &&
     renderedEpoch != null &&
-    renderedEpoch === String(cacheEpoch) &&
+    renderedEpoch === String(beatmapsetCache.version(id)) &&
     wantMeta === hasMeta &&
     wantStars === hasStars
   ) {
@@ -333,29 +198,23 @@ async function processPanel(panel, settings) {
   panel.removeAttribute(PANEL_RENDERED_STARS_ATTR);
   panel.setAttribute(PANEL_STATE_ATTR, "loading");
 
-  let data = cache.get(id);
+  let data = beatmapsetCache.get(id);
   if (!data && profileExtraState.waitForExtraPages) {
     // Profile cards are rendered from the site's own extra-pages response, which the
     // hooks normally ingest; only fetch it ourselves if that response was missed.
-    data = await waitForCachedBeatmapset(
-      id,
-      PROFILE_EXTRA_HOOK_GRACE_MS,
-      CACHE_POLL_MS,
-    );
+    data = await beatmapsetCache.waitFor(id, {
+      timeout: PROFILE_EXTRA_HOOK_GRACE_MS,
+    });
     if (!data) {
       startProfileExtraPagesPrefetchIfNeeded();
-      data = await waitForCachedBeatmapset(
-        id,
-        PROFILE_EXTRA_CACHE_WAIT_MS,
-        CACHE_POLL_MS,
-      );
+      data = await beatmapsetCache.waitFor(id, {
+        timeout: PROFILE_EXTRA_CACHE_WAIT_MS,
+      });
     }
   } else if (!data) {
-    data = await waitForCachedBeatmapset(
-      id,
-      LISTING_CACHE_WAIT_MS,
-      CACHE_POLL_MS,
-    );
+    data = await beatmapsetCache.waitFor(id, {
+      timeout: LISTING_CACHE_WAIT_MS,
+    });
   }
 
   if (!data) {
@@ -384,7 +243,10 @@ async function processPanel(panel, settings) {
   }
 
   panel.setAttribute(PANEL_STATE_ATTR, id);
-  panel.setAttribute(PANEL_CACHE_EPOCH_ATTR, String(cacheEpoch));
+  panel.setAttribute(
+    PANEL_CACHE_EPOCH_ATTR,
+    String(beatmapsetCache.version(id)),
+  );
 }
 
 /**
@@ -430,11 +292,11 @@ function scheduleAllPanels(root, settings) {
  * @returns {((json: any) => void) | null}
  */
 function ingestorForUrl(url) {
-  if (isUsersExtraPagesBeatmapsUrl(url)) return ingestExtraPagesBeatmapsPayload;
+  if (isUsersExtraPagesBeatmapsUrl(url)) return beatmapsetsFromExtraPages;
   if (isUsersWebBeatmapsetsTypeUrl(url) || isApiV2UsersBeatmapsetsTypeUrl(url))
-    return ingestUserBeatmapsetsPaginatedPayload;
+    return beatmapsetsFromUserList;
   if (isBeatmapsetsSearchUrl(url) || isApiV2BeatmapsetsSearchUrl(url))
-    return ingestBeatmapsetsSearchPayload;
+    return beatmapsetsFromSearch;
   return null;
 }
 
@@ -446,7 +308,7 @@ function startProfileExtraPagesPrefetchIfNeeded() {
   const wantIngest = profileExtraPrefetchWantIngest;
   if (!wantIngest || !wantIngest()) return;
   if (!profileExtraState.waitForExtraPages) return;
-  if (cache.size > 0) return;
+  if (beatmapsetCache.size > 0) return;
   if (profileExtraPrefetchStarted) return;
   const m = location.pathname.match(
     /^\/users\/(\d+)(?:\/(osu|taiko|fruits|mania))?\/?$/i,
@@ -465,7 +327,7 @@ function startProfileExtraPagesPrefetchIfNeeded() {
       if (!r.ok) {
         return;
       }
-      ingestExtraPagesBeatmapsPayload(await r.json());
+      beatmapsetCache.put(beatmapsetsFromExtraPages(await r.json()));
     } catch (_) {
       void 0;
     }
@@ -501,7 +363,7 @@ function startListingSearchPrefetchIfNeeded(wantIngest, nativeFetch) {
       });
       if (!wantIngest()) return;
       if (!r.ok) return;
-      ingestBeatmapsetsSearchPayload(await r.json());
+      beatmapsetCache.put(beatmapsetsFromSearch(await r.json()));
     } catch (_) {
       void 0;
     }
@@ -578,7 +440,10 @@ export function start(settings, options = {}) {
 
   const removeJsonListener = pageHooks.addJsonResponseListener({
     match: (url) => wantIngest() && ingestorForUrl(url) !== null,
-    onJson: (url, json) => ingestorForUrl(url)?.(json),
+    onJson: (url, json) => {
+      const extract = ingestorForUrl(url);
+      if (extract) beatmapsetCache.put(extract(json));
+    },
   });
 
   const run = () => {
@@ -755,10 +620,12 @@ export function start(settings, options = {}) {
   };
 
   /**
-   * Must not share the MO debounce timer: continuous DOM mutations can reset it forever and
-   * block `run()` after XHR ingest (e.g. profile “load more”).
+   * Debounced panel pass after the cache got new sets. Must not share the MO
+   * debounce timer: continuous DOM mutations can reset it forever and block
+   * the pass after XHR ingest (e.g. profile "load more"). Panels whose set did
+   * not change return early (per-id versions).
    */
-  scheduleAfterIngest = () => {
+  const scheduleAfterIngest = () => {
     window.clearTimeout(ingestPanelsId);
     ingestPanelsId = window.setTimeout(() => {
       ingestPanelsId = 0;
@@ -770,6 +637,7 @@ export function start(settings, options = {}) {
       });
     }, 0);
   };
+  const unsubCache = beatmapsetCache.onChange(() => scheduleAfterIngest());
 
   run();
 
@@ -790,7 +658,7 @@ export function start(settings, options = {}) {
     profileExtraPrefetchStarted = false;
     profileExtraPrefetchWantIngest = null;
     listingSearchPrefetchStarted = false;
-    scheduleAfterIngest = () => {};
+    unsubCache();
     detachBeatmapsetsListingItemsRo();
     removeJsonListener();
     style.remove();
