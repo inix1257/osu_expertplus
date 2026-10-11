@@ -20,7 +20,12 @@ import {
   beatmapsetsFromUserList,
 } from "../../core/beatmapset-cache.js";
 import * as pageHooks from "../../core/page-hooks.js";
+import { observe } from "../../core/observe.js";
 import { isBeatmapsetsListing } from "../../core/routes.js";
+import {
+  createListingHeightSync,
+  syncPopupHighlightHeight,
+} from "./extra-layout.js";
 import {
   buildMetaBlock,
   insertTargetMeta,
@@ -405,6 +410,58 @@ function startListingSearchPrefetchIfNeeded(wantIngest) {
 }
 
 /**
+ * Re-ingests `#json-beatmaps` when its text changes in place (SPA navigations
+ * fill the script by updating its text node, which a childList observer on
+ * the document does not see).
+ * @param {() => boolean} isOn
+ * @returns {{ connect: () => void, disconnect: () => void }}
+ */
+function createJsonBeatmapsWatcher(isOn) {
+  /** @type {MutationObserver|null} */
+  let mo = null;
+  /** @type {Element|null} */
+  let observed = null;
+  let debounce = 0;
+
+  function disconnect() {
+    window.clearTimeout(debounce);
+    debounce = 0;
+    mo?.disconnect();
+    mo = null;
+    observed = null;
+  }
+
+  function connect() {
+    const n = isOn() ? document.getElementById("json-beatmaps") : null;
+    if (!n) {
+      disconnect();
+      return;
+    }
+    if (observed === n && mo) return;
+    disconnect();
+    observed = n;
+    mo = new MutationObserver(() => {
+      if (!isOn()) return;
+      window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => {
+        debounce = 0;
+        ingestFromJsonBeatmapsScript();
+      }, 0);
+    });
+    mo.observe(n, { childList: true, characterData: true, subtree: true });
+  }
+
+  return { connect, disconnect };
+}
+
+/** What the card extras react to: cards, the popup, the listing data. */
+const CARD_WATCH_SELECTOR =
+  ".beatmapset-panel, .beatmaps-popup, #json-beatmaps, .beatmapsets__items";
+const MO_DEBOUNCE_MS = 100;
+/** Ensures the pass eventually runs when the page mutates continuously (React). */
+const MO_MAX_WAIT_MS = 450;
+
+/**
  * @param {typeof OsuExpertPlus.settings} settings
  * @param {{ hookProfileExtraPages?: boolean }} [options]
  * @returns {() => void}
@@ -415,64 +472,14 @@ export function start(settings, options = {}) {
   const ID_STARS = settings.IDS.BEATMAP_CARD_DIFFICULTY_RANGE;
   const wantIngest = () =>
     settings.isEnabled(ID_META) || settings.isEnabled(ID_STARS);
-  let moDebounceId = 0;
-  let moMaxWaitId = 0;
-  const MO_DEBOUNCE_MS = 100;
-  /** Ensures `run()` eventually fires when the subtree mutates continuously (React). */
-  const MO_MAX_WAIT_MS = 450;
-  let ingestPanelsId = 0;
-
-  /** @type {MutationObserver|null} */
-  let jsonBeatmapsMo = null;
-  /** @type {Element|null} */
-  let jsonBeatmapsObserved = null;
-  let jsonBeatmapsTextMutDeb = 0;
-
-  function disconnectJsonBeatmapsObserver() {
-    window.clearTimeout(jsonBeatmapsTextMutDeb);
-    jsonBeatmapsTextMutDeb = 0;
-    try {
-      jsonBeatmapsMo?.disconnect();
-    } catch (_) {
-      void 0;
-    }
-    jsonBeatmapsMo = null;
-    jsonBeatmapsObserved = null;
-  }
-
-  function connectJsonBeatmapsObserver() {
-    if (!wantIngest()) {
-      disconnectJsonBeatmapsObserver();
-      return;
-    }
-    const n = document.getElementById("json-beatmaps");
-    if (!n) {
-      disconnectJsonBeatmapsObserver();
-      return;
-    }
-    if (jsonBeatmapsObserved === n && jsonBeatmapsMo) return;
-    disconnectJsonBeatmapsObserver();
-    jsonBeatmapsObserved = n;
-    jsonBeatmapsMo = new MutationObserver(() => {
-      if (!wantIngest()) return;
-      window.clearTimeout(jsonBeatmapsTextMutDeb);
-      jsonBeatmapsTextMutDeb = window.setTimeout(() => {
-        jsonBeatmapsTextMutDeb = 0;
-        ingestFromJsonBeatmapsScript();
-        scheduleAfterIngest();
-      }, 0);
-    });
-    jsonBeatmapsMo.observe(n, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-  }
+  const jsonWatcher = createJsonBeatmapsWatcher(wantIngest);
+  const listingHeight = createListingHeightSync(wantIngest);
 
   profileExtraState.waitForExtraPages = options.hookProfileExtraPages === true;
   profileExtraPrefetchStarted = false;
   listingSearchPrefetchStarted = false;
 
+  // Site responses carrying beatmapsets go into the cache.
   const removeJsonListener = pageHooks.addJsonResponseListener({
     match: (url) => wantIngest() && ingestorForUrl(url) !== null,
     onJson: (url, json) => {
@@ -490,176 +497,66 @@ export function start(settings, options = {}) {
       ingestFromJsonBeatmapsScript();
       profileExtraPrefetchWantIngest = wantIngest;
       startListingSearchPrefetchIfNeeded(wantIngest);
-      connectJsonBeatmapsObserver();
+      jsonWatcher.connect();
       scheduleAllPanels(document, settings, ac.signal);
     } else {
-      disconnectJsonBeatmapsObserver();
+      jsonWatcher.disconnect();
     }
     syncPopupHighlightHeight();
-    scheduleBeatmapsetsListingLayoutSync();
+    listingHeight.schedule();
   };
 
-  /** @type {ResizeObserver|null} */
-  let beatmapsetsListingItemsRo = null;
-  /** @type {Element|null} */
-  let beatmapsetsListingItemsObserved = null;
-
-  function detachBeatmapsetsListingItemsRo() {
-    if (beatmapsetsListingItemsRo) {
-      beatmapsetsListingItemsRo.disconnect();
-      beatmapsetsListingItemsRo = null;
-      beatmapsetsListingItemsObserved = null;
-    }
-  }
-
-  function isBeatmapsetsListingIndexPage() {
-    const p = location.pathname;
-    return p === "/beatmapsets" || p === "/beatmapsets/";
-  }
-
-  /**
-   * Listing uses a virtual list: the first child of `.beatmapsets__content` gets an inline
-   * `height` from osu-web from row count × assumed row height. Extra card rows increase real
-   * content height without updating that value, so the b5 page background shows past the block.
-   */
-  function syncBeatmapsetsListingOuterHeight(outer, items) {
-    if (!(outer instanceof HTMLElement) || !(items instanceof HTMLElement))
-      return;
-    const st = outer.getAttribute("style") || "";
-    if (!/height\s*:\s*[\d.]+\s*px/i.test(st)) return;
-    const cs = getComputedStyle(outer);
-    const padY =
-      (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
-    const minOuter = Math.ceil(items.scrollHeight + padY);
-    if (minOuter > outer.clientHeight + 0.5) {
-      outer.style.height = `${minOuter}px`;
-    }
-  }
-
-  function maybeAttachBeatmapsetsListingHeightObserver() {
-    if (!wantIngest()) {
-      detachBeatmapsetsListingItemsRo();
-      return;
-    }
-    if (!isBeatmapsetsListingIndexPage()) {
-      detachBeatmapsetsListingItemsRo();
-      return;
-    }
-    const content = document.querySelector(".beatmapsets__content");
-    const outer = content?.firstElementChild;
-    const items = outer?.querySelector?.(".beatmapsets__items");
-    if (!(outer instanceof HTMLElement) || !(items instanceof HTMLElement)) {
-      detachBeatmapsetsListingItemsRo();
-      return;
-    }
-    if (
-      beatmapsetsListingItemsObserved === items &&
-      beatmapsetsListingItemsRo
-    ) {
-      syncBeatmapsetsListingOuterHeight(outer, items);
-      return;
-    }
-    detachBeatmapsetsListingItemsRo();
-    beatmapsetsListingItemsObserved = items;
-    beatmapsetsListingItemsRo = new ResizeObserver(() => {
-      syncBeatmapsetsListingOuterHeight(outer, items);
-    });
-    beatmapsetsListingItemsRo.observe(items);
-    syncBeatmapsetsListingOuterHeight(outer, items);
-  }
-
-  function scheduleBeatmapsetsListingLayoutSync() {
-    if (!wantIngest()) {
-      detachBeatmapsetsListingItemsRo();
-      return;
-    }
-    if (!isBeatmapsetsListingIndexPage()) {
-      detachBeatmapsetsListingItemsRo();
-      return;
-    }
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        maybeAttachBeatmapsetsListingHeightObserver();
-      });
-    });
-  }
-
-  /**
-   * osu-web's difficulty popup (`.beatmaps-popup`, rendered via Portal) draws a highlight border
-   * using `::before { height: calc(100% + var(--panel-height)) }`. `--panel-height` is a fixed
-   * CSS variable set on `.beatmaps-popup` itself, so it doesn't account for our injected rows.
-   * Sync the popup's `--panel-height` to the actual rendered height of the hovered panel.
-   */
-  function syncPopupHighlightHeight() {
-    const activePanel = document.querySelector(
-      ".beatmapset-panel--beatmaps-popup-visible",
-    );
-    const popup = document.querySelector(".beatmaps-popup");
-    if (!activePanel || !popup) return;
-    const actual = /** @type {HTMLElement} */ (activePanel).offsetHeight;
-    if (actual > 0) {
-      popup.style.setProperty("--panel-height", actual + "px");
-    }
-  }
-
-  /**
-   * DOM mutations (including our injections) were calling full `run()` via MO, re-scanning every
-   * panel and re-running ingest on a hot path. Only refresh listing JSON + panel pass.
-   */
+  // Cards and data appearing in the page: one panel pass per burst.
+  let moDebounceId = 0;
+  let moMaxWaitId = 0;
   const refreshAfterDomMutation = () => {
-    if (!wantIngest()) {
-      return;
-    }
-    connectJsonBeatmapsObserver();
-    ingestFromJsonBeatmapsScript();
-    scheduleAllPanels(document, settings, ac.signal);
-    syncPopupHighlightHeight();
-    scheduleBeatmapsetsListingLayoutSync();
-  };
-
-  const flushMoSchedule = () => {
     window.clearTimeout(moDebounceId);
     moDebounceId = 0;
     window.clearTimeout(moMaxWaitId);
     moMaxWaitId = 0;
-    refreshAfterDomMutation();
+    if (!wantIngest()) return;
+    jsonWatcher.connect();
+    ingestFromJsonBeatmapsScript();
+    scheduleAllPanels(document, settings, ac.signal);
+    syncPopupHighlightHeight();
+    listingHeight.schedule();
   };
-
-  /**
-   * @param {MutationRecord[]} mutations
-   */
-  const scheduleFromMutationObserver = (mutations) => {
-    if (!wantIngest()) {
-      return;
-    }
-    // MutationObserver callbacks fire before the next browser paint, so syncing immediately here
-    // corrects --panel-height on the popup before its opacity transition becomes visible (no flash).
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType !== 1) continue;
-        const el = /** @type {Element} */ (node);
-        if (
-          el.classList.contains("beatmaps-popup") ||
-          el.querySelector(".beatmaps-popup")
-        ) {
-          syncPopupHighlightHeight();
-          break;
-        }
+  observe.subscribe(
+    {
+      selector: CARD_WATCH_SELECTOR,
+      schedule: "sync",
+      signal: ac.signal,
+      label: "cards/extra",
+    },
+    ({ added }) => {
+      if (!wantIngest()) return;
+      // Before the next paint, so the popup's highlight never flashes at the
+      // old height.
+      if (
+        added.some(
+          (n) =>
+            n.matches(".beatmaps-popup") || n.querySelector(".beatmaps-popup"),
+        )
+      ) {
+        syncPopupHighlightHeight();
       }
-    }
-    window.clearTimeout(moDebounceId);
-    moDebounceId = window.setTimeout(flushMoSchedule, MO_DEBOUNCE_MS);
-    if (!moMaxWaitId) {
-      moMaxWaitId = window.setTimeout(flushMoSchedule, MO_MAX_WAIT_MS);
-    }
-  };
+      window.clearTimeout(moDebounceId);
+      moDebounceId = window.setTimeout(refreshAfterDomMutation, MO_DEBOUNCE_MS);
+      if (!moMaxWaitId) {
+        moMaxWaitId = window.setTimeout(
+          refreshAfterDomMutation,
+          MO_MAX_WAIT_MS,
+        );
+      }
+    },
+  );
 
   /**
-   * Debounced panel pass after the cache got new sets. Must not share the MO
-   * debounce timer: continuous DOM mutations can reset it forever and block
-   * the pass after XHR ingest (e.g. profile "load more"). Panels whose set did
-   * not change return early (per-id versions).
+   * Panel pass after the cache got new sets. Separate from the DOM debounce:
+   * continuous DOM mutations could postpone it forever (profile "load more").
+   * Panels whose set did not change return early (per-id versions).
    */
+  let ingestPanelsId = 0;
   const scheduleAfterIngest = () => {
     window.clearTimeout(ingestPanelsId);
     ingestPanelsId = window.setTimeout(() => {
@@ -668,34 +565,30 @@ export function start(settings, options = {}) {
       requestAnimationFrame(() => {
         if (!wantIngest()) return;
         scheduleAllPanels(document, settings, ac.signal);
-        scheduleBeatmapsetsListingLayoutSync();
+        listingHeight.schedule();
       });
     }, 0);
   };
-  const unsubCache = beatmapsetCache.onChange(() => scheduleAfterIngest());
+  const unsubCache = beatmapsetCache.onChange(scheduleAfterIngest);
 
   run();
-
   const unsubMeta = settings.onChange(ID_META, run);
   const unsubStars = settings.onChange(ID_STARS, run);
-  const mo = new MutationObserver(scheduleFromMutationObserver);
-  mo.observe(document.documentElement, { childList: true, subtree: true });
 
   return () => {
     ac.abort();
     window.clearTimeout(moDebounceId);
     window.clearTimeout(moMaxWaitId);
     window.clearTimeout(ingestPanelsId);
-    disconnectJsonBeatmapsObserver();
+    jsonWatcher.disconnect();
     unsubMeta();
     unsubStars();
-    mo.disconnect();
     profileExtraState.waitForExtraPages = false;
     profileExtraPrefetchStarted = false;
     profileExtraPrefetchWantIngest = null;
     listingSearchPrefetchStarted = false;
     unsubCache();
-    detachBeatmapsetsListingItemsRo();
+    listingHeight.detach();
     removeJsonListener();
     style.remove();
     document.querySelectorAll(".beatmapset-panel").forEach((panel) => {
