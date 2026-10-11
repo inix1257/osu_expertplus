@@ -2,13 +2,15 @@
  * Difficulty names and star ratings beside the difficulty picker icons (WS-33).
  */
 
-import { readBeatmapsetJson } from "../../osu/beatmapset-data.js";
+import {
+  parsePickerHref,
+  readBeatmapsetJson,
+} from "../../osu/beatmapset-data.js";
 import { el, settingIds, settings } from "../legacy.js";
 import { PICKER_DIFF_NAMES_META_ATTR } from "./constants.js";
 import {
   PICKER_LINK_SEL,
   PICKER_SEL,
-  pickerLinkBeatmapId,
   subscribePickerChanges,
 } from "./picker.js";
 import { formatStars, STAR_FORMAT } from "../../osu/format.js";
@@ -22,15 +24,22 @@ export function formatBeatmapsetHeaderStarRatingText(n) {
 }
 
 /**
+ * Name and nomod star rating of a difficulty as shown for `ruleset`. A
+ * difficulty listed under another ruleset's tab is a convert, whose name
+ * (e.g. `[4K] Normal`) and rating come from the set's `converts` (B91).
  * @param {number|null|undefined} beatmapId
+ * @param {string|null} [ruleset]  the picker link's ruleset
  * @returns {{ version: string, rating: number|null }}
  */
-export function getBeatmapVersionAndRatingForHeader(beatmapId) {
+export function getBeatmapVersionAndRatingForHeader(beatmapId, ruleset) {
   const data = readBeatmapsetJson();
   if (!data?.beatmaps?.length) return { version: "", rating: null };
   const n = Number(beatmapId);
   if (!Number.isFinite(n)) return { version: "", rating: null };
-  const bm = data.beatmaps.find((b) => Number(b.id) === n);
+  let bm = data.beatmaps.find((b) => Number(b.id) === n);
+  if (bm && ruleset && bm.mode !== ruleset) {
+    bm = data.converts?.find((b) => Number(b.id) === n && b.mode === ruleset);
+  }
   if (!bm) return { version: "", rating: null };
   const version =
     bm.version != null && String(bm.version).trim() !== ""
@@ -68,11 +77,12 @@ export function startPickerDiffNames(header, pathRe) {
       return;
     }
 
-    const id = pickerLinkBeatmapId(a, { pathFallback: true });
-    const { version, rating } =
-      id != null
-        ? getBeatmapVersionAndRatingForHeader(id)
-        : { version: "", rating: null };
+    const link = parsePickerHref(a.getAttribute("href"), {
+      pathFallback: true,
+    });
+    const { version, rating } = link
+      ? getBeatmapVersionAndRatingForHeader(link.beatmapId, link.ruleset)
+      : { version: "", rating: null };
 
     let meta = a.querySelector(`[${PICKER_DIFF_NAMES_META_ATTR}]`);
     if (!(meta instanceof HTMLElement)) {
