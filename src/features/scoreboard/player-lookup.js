@@ -374,6 +374,14 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
   );
   // osu-web switches difficulty without reloading and re-renders the table
   // around our rows: drop results that belong to the previous one (B72).
+  const dropIfBeatmapChanged = () => {
+    if (resultKey == null || beatmapKey() === resultKey) return;
+    resultKey = null;
+    const boardRoot = findBeatmapScoreboardRoot();
+    if (hasUserSearchResultRows(boardRoot))
+      clearLookupResults(boardRoot, false);
+    resetBarState();
+  };
   const unsubscribeBeatmap = observe.subscribe(
     {
       selector:
@@ -381,19 +389,25 @@ export function startBeatmapScoreUserSearchManager(pathRe) {
       schedule: 16,
       label: "scoreboard/player-lookup-beatmap",
     },
-    () => {
-      if (resultKey == null || beatmapKey() === resultKey) return;
-      resultKey = null;
-      const boardRoot = findBeatmapScoreboardRoot();
-      if (hasUserSearchResultRows(boardRoot))
-        clearLookupResults(boardRoot, false);
-      resetBarState();
+    dropIfBeatmapChanged,
+  );
+  // A board osu-web already has refills the same rows (none added), so also
+  // follow the picker's selected difficulty (B110).
+  const unsubscribePicker = observe.subscribe(
+    {
+      selector:
+        ".beatmapset-beatmap-picker, .beatmapset-beatmap-picker__beatmap",
+      attributes: ["class"],
+      schedule: 16,
+      label: "scoreboard/player-lookup-picker",
     },
+    dropIfBeatmapChanged,
   );
   schedule();
 
   return () => {
     unsubscribeBeatmap();
+    unsubscribePicker();
     unsubLookup();
     window.removeEventListener(OSU_API_CREDS_CHANGE, onOsuApiCredsChange);
     window.clearTimeout(debounceTimer);

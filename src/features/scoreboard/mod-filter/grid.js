@@ -672,6 +672,14 @@ export async function setupBeatmapScoreboardModGrid() {
     // new one. Only writes when the key actually changes, so our own writes
     // can't loop.
     let wildcardBeatmapKey = getWildcardBeatmapKey();
+    const refetchIfBeatmapChanged = () => {
+      const key = getWildcardBeatmapKey();
+      if (key === wildcardBeatmapKey) return;
+      wildcardBeatmapKey = key;
+      if (getWildcardMods().length === 0) return;
+      clearMergedLeaderboard(scoreboardRoot, "wildcard");
+      scheduleWildcardFetch(grid);
+    };
     observe.subscribe(
       {
         selector:
@@ -682,13 +690,21 @@ export async function setupBeatmapScoreboardModGrid() {
       },
       () => {
         syncWildcardLoadingOverlay(scoreboardRoot);
-        const key = getWildcardBeatmapKey();
-        if (key === wildcardBeatmapKey) return;
-        wildcardBeatmapKey = key;
-        if (getWildcardMods().length === 0) return;
-        clearMergedLeaderboard(scoreboardRoot, "wildcard");
-        scheduleWildcardFetch(grid);
+        refetchIfBeatmapChanged();
       },
+    );
+    // A board osu-web already has refills the same rows (none added), so also
+    // follow the picker's selected difficulty (B110).
+    observe.subscribe(
+      {
+        selector:
+          ".beatmapset-beatmap-picker, .beatmapset-beatmap-picker__beatmap",
+        attributes: ["class"],
+        schedule: 16,
+        signal,
+        label: "scoreboard/wildcard-picker",
+      },
+      refetchIfBeatmapChanged,
     );
   }
 
