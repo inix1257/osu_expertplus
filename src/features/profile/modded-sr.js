@@ -12,19 +12,11 @@ import {
   _extractRowData,
   _fetchBeatmapAttributesCached,
   isPermanentBeatmap,
-  rememberRowBeatmap,
   rowBeatmap,
   rowHasCustomDifficultySettings,
 } from "./beatmap-attributes.js";
-import {
-  _applyByBeatmapId,
-  _buildScoresByBeatmapId,
-  _getSectionType,
-} from "./score-rows.js";
-import {
-  _applyApiMaxComboToComboInline,
-  injectStatsRow,
-} from "./score-stats.js";
+import { _getSectionType } from "./score-rows.js";
+import { _applyApiMaxComboToComboInline } from "./score-stats.js";
 async function _fetchAndApplySr(rowEl) {
   if (rowEl.hasAttribute(MODDED_SR_ATTR)) return;
   rowEl.setAttribute(MODDED_SR_ATTR, "");
@@ -139,13 +131,4 @@ export function revertModdedStarRatings() {
       rowEl.removeAttribute(MODDED_SR_ATTR);
       rowEl.querySelector(".oep-sr-badge")?.remove();
     });
-}
-
-export function processElements(elements, scores) {
-  const byBeatmap = _buildScoresByBeatmapId(scores);
-  const usageCount = new Map();
-  _applyByBeatmapId(elements, byBeatmap, usageCount, (rowEl, score) => {
-    rememberRowBeatmap(rowEl, score?.beatmap);
-    injectStatsRow(rowEl, score);
-  });
 }

@@ -11,6 +11,7 @@ import {
   statsCells,
 } from "../../osu/score.js";
 import { el } from "../legacy.js";
+import { rememberRowBeatmap } from "./beatmap-attributes.js";
 import {
   MW_PP_CLASS,
   SCORE_STATS_ATTR,
@@ -142,6 +143,28 @@ export function injectStatsRow(rowEl, score) {
   const comboStatsCol = rowEl.querySelector(".oep-combo-stats-col");
   (comboStatsCol || midCol).appendChild(statsRow);
   rowEl.setAttribute(SCORE_STATS_ATTR, "1");
+}
+
+/**
+ * Give every row that lacks it the stats of its score, matched by beatmap in
+ * row order. A row osu! re-rendered keeps our attribute but lost the stats, so
+ * it is filled again. Serves the first pass and every later row change.
+ * @param {HTMLElement[]} rows
+ * @param {Object[]} scores
+ */
+export function fillStatsRows(rows, scores) {
+  _applyByBeatmapId(
+    rows,
+    _buildScoresByBeatmapId(scores),
+    new Map(),
+    (rowEl, score) => {
+      rememberRowBeatmap(rowEl, score?.beatmap);
+      if (!rowEl.querySelector(".oep-score-stats")) {
+        rowEl.removeAttribute(SCORE_STATS_ATTR);
+      }
+      injectStatsRow(rowEl, score);
+    },
+  );
 }
 
 function _revertAccuracyComboWrap(rowEl) {

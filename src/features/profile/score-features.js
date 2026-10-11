@@ -11,11 +11,7 @@ import {
   waitForStaleElementToLeave,
 } from "../legacy.js";
 import { MODDED_SR_ID } from "./beatmap-attributes.js";
-import {
-  initSrObserver,
-  processElements,
-  revertModdedStarRatings,
-} from "./modded-sr.js";
+import { initSrObserver, revertModdedStarRatings } from "./modded-sr.js";
 import {
   _scoreListComplete,
   beginScoreListVisit,
@@ -33,7 +29,6 @@ import {
   SCORE_PLACE_SECTION_TYPE,
   SCORE_PP_DECIMALS_ID,
   SCORE_SECTION_TYPES,
-  SCORE_STATS_ATTR,
   _beatmapIdFromRow,
   _buildScoresByBeatmapId,
   _getSectionType,
@@ -49,7 +44,7 @@ import {
   applyHideWeightedPp,
   applyMostWatchedPp,
   injectMostWatchedPpRow,
-  injectStatsRow,
+  fillStatsRows,
   revertMostWatchedPp,
   revertStatsRows,
 } from "./score-stats.js";
@@ -177,7 +172,7 @@ export async function initScoreFeatures(userId, mode, run) {
           );
     if (isDisposed()) return;
     scoresMap.set(type, scores);
-    processElements(
+    fillStatsRows(
       Array.from(listEl.querySelectorAll(".play-detail")),
       scoresMap.get(type),
     );
@@ -211,43 +206,6 @@ export async function initScoreFeatures(userId, mode, run) {
     if (settings().isEnabled(SCORE_PP_DECIMALS_ID)) {
       scoreSections.forEach(({ listEl }) => applyPpDecimals(listEl));
     }
-  }
-
-  /**
-   * Inject stats into rows that do not have them (new rows, or rows osu! re-rendered).
-   * @param {HTMLElement[]} allEls
-   * @param {Object[]} scores
-   */
-  function injectMissingStats(allEls, scores) {
-    const byBeatmap = _buildScoresByBeatmapId(scores);
-    const usageCount = new Map();
-    // First pass: count already-matched rows so duplicate-beatmapId
-    // candidates are consumed in the correct order.
-    allEls.forEach((rowEl) => {
-      const already =
-        rowEl.hasAttribute(SCORE_STATS_ATTR) &&
-        rowEl.querySelector(".oep-score-stats");
-      if (!already) return;
-      const bmId = _beatmapIdFromRow(rowEl);
-      if (bmId) usageCount.set(bmId, (usageCount.get(bmId) ?? 0) + 1);
-    });
-    // Second pass: inject only rows that are missing stats.
-    allEls.forEach((rowEl) => {
-      const needsReinjection =
-        !rowEl.hasAttribute(SCORE_STATS_ATTR) ||
-        !rowEl.querySelector(".oep-score-stats");
-      if (!needsReinjection) return;
-      rowEl.removeAttribute(SCORE_STATS_ATTR);
-      const bmId = _beatmapIdFromRow(rowEl);
-      if (!bmId) return;
-      const candidates = byBeatmap.get(bmId);
-      if (!candidates) return;
-      const idx = usageCount.get(bmId) ?? 0;
-      const score = candidates[idx];
-      if (!score) return;
-      usageCount.set(bmId, idx + 1);
-      injectStatsRow(rowEl, score);
-    });
   }
 
   function mountScoreListObserver(section) {
@@ -313,7 +271,7 @@ export async function initScoreFeatures(userId, mode, run) {
           });
         } else if (scoresMap.has(type)) {
           const scores = scoresMap.get(type);
-          injectMissingStats(allEls, scores);
+          fillStatsRows(allEls, scores);
           if (
             type !== "most_watched" &&
             allEls.length > scores.length &&
@@ -326,7 +284,7 @@ export async function initScoreFeatures(userId, mode, run) {
               statsFetchPending = false;
               if (isDisposed()) return;
               scoresMap.set(type, more);
-              injectMissingStats(
+              fillStatsRows(
                 Array.from(listEl.querySelectorAll(".play-detail")),
                 more,
               );

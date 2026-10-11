@@ -14,12 +14,7 @@ import {
   clearBeatmapAttributesCache,
   rememberRowBeatmap,
 } from "../beatmap-attributes.js";
-import {
-  _observeRow,
-  _srObserver,
-  initSrObserver,
-  processElements,
-} from "../modded-sr.js";
+import { _observeRow, _srObserver, initSrObserver } from "../modded-sr.js";
 import { observe } from "../../../core/observe.js";
 import {
   RANKS_CARD_BG_FEATURE_ID,
@@ -58,7 +53,7 @@ import {
   scorePlaceNumberStyle,
   syncScoreListPpDecimalsWidthClass,
 } from "../score-rows.js";
-import { applyHideWeightedPp } from "../score-stats.js";
+import { applyHideWeightedPp, fillStatsRows } from "../score-stats.js";
 import { playDetailStyle } from "../styles.js";
 /** Inject only: the shared play-detail style is removed by profile `init` (B07). */
 function ensurePlayDetailStylesForRecent() {
@@ -120,7 +115,7 @@ function populateRecentScoresInnerList(
     applyPpDecimals(innerList);
   }
   if (settings().isEnabled(SCORE_HIT_STATISTICS_ID)) {
-    processElements(rows, scores);
+    fillStatsRows(rows, scores);
     enrichPlayDetailRowsMaxComboFromAttributes(rows, scores, innerList);
   }
   if (settings().isEnabled(settingIds().MOD_ICONS_AS_ACRONYMS)) {
