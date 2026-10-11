@@ -29,6 +29,7 @@ import {
   SCOREBOARD_CELL_LINK_SEL,
   SCOREBOARD_PP_ORIGINAL_ATTR,
   SCOREBOARD_ROW_SEL,
+  SCOREBOARD_SORT_VALUE_ATTR,
   WILDCARD_MERGED_ROW_ATTR,
 } from "./context.js";
 import { applyScoreboardModsCell } from "./row-mods.js";
@@ -646,7 +647,23 @@ export function applyApiScoreToBeatmapScoreRow(
     applyScoreboardModsCell(tds[colMap.mods], score, modTemplateBtn);
   }
 
+  setScoreboardSortValue(tds[colMap.score], score.oepDisplayTotal);
+  const acc = Number(score.accuracy);
+  setScoreboardSortValue(tds[colMap.accuracy], acc <= 1 ? acc * 100 : acc);
+  setScoreboardSortValue(tds[colMap.combo], score.max_combo);
+
   pointScoreboardRowLinksAtScore(tr, score);
+}
+
+/**
+ * @param {HTMLTableCellElement|null|undefined} td
+ * @param {unknown} value
+ */
+function setScoreboardSortValue(td, value) {
+  const n = Number(value);
+  if (td && value != null && value !== "" && Number.isFinite(n)) {
+    td.setAttribute(SCOREBOARD_SORT_VALUE_ATTR, String(n));
+  }
 }
 
 /**

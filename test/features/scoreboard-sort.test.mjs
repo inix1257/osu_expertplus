@@ -62,6 +62,9 @@ function useDom(lang, rows) {
     "HTMLTableCellElement",
     "HTMLTableRowElement",
     "HTMLTimeElement",
+    "HTMLButtonElement",
+    "HTMLAnchorElement",
+    "Node",
   ]) {
     Object.defineProperty(globalThis, key, {
       value: key === "window" ? window : window[key],
@@ -229,5 +232,47 @@ test("renumbering skips lookup rows, which show a global rank (B12)", async () =
   assert.deepEqual(
     rows.map((r) => r.cells[0].textContent.trim()),
     ["#523", "?", "#3"],
+  );
+});
+
+test("injected rows sort by their plain numbers in any locale (B97)", async () => {
+  const { applyApiScoreToBeatmapScoreRow } =
+    await import("../../src/features/scoreboard/row-builder.js");
+  const doc = useDom(
+    "de",
+    row({
+      rank: "#1",
+      score: "1",
+      acc: "1%",
+      combo: "1x",
+      pp: "1",
+      ppTitle: "1",
+      time: "2020-01-01T00:00:00Z",
+    }),
+  );
+  const table = doc.querySelector("table");
+  const template = table.querySelector("tbody tr");
+  const map = buildBeatmapScoreboardColumnMap(template, table);
+  const tr = template.cloneNode(true);
+  globalThis.OsuExpertPlus ??= {};
+  applyApiScoreToBeatmapScoreRow(
+    tr,
+    {
+      total_score: 141639015,
+      accuracy: 0.9966,
+      max_combo: 2384,
+      statistics: { great: 1 },
+    },
+    2,
+    map,
+    table,
+    template,
+    null,
+  );
+  assert.equal(beatmapScoreboardRowSortPrimary(tr, map, "score"), 141639015);
+  assert.equal(beatmapScoreboardRowSortPrimary(tr, map, "combo"), 2384);
+  assert.ok(
+    Math.abs(beatmapScoreboardRowSortPrimary(tr, map, "accuracy") - 99.66) <
+      1e-9,
   );
 });

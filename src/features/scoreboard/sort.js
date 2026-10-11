@@ -14,6 +14,7 @@ import {
   readScoreDisplayPrefs,
   SCOREBOARD_HTML_TABLE_SEL,
   SCOREBOARD_ROW_SEL,
+  SCOREBOARD_SORT_VALUE_ATTR,
   SCOREBOARD_TBODY_SEL,
 } from "./context.js";
 import { refreshBeatmapScoreboardTableEnhancements } from "./refresh.js";
@@ -238,6 +239,9 @@ export function syncBeatmapScoreboardHeaderSortUi(scoreboardRoot) {
  */
 export function beatmapScoreboardTdNumberForSort(td) {
   if (!(td instanceof HTMLTableCellElement)) return -Infinity;
+  // Injected rows keep the plain number (B97).
+  const plain = td.getAttribute(SCOREBOARD_SORT_VALUE_ATTR);
+  if (plain != null && Number.isFinite(Number(plain))) return Number(plain);
   const span = td.querySelector(
     "a.beatmap-scoreboard-table__cell-content span[title], span.beatmap-scoreboard-table__cell-content span[title], span[title]",
   );

@@ -24,6 +24,12 @@ export const SCOREBOARD_PP_ORIGINAL_ATTR = "data-oep-scoreboard-pp-original";
 
 export const EXTENDED_SCORE_ROW_ATTR = "data-oep-api-extended-score";
 
+/**
+ * Plain number an injected cell sorts by (B97): its text is formatted, and
+ * reading it back in a comma-decimal locale turns `1,234` into 1.234.
+ */
+export const SCOREBOARD_SORT_VALUE_ATTR = "data-oep-sort-value";
+
 /** Score rows of the scoreboard table (osu-web and injected). */
 export const SCOREBOARD_ROW_SEL = "tr.beatmap-scoreboard-table__body-row";
 export const SCOREBOARD_TBODY_SEL = "tbody.beatmap-scoreboard-table__body";
