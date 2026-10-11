@@ -109,20 +109,27 @@ export function destroySharedEngineHard() {
   const root = sharedEngineRoot;
   sharedEngine = null;
   sharedEngineRoot = null;
+  try {
+    root?.remove();
+  } catch (_) {
+    void 0;
+  }
+  if (!engine) return;
+  try {
+    engine.pause?.();
+  } catch (_) {
+    void 0;
+  }
   const teardown = () => {
     try {
-      engine?.destroy?.();
-    } catch (_) {
-      void 0;
-    }
-    try {
-      root?.remove();
+      engine.destroy?.();
     } catch (_) {
       void 0;
     }
   };
   // B31: an engine still in init() is destroyed once init settles; the
   // acquire queue is never reset from outside, so acquires stay serialized.
-  if (engineInitializing) engineInitializing.then(teardown, teardown);
-  else teardown();
+  // B88: likewise once the loads queued so far settle; a loadBeatmap() that
+  // goes on after destroy() would give the dead engine a new <audio>.
+  Promise.all([engineInitializing, engineLoadQueue]).then(teardown, teardown);
 }
