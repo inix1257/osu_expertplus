@@ -47,19 +47,20 @@ const BWS_RANKING_CSS = `
     column-gap: 1.25rem;
     row-gap: 0.35rem;
   }
+  /* Left-aligned like the Global/Country values beside it (B90). */
   .oep-bws-value-stack {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: flex-start;
     gap: 0.2rem;
     min-width: 0;
-    text-align: right;
+    text-align: left;
   }
   .oep-bws-controls {
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.35rem;
     font-size: 12px;
     line-height: 1.35;
@@ -69,7 +70,7 @@ const BWS_RANKING_CSS = `
     display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.35rem;
   }
   .oep-bws-badge-adjust-input {
