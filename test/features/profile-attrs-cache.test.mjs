@@ -6,6 +6,7 @@ const { window } = loadScripts(["src/utils/dom.js", "src/utils/settings.js"]);
 for (const key of [
   "window",
   "document",
+  "HTMLElement",
   "OsuExpertPlus",
   "GM_getValue",
   "GM_setValue",
@@ -139,4 +140,32 @@ test("B36: custom rates and customised DA hide the SR badge", () => {
       html,
     );
   }
+});
+
+test("B104: a customised DA chip hides the SR badge without osu-web's badge on the page", async () => {
+  const { buildApiScoreModsInner } =
+    await import("../../src/features/profile/recent-scores/mods.js");
+  window.OsuExpertPlus.modIconsAsAcronyms ??= {
+    modTypeClassForAcronym: () => "mod--type-Conversion",
+  };
+  assert.equal(
+    window.document.querySelector(".mod__customised-indicator"),
+    null,
+    "nothing to borrow",
+  );
+  const row = window.document.createElement("div");
+  row.className = "play-detail";
+  row.appendChild(
+    buildApiScoreModsInner(
+      [{ acronym: "DA", settings: { approach_rate: 9 } }, { acronym: "HD" }],
+      null,
+    ),
+  );
+  assert.equal(rowHasCustomDifficultySettings(row), true);
+
+  const plain = window.document.createElement("div");
+  plain.appendChild(
+    buildApiScoreModsInner([{ acronym: "DA", settings: {} }], null),
+  );
+  assert.equal(rowHasCustomDifficultySettings(plain), false);
 });

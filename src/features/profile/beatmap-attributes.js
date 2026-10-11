@@ -8,6 +8,8 @@ import { settingIds } from "../legacy.js";
 // Modded SR: IO + POST /beatmaps/{id}/attributes; row data from title href + mod icons
 export const MODDED_SR_ID = settingIds().MODDED_STAR_RATING;
 export const MODDED_SR_ATTR = "data-oep-sr"; // '' pending, 1 done
+/** On Expert+ mod chips whose API mod has settings (B104). */
+export const MOD_CUSTOMISED_ATTR = "data-oep-mod-customised";
 
 /** @type {Map<string, { sr: number|null, maxCombo: number|null }>} */
 export const _attrsSessionCache = new Map();
@@ -266,7 +268,10 @@ export function rowHasCustomDifficultySettings(rowEl) {
     const modEl = icon.closest(".mod") ?? icon.parentElement;
     if (!modEl) continue;
     if (acronym === "DA") {
-      if (modEl.querySelector(".mod__extender, .mod__customised-indicator")) {
+      if (
+        modEl.hasAttribute(MOD_CUSTOMISED_ATTR) ||
+        modEl.querySelector(".mod__extender, .mod__customised-indicator")
+      ) {
         return true;
       }
       continue;

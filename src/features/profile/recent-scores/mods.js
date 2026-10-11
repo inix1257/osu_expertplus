@@ -13,6 +13,7 @@ import {
   modTypeClassForAcronym,
   stripOepModAcronymFromClonedMod,
 } from "../../legacy.js";
+import { MOD_CUSTOMISED_ATTR } from "../beatmap-attributes.js";
 import {
   findRecentPlaysListRoot,
   isInsideOepRecentFailsWrap,
@@ -83,6 +84,7 @@ function patchClonedModForAcronym(modRoot, acronym) {
   modRoot.querySelector(".mod__extender")?.remove();
   modRoot.querySelector(".mod__customised-indicator")?.remove();
   modRoot.removeAttribute("title");
+  modRoot.removeAttribute(MOD_CUSTOMISED_ATTR);
 }
 
 /**
@@ -125,6 +127,9 @@ function applyModCustomisation(chip, mod) {
   const settings = mod && typeof mod === "object" ? mod.settings : null;
   if (!settings || typeof settings !== "object") return;
   if (!Object.keys(settings).length) return;
+  // From the score itself: the badge below can only be borrowed when osu-web
+  // shows one somewhere on the page (B104).
+  chip.setAttribute(MOD_CUSTOMISED_ATTR, "1");
 
   const rate = Number(settings.speed_change);
   if (Number.isFinite(rate) && rate > 0) {
