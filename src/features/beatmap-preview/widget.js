@@ -9,8 +9,17 @@ import {
   revokeBeatmapCoverObjectUrl,
 } from "./files.js";
 import { observe } from "../../core/observe.js";
-import { pageLocalStorage } from "../../core/page-window.js";
-import { readOsuSiteAudioVolume } from "./prefs.js";
+import { PREVIEW_CLIP_CAP_MS } from "./engine-patches.js";
+import {
+  PREVIEW_VOLUME_DEFAULT,
+  actualAudioOffsetMsFromDisplay,
+  formatOffsetForField,
+  hitsoundVolumePref,
+  musicVolumePref,
+  parseOffsetTextStrict,
+  readStoredOffsetMs,
+  writeStoredOffsetMs,
+} from "./prefs.js";
 import {
   acquireSharedEngine,
   destroySharedEngineHard,
@@ -344,150 +353,6 @@ export function mountBeatmapsetInfoPreview({
     }
   }
 
-  /** Site preview files are short; cap so we never treat a longer buffer as full-map audio. */
-  const PREVIEW_CLIP_MAX_MS = 10000;
-  const PREVIEW_MUSIC_LS_KEY = "oep.beatmapPreview.musicVolume";
-  const PREVIEW_HITSOUND_LS_KEY = "oep.beatmapPreview.hitsoundVolume";
-  /** Tampermonkey keys from before localStorage migration; read once to seed LS. */
-  const PREVIEW_MUSIC_VOLUME_LEGACY_GM_KEY = "beatmapPreview.musicVolume";
-  const PREVIEW_HITSVOL_LEGACY_GM_KEY = "beatmapPreview.hitsoundVolume";
-  const PREVIEW_VOLUME_DEFAULT = 0.3;
-  const PREVIEW_OFFSET_LS_KEY = "oep.beatmapPreview.audioOffsetMs";
-  const OFFSET_MIN = -500;
-  const OFFSET_MAX = 500;
-  /** Added to the displayed offset when calling the renderer (0 ms shown → 85 ms actual). */
-  const PREVIEW_OFFSET_DISPLAY_BASE_MS = 85;
-
-  function clampOffsetMs(n) {
-    if (!Number.isFinite(n)) return 0;
-    return Math.min(OFFSET_MAX, Math.max(OFFSET_MIN, Math.round(n)));
-  }
-
-  function actualAudioOffsetMsFromDisplay(displayMs) {
-    return clampOffsetMs(displayMs) + PREVIEW_OFFSET_DISPLAY_BASE_MS;
-  }
-
-  /** @param {unknown} raw */
-  function parseOffsetTextStrict(raw) {
-    const s = String(raw ?? "")
-      .trim()
-      .replace(/\s+/g, "")
-      .replace(/ms$/i, "");
-    if (s === "" || s === "-" || s === "+") return null;
-    const n = Number(s);
-    if (!Number.isFinite(n)) return null;
-    return clampOffsetMs(n);
-  }
-
-  function formatOffsetForField(ms) {
-    return String(clampOffsetMs(ms));
-  }
-
-  function readStoredOffsetMs() {
-    const ls = pageLocalStorage();
-    if (ls) {
-      try {
-        const s = ls.getItem(PREVIEW_OFFSET_LS_KEY);
-        if (s != null && s !== "") {
-          return clampOffsetMs(Number(s));
-        }
-      } catch (_) {
-        void 0;
-      }
-    }
-    return 0;
-  }
-
-  function writeStoredOffsetMs(ms) {
-    const ls = pageLocalStorage();
-    if (!ls) return;
-    try {
-      ls.setItem(PREVIEW_OFFSET_LS_KEY, String(clampOffsetMs(ms)));
-    } catch (_) {
-      void 0;
-    }
-  }
-
-  function readStoredMusicVolume() {
-    const ls = pageLocalStorage();
-    if (ls) {
-      try {
-        const s = ls.getItem(PREVIEW_MUSIC_LS_KEY);
-        if (s != null && s !== "") {
-          const n = Number(s);
-          if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
-        }
-      } catch (_) {
-        void 0;
-      }
-    }
-    try {
-      const v = GM_getValue(PREVIEW_MUSIC_VOLUME_LEGACY_GM_KEY, undefined);
-      if (v !== undefined && v !== null && String(v) !== "") {
-        const n = Number(v);
-        if (Number.isFinite(n) && n >= 0 && n <= 1) {
-          writeStoredMusicVolume(n);
-          return n;
-        }
-      }
-    } catch (_) {
-      void 0;
-    }
-    const site = readOsuSiteAudioVolume();
-    if (site != null) return site;
-    return PREVIEW_VOLUME_DEFAULT;
-  }
-
-  function writeStoredMusicVolume(vol) {
-    const ls = pageLocalStorage();
-    if (!ls) return;
-    try {
-      ls.setItem(PREVIEW_MUSIC_LS_KEY, String(vol));
-    } catch (_) {
-      void 0;
-    }
-  }
-
-  function readStoredHitsoundVolume() {
-    const ls = pageLocalStorage();
-    if (ls) {
-      try {
-        const s = ls.getItem(PREVIEW_HITSOUND_LS_KEY);
-        if (s != null && s !== "") {
-          const n = Number(s);
-          if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
-        }
-      } catch (_) {
-        void 0;
-      }
-    }
-    try {
-      const v = GM_getValue(PREVIEW_HITSVOL_LEGACY_GM_KEY, undefined);
-      if (v !== undefined && v !== null && String(v) !== "") {
-        const n = Number(v);
-        if (Number.isFinite(n) && n >= 0 && n <= 1) {
-          writeStoredHitsoundVolume(n);
-          return n;
-        }
-      }
-    } catch (_) {
-      void 0;
-    }
-    const site = readOsuSiteAudioVolume();
-    if (site != null) return site;
-    return PREVIEW_VOLUME_DEFAULT;
-  }
-
-  function writeStoredHitsoundVolume(vol) {
-    const ls = pageLocalStorage();
-    if (!ls) return;
-    try {
-      ls.setItem(PREVIEW_HITSOUND_LS_KEY, String(vol));
-    } catch (_) {
-      void 0;
-    }
-  }
-
   const statusEl = el("span", { class: `${wrapClass}__status` }, "");
 
   const unsupportedWrap = el(
@@ -590,7 +455,7 @@ export function mountBeatmapsetInfoPreview({
     class: `${wrapClass}__volume-range`,
     min: "0",
     max: "100",
-    value: String(Math.round(readStoredMusicVolume() * 100)),
+    value: String(Math.round(musicVolumePref.read() * 100)),
     step: "1",
     disabled: true,
     "aria-label": "Gameplay preview music volume",
@@ -618,7 +483,7 @@ export function mountBeatmapsetInfoPreview({
     class: `${wrapClass}__volume-range`,
     min: "0",
     max: "100",
-    value: String(Math.round(readStoredHitsoundVolume() * 100)),
+    value: String(Math.round(hitsoundVolumePref.read() * 100)),
     step: "1",
     disabled: true,
     "aria-label": "Gameplay preview hitsounds volume",
@@ -763,9 +628,9 @@ export function mountBeatmapsetInfoPreview({
       a.duration > 0 &&
       a.readyState >= 1
     ) {
-      return Math.min(PREVIEW_CLIP_MAX_MS, a.duration * 1000);
+      return Math.min(PREVIEW_CLIP_CAP_MS, a.duration * 1000);
     }
-    return PREVIEW_CLIP_MAX_MS;
+    return PREVIEW_CLIP_CAP_MS;
   }
 
   /**
@@ -796,7 +661,7 @@ export function mountBeatmapsetInfoPreview({
     const vol =
       Number.isFinite(eng.musicVolume) && eng.musicVolume >= 0
         ? eng.musicVolume
-        : 0.3;
+        : PREVIEW_VOLUME_DEFAULT;
     let t;
     try {
       t = eng.getCurrentTime?.();
@@ -993,13 +858,13 @@ export function mountBeatmapsetInfoPreview({
 
   function previewMusicVolumeFromSlider() {
     const v = Number(musicVolumeRange.value) / 100;
-    if (!Number.isFinite(v)) return 0.3;
+    if (!Number.isFinite(v)) return PREVIEW_VOLUME_DEFAULT;
     return Math.min(1, Math.max(0, v));
   }
 
   function previewHitsoundVolumeFromSlider() {
     const v = Number(hitsoundVolumeRange.value) / 100;
-    if (!Number.isFinite(v)) return 0.3;
+    if (!Number.isFinite(v)) return PREVIEW_VOLUME_DEFAULT;
     return Math.min(1, Math.max(0, v));
   }
 
@@ -1288,13 +1153,13 @@ export function mountBeatmapsetInfoPreview({
     applyPreviewMusicVolumeToEngine();
   });
   musicVolumeRange.addEventListener("change", () => {
-    writeStoredMusicVolume(previewMusicVolumeFromSlider());
+    musicVolumePref.write(previewMusicVolumeFromSlider());
   });
   hitsoundVolumeRange.addEventListener("input", () => {
     applyPreviewHitsoundVolumeToEngine();
   });
   hitsoundVolumeRange.addEventListener("change", () => {
-    writeStoredHitsoundVolume(previewHitsoundVolumeFromSlider());
+    hitsoundVolumePref.write(previewHitsoundVolumeFromSlider());
   });
   offsetInput.addEventListener("input", () => {
     applyPreviewOffsetToEngine();

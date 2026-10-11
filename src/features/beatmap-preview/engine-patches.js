@@ -16,8 +16,8 @@ const BEATMAP_ENGINE_PLAY_PATCH = "__oepBeatmapEnginePlayOutsidePreview";
 const BEATMAP_ENGINE_TRANSPORT_PATCH = "__oepBeatmapEngineTransportPreview";
 const BEATMAP_ENGINE_PAUSE_PATCH = "__oepBeatmapEnginePauseSnapshot";
 const BEATMAP_ENGINE_BG_CONTAIN_PATCH = "__oepBeatmapEngineBgContain";
-/** Same cap as site preview MP3 handling in {@link mountBeatmapsetInfoPreview}. */
-const OEP_PREVIEW_CLIP_CAP_MS = 10000;
+/** The site's preview MP3 is ~10 s; a longer buffer is never treated as the full song. */
+export const PREVIEW_CLIP_CAP_MS = 10000;
 
 /**
  * True when beatmap time does not fall inside the ~10s site preview MP3 (relative to PreviewTime).
@@ -36,8 +36,8 @@ function isBeatmapTimeOutsideSitePreviewClip(engine, beatmapMs) {
   const dur = engine.previewAudio.duration;
   const durMs =
     Number.isFinite(dur) && dur > 0
-      ? Math.min(OEP_PREVIEW_CLIP_CAP_MS, dur * 1000)
-      : OEP_PREVIEW_CLIP_CAP_MS;
+      ? Math.min(PREVIEW_CLIP_CAP_MS, dur * 1000)
+      : PREVIEW_CLIP_CAP_MS;
   return !Number.isFinite(shifted) || shifted < 0 || shifted >= durMs;
 }
 
