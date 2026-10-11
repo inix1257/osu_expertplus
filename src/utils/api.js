@@ -6,6 +6,14 @@ OsuExpertPlus.api = (() => {
   const BASE = "https://osu.ppy.sh/api/v2";
   /** Public site origin (non-`/api/v2` routes). */
   const SITE_ORIGIN = "https://osu.ppy.sh";
+  /**
+   * `x-api-version` for routes that return scores. Without it (or below
+   * 20220705) API v2 answers in the old score shape: `score` is the stable
+   * score (0 for lazer plays), mods are bare acronyms (no CL, no settings) and
+   * there is no `classic_total_score`/`total_score` (B89). With it the scores
+   * match the site's own scoreboard JSON.
+   */
+  const LAZER_SCORE_API_VERSION = "20240529";
 
   /**
    * Global limiter for every request Expert+ sends to osu.ppy.sh (API v2 and
@@ -373,13 +381,20 @@ OsuExpertPlus.api = (() => {
    * Automatically attaches the Bearer token when credentials are configured.
    * @param {string} url
    * @param {Object} [params={}]  Query-string parameters.
-   * @param {{ priority?: "high"|"low" }} [options={}]
+   * @param {{ priority?: "high"|"low", apiVersion?: string }} [options={}]
    *        `priority` selects the limiter queue (see `siteFetch`).
+   *        `apiVersion` is sent as `x-api-version`, which picks the response
+   *        shape on some routes (see `LAZER_SCORE_API_VERSION`).
    * @returns {Promise<any>}
    */
   async function get(url, params = {}, options = {}) {
     const fullUrl = withQuery(url, params);
-    const resp = await authedFetch(fullUrl, {}, { priority: options.priority });
+    const init = options.apiVersion
+      ? { headers: { "x-api-version": options.apiVersion } }
+      : {};
+    const resp = await authedFetch(fullUrl, init, {
+      priority: options.priority,
+    });
 
     if (!resp.ok) {
       const err = /** @type {Error & { status?: number }} */ (
@@ -474,6 +489,7 @@ OsuExpertPlus.api = (() => {
     return get(
       `${BASE}/beatmaps/${beatmapId}/scores/users/${userId}/all`,
       params,
+      { apiVersion: LAZER_SCORE_API_VERSION },
     );
   }
 

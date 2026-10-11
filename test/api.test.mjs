@@ -175,3 +175,20 @@ test("a 401 on a Bearer request drops the token and retries once (B35)", async (
   await assert.rejects(api.getBeatmap(1));
   assert.equal(calls.length, 1);
 });
+
+test("user beatmap scores ask for the lazer score shape (B89)", async () => {
+  const { api, calls } = loadApi({ authHeader: "Bearer t" });
+  await api.getBeatmapUserScoresAll(129891, 2, {
+    ruleset: "osu",
+    legacy_only: 0,
+  });
+  await api.getBeatmap(129891);
+  assert.equal(
+    calls[0].url,
+    "https://osu.ppy.sh/api/v2/beatmaps/129891/scores/users/2/all?ruleset=osu&legacy_only=0",
+  );
+  assert.equal(calls[0].init.headers["x-api-version"], "20240529");
+  assert.equal(calls[0].init.headers.Authorization, "Bearer t");
+  // Other routes keep their current response shape.
+  assert.equal(calls[1].init.headers["x-api-version"], undefined);
+});
