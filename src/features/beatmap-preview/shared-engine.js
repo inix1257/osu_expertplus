@@ -80,6 +80,23 @@ export async function acquireSharedEngine(hostEl) {
   return run;
 }
 
+/** Loads on the shared engine, one at a time (B30). */
+let engineLoadQueue = Promise.resolve();
+
+/**
+ * Run `task` after every load queued before it, so a load from a page that
+ * was left finishes before the next page's load starts instead of running
+ * beside it on the same engine (B30).
+ * @template T
+ * @param {() => Promise<T>} task
+ * @returns {Promise<T>}
+ */
+export function runEngineLoad(task) {
+  const run = engineLoadQueue.then(task, task);
+  engineLoadQueue = run.catch(() => {});
+  return run;
+}
+
 /**
  * Destroys the shared engine and its root. Used when the preview is collapsed
  * and when switching to a non-osu! ruleset; SPA navigation only parks it.

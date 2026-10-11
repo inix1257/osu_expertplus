@@ -15,6 +15,7 @@ import {
   destroySharedEngineHard,
   parkSharedEngineRoot,
   placeSharedEngineRoot,
+  runEngineLoad,
   sharedEngine,
 } from "./shared-engine.js";
 /**
@@ -264,6 +265,10 @@ export function mountBeatmapsetInfoPreview({
   let expanded = false;
   let busy = false;
   let lastLoadedKey = "";
+  /** Set by dispose: this widget must not touch the shared engine any more. */
+  let disposed = false;
+  /** Bumped by every load and by dispose; a load that sees a newer value stops (B30). */
+  let loadSeq = 0;
   let seekRafId = 0;
   let seekPointerActive = false;
   /** `ruleset:beatmapId` while preview is expanded; used to detect difficulty / mode changes (SPA). */
@@ -1174,19 +1179,35 @@ export function mountBeatmapsetInfoPreview({
     setStatus("Loading…");
     setPreviewControlsEnabled(false);
 
+    // B30: after every await, stop if the widget was disposed (the shared
+    // engine may already belong to the next page) or a newer load started.
+    const seq = ++loadSeq;
+    const superseded = () => disposed || seq !== loadSeq;
+    const offPage = () => !expanded || !pathRe.test(location.pathname);
+
     try {
       const osuText = await fetchOsuFileText(beatmapId);
-      if (!expanded || !pathRe.test(location.pathname)) return;
-      const eng = await ensureEngine();
-      eng.pause();
-      const bgAbs = absoluteUrl(bg);
-      const bgObjectUrl = bgAbs ? await fetchBeatmapCoverObjectUrl(bgAbs) : "";
-      await eng.loadBeatmap({
-        osuText,
-        audioUrl: previewAudio || undefined,
-        backgroundUrl: bgObjectUrl || undefined,
+      if (superseded() || offPage()) return;
+      let loaded = false;
+      await runEngineLoad(async () => {
+        if (superseded() || offPage()) return;
+        const eng = await ensureEngine();
+        if (superseded()) return;
+        eng.pause();
+        const bgAbs = absoluteUrl(bg);
+        const bgObjectUrl = bgAbs
+          ? await fetchBeatmapCoverObjectUrl(bgAbs)
+          : "";
+        if (superseded()) return;
+        await eng.loadBeatmap({
+          osuText,
+          audioUrl: previewAudio || undefined,
+          backgroundUrl: bgObjectUrl || undefined,
+        });
+        loaded = true;
       });
-      if (!expanded || !pathRe.test(location.pathname)) {
+      if (superseded()) return;
+      if (!loaded || offPage()) {
         invalidateLoadState();
         return;
       }
@@ -1197,12 +1218,14 @@ export function mountBeatmapsetInfoPreview({
       syncSeekUiFromEngine();
       updateCanvasPlayStateAria();
     } catch (e) {
+      if (superseded()) return;
       setStatus(
         e instanceof Error ? e.message : "Could not load this difficulty.",
       );
       invalidateLoadState();
     } finally {
-      busy = false;
+      // A newer load in this widget keeps it busy.
+      if (seq === loadSeq) busy = false;
     }
   }
 
@@ -1322,6 +1345,8 @@ export function mountBeatmapsetInfoPreview({
 
   return {
     dispose: () => {
+      disposed = true;
+      loadSeq += 1;
       stopContextPoll();
       window.removeEventListener("hashchange", onPossiblePreviewContextChange);
       window.removeEventListener("popstate", onPossiblePreviewContextChange);
