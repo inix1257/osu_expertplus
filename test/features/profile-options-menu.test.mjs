@@ -57,3 +57,35 @@ test("options menus are portaled on first open and removed on cleanup (B42)", ()
   assert.equal(doc.querySelector(".oep-score-options-menu[data-open]"), null);
   menus.disposeScoreOptionsMenus();
 });
+
+test("an open menu follows its button on scroll and resize (B105)", () => {
+  const doc = window.document;
+  const wrap = menus.buildScoreOptionsMenu({ id: 5, user_id: 9 });
+  doc.body.append(wrap);
+  const btn = wrap.querySelector("button");
+  let top = 100;
+  btn.getBoundingClientRect = () => ({ bottom: top, right: 500 });
+  btn.click();
+  const menu = doc.querySelector(".oep-score-options-menu[data-open]");
+  assert.equal(menu.style.top, "102px");
+
+  top = 40;
+  doc.dispatchEvent(new window.Event("scroll"));
+  assert.equal(menu.style.top, "42px", "page scroll");
+  top = 10;
+  doc.body.dispatchEvent(new window.Event("scroll")); // a scrolling container
+  assert.equal(menu.style.top, "12px");
+  top = 70;
+  window.dispatchEvent(new window.Event("resize"));
+  assert.equal(menu.style.top, "72px");
+
+  // Button gone (list re-rendered): the menu closes instead of floating.
+  wrap.remove();
+  doc.dispatchEvent(new window.Event("scroll"));
+  assert.equal(menu.hasAttribute("data-open"), false);
+
+  menus.disposeScoreOptionsMenus();
+  top = 1;
+  doc.dispatchEvent(new window.Event("scroll"));
+  assert.equal(menu.style.top, "72px", "listeners removed on cleanup");
+});

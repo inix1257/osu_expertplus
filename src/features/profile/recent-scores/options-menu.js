@@ -23,8 +23,33 @@ function _closeAllScoreOptionsMenus() {
 const portaledMenus = new Set();
 /** @type {WeakMap<Element, HTMLElement>} options button -> its menu */
 const menuByButton = new WeakMap();
+/** @type {WeakMap<Element, Element>} menu -> its options button */
+const buttonByMenu = new WeakMap();
 /** @type {((e: MouseEvent) => void) | null} */
 let docClickListener = null;
+/** @type {(() => void) | null} */
+let repositionListener = null;
+
+/**
+ * Put a `position: fixed` menu right under its button.
+ * @param {HTMLElement} menu
+ * @param {Element} btn
+ */
+function placeMenuUnderButton(menu, btn) {
+  const rect = btn.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + 2}px`;
+  menu.style.right = `${window.innerWidth - rect.right}px`;
+}
+
+/** Keep open menus under their buttons (B105); close orphaned ones. */
+function repositionOpenMenus() {
+  for (const menu of portaledMenus) {
+    if (!menu.hasAttribute("data-open")) continue;
+    const btn = buttonByMenu.get(menu);
+    if (btn?.isConnected) placeMenuUnderButton(menu, btn);
+    else menu.removeAttribute("data-open");
+  }
+}
 
 function _ensureScoreOptionsDocListener() {
   if (docClickListener) return;
@@ -38,6 +63,14 @@ function _ensureScoreOptionsDocListener() {
     if (!inWrap && !inMenu) _closeAllScoreOptionsMenus();
   };
   document.addEventListener("click", docClickListener, { capture: true });
+  // The menu is `position: fixed` in <body>: follow the button when the page
+  // or a scrolling container moves it.
+  repositionListener = repositionOpenMenus;
+  document.addEventListener("scroll", repositionListener, {
+    capture: true,
+    passive: true,
+  });
+  window.addEventListener("resize", repositionListener);
 }
 
 /**
@@ -61,6 +94,13 @@ export function disposeScoreOptionsMenus() {
   if (docClickListener) {
     document.removeEventListener("click", docClickListener, { capture: true });
     docClickListener = null;
+  }
+  if (repositionListener) {
+    document.removeEventListener("scroll", repositionListener, {
+      capture: true,
+    });
+    window.removeEventListener("resize", repositionListener);
+    repositionListener = null;
   }
 }
 
@@ -184,9 +224,7 @@ export function buildScoreOptionsMenu(score) {
         document.body.appendChild(menu);
         portaledMenus.add(menu);
       }
-      const rect = btn.getBoundingClientRect();
-      menu.style.top = `${rect.bottom + 2}px`;
-      menu.style.right = `${window.innerWidth - rect.right}px`;
+      placeMenuUnderButton(menu, btn);
       menu.setAttribute("data-open", "");
     }
   });
@@ -194,6 +232,7 @@ export function buildScoreOptionsMenu(score) {
   // So the menu can be removed when the list is repopulated
   // (populateRecentScoresInnerList).
   menuByButton.set(btn, menu);
+  buttonByMenu.set(menu, btn);
 
   return el("div", { class: SCORE_OPTIONS_WRAP_CLASS }, btn);
 }
