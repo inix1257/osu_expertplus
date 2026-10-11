@@ -6,7 +6,7 @@
 
 import { mountSettingFeature, safeStart } from "../core/lifecycle.js";
 import { startBbcodeHelperManager } from "../editor/bbcode-helper/manager.js";
-import { start as startCardExtra } from "../features/cards/extra.js";
+import { startCardFeatures } from "../features/cards/index.js";
 import { startProfileBadgesCollapseManager } from "../features/profile/badges.js";
 import { mountBwsRanking } from "../features/profile/bws.js";
 import { startContentsReorderManager } from "../features/profile/contents-reorder.js";
@@ -57,24 +57,11 @@ function init(_match) {
     }),
   );
 
-  const cards = OsuExpertPlus.beatmapCardStats;
-  safeStart(
-    bag,
-    () => cards.startAlwaysShowStats(settings, manageStyle),
-    "card stats",
-  );
-  safeStart(
-    bag,
-    () => cards.startFullBeatmapStatNumbers(settings),
-    "card stat numbers",
-  );
   safeStart(
     bag,
     () =>
-      startCardExtra(settings, {
-        hookProfileExtraPages: true,
-      }),
-    "card extras",
+      startCardFeatures(settings, manageStyle, { hookProfileExtraPages: true }),
+    "card features",
   );
 
   safeStart(bag, startRanksDateHighlightManager, "ranks period");

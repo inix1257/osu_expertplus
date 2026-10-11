@@ -1,6 +1,6 @@
 /** /beatmapsets listing (no set id): card features and the listing mode. */
 
-import { start as startCardExtra } from "../features/cards/extra.js";
+import { startCardFeatures } from "../features/cards/index.js";
 
 window.OsuExpertPlus = window.OsuExpertPlus || {};
 OsuExpertPlus.pages = OsuExpertPlus.pages || {};
@@ -17,16 +17,7 @@ OsuExpertPlus.pages.beatmapsetsListing = (() => {
   function init(_match) {
     const bag = createCleanupBag();
 
-    bag.add(
-      OsuExpertPlus.beatmapCardStats.startAlwaysShowStats(
-        settings,
-        manageStyle,
-      ),
-    );
-    bag.add(
-      OsuExpertPlus.beatmapCardStats.startFullBeatmapStatNumbers(settings),
-    );
-    bag.add(startCardExtra(settings));
+    bag.add(startCardFeatures(settings, manageStyle));
     bag.add(OsuExpertPlus.beatmapsetsListingMode.startPageBehavior());
 
     return () => bag.dispose();
