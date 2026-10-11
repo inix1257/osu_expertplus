@@ -16,7 +16,11 @@ import {
   musicVolumePref,
   readStoredOffsetMs,
 } from "../prefs.js";
-import { destroySharedEngineHard, sharedEngine } from "../shared-engine.js";
+import {
+  destroySharedEngineHard,
+  setSharedEngineRendering,
+  sharedEngine,
+} from "../shared-engine.js";
 import { buildPreviewDom, setStatus, setToggleLabel } from "./dom.js";
 import { createPreviewKeydown } from "./keyboard.js";
 import { createBeatmapLoader } from "./load.js";
@@ -162,6 +166,7 @@ export function mountBeatmapsetInfoPreview({
     if (state.expanded) {
       state.previewContextKey = previewContextKeyFromPage();
       startContextWatch();
+      setSharedEngineRendering(true);
       transport.startSeekAnimationLoop();
       if (!state.busy) {
         await loadCurrentBeatmap();
@@ -176,6 +181,8 @@ export function mountBeatmapsetInfoPreview({
       } catch (_) {
         void 0;
       }
+      // Paused and hidden: stop drawing frames until expanded again (B87).
+      setSharedEngineRendering(false);
     }
   });
 

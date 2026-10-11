@@ -9,6 +9,7 @@
  *   transportStartPerfTime, audioSyncOffsetMs, lastAudioSyncSamplePerfMs,
  *   hitsoundPlayer, backgroundSprite, getDisplayDimensions(),
  *   getPreviewAudioTimeMsForBeatmapTime(), getTransportCurrentTimeMs()
+ * shared-engine.js also starts and stops `app.ticker` (B87).
  */
 const BEATMAP_ENGINE_AUDIO_PATCH = "__oepBeatmapEngineNoPreviewAudioCors";
 const BEATMAP_ENGINE_SEEK_PATCH = "__oepBeatmapEngineSeekBeforePreview";

@@ -81,6 +81,23 @@ export function runEngineLoad(task) {
 }
 
 /**
+ * Start or stop drawing frames. The renderer adds its frame update to the
+ * Pixi ticker in `init()` and only stops it in `destroy()`, so a collapsed
+ * preview would keep drawing every frame (B87). Reads the renderer's `app`.
+ * @param {boolean} on
+ */
+export function setSharedEngineRendering(on) {
+  const ticker = sharedEngine?.app?.ticker;
+  if (!ticker) return;
+  try {
+    if (on) ticker.start();
+    else ticker.stop();
+  } catch (_) {
+    void 0;
+  }
+}
+
+/**
  * Destroys the shared engine and its root: the Pixi ticker, the WebGL context
  * (Pixi's destroy calls `loseContext`), the hitsound AudioContext and the
  * preview `<audio>`. Used when the preview leaves the page (dispose) and when

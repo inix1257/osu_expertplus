@@ -14,6 +14,7 @@ import {
   destroySharedEngineHard,
   placeSharedEngineRoot,
   runEngineLoad,
+  setSharedEngineRendering,
   sharedEngine,
 } from "../shared-engine.js";
 import { setStatus } from "./dom.js";
@@ -123,6 +124,8 @@ export function createBeatmapLoader({
         if (superseded() || offPage()) return;
         const eng = await acquireSharedEngine(engineSlot);
         if (superseded()) return;
+        // A new engine starts its ticker; collapsed meanwhile (B87).
+        if (!state.expanded) setSharedEngineRendering(false);
         eng.pause();
         const bgAbs = absoluteUrl(bg);
         const bgObjectUrl = bgAbs
