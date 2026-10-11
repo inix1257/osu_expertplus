@@ -4,7 +4,6 @@
 
 import { observe } from "../../core/observe.js";
 import { el, manageStyle } from "../legacy.js";
-import { mutationsIncludeSelector } from "./mutations.js";
 const USERPAGE_EXPAND_STYLE_ID = "osu-expertplus-userpage-expand";
 const USERPAGE_EXPAND_DONE_ATTR = "data-oep-userpage-expand";
 const USERPAGE_EXPAND_PAGE_CLASS = "oep-userpage--expanded";
@@ -156,9 +155,16 @@ function teardownUserpageExpand() {
   });
 }
 
-/** @param {MutationRecord[]} mutations */
-function mutationsAffectMeUserpage(mutations) {
-  return mutationsIncludeSelector(mutations, USERPAGE_ME_SECTION_SEL);
+/**
+ * Whether an added element is (or holds) the me! section.
+ * @param {Element[]} added
+ */
+function addedMeUserpage(added) {
+  return added.some(
+    (n) =>
+      n.matches(USERPAGE_ME_SECTION_SEL) ||
+      n.querySelector(USERPAGE_ME_SECTION_SEL) !== null,
+  );
 }
 
 /** Expand/collapse the profile Me tab userpage past osu!'s 400px cap. */
@@ -237,11 +243,11 @@ export function startUserpageExpandManager() {
   // (it used to be a second observer re-targeted at the section).
   observe.subscribe(
     { schedule: "sync", signal: ac.signal, label: "profile/userpage-expand" },
-    ({ records }) => {
+    ({ records, added }) => {
       const section = findMeUserpageContext()?.section;
       if (
         (section && records.some((r) => section.contains(r.target))) ||
-        mutationsAffectMeUserpage(records)
+        addedMeUserpage(added)
       ) {
         scan();
       }
