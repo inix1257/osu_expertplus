@@ -272,19 +272,24 @@ export function mountBeatmapsetInfoPreview({
     "Gameplay preview",
   );
 
-  let expanded = false;
-  let busy = false;
-  let lastLoadedKey = "";
-  /** Set by dispose: this widget must not touch the shared engine any more. */
-  let disposed = false;
-  /** Bumped by every load and by dispose; a load that sees a newer value stops (B30). */
-  let loadSeq = 0;
-  let seekRafId = 0;
-  let seekPointerActive = false;
-  /** `ruleset:beatmapId` while preview is expanded; used to detect difficulty / mode changes (SPA). */
-  let previewContextKey = "";
-  /** @type {AbortController|null} the picker watch while expanded */
-  let contextWatch = null;
+  const state = {
+    expanded: false,
+    busy: false,
+    /** The beatmap id loaded on the shared engine by this widget, or "". */
+    lastLoadedKey: "",
+    /** Set by dispose: this widget must not touch the shared engine any more. */
+    disposed: false,
+    /** Bumped by every load and by dispose; a load that sees a newer value stops (B30). */
+    loadSeq: 0,
+    seekRafId: 0,
+    seekPointerActive: false,
+    /** `ruleset:beatmapId` while preview is expanded; used to detect difficulty / mode changes (SPA). */
+    previewContextKey: "",
+    /** @type {AbortController|null} the picker watch while expanded */
+    contextWatch: null,
+    transportFlashTimer: 0,
+    offsetInputCommittedMs: readStoredOffsetMs(),
+  };
 
   function previewContextKeyFromPage() {
     if (!pathRe.test(location.pathname)) return "";
@@ -294,8 +299,8 @@ export function mountBeatmapsetInfoPreview({
   }
 
   function stopContextWatch() {
-    contextWatch?.abort();
-    contextWatch = null;
+    state.contextWatch?.abort();
+    state.contextWatch = null;
   }
 
   /**
@@ -306,14 +311,14 @@ export function mountBeatmapsetInfoPreview({
    */
   function startContextWatch() {
     stopContextWatch();
-    contextWatch = new AbortController();
+    state.contextWatch = new AbortController();
     observe.subscribe(
       {
         selector:
           ".beatmapset-beatmap-picker, .beatmapset-beatmap-picker__beatmap",
         attributes: ["class"],
         schedule: "sync",
-        signal: contextWatch.signal,
+        signal: state.contextWatch.signal,
         label: "beatmap-preview/context",
       },
       onPossiblePreviewContextChange,
@@ -321,8 +326,8 @@ export function mountBeatmapsetInfoPreview({
   }
 
   function collapsePreviewAndResetEngine() {
-    if (!expanded) return;
-    expanded = false;
+    if (!state.expanded) return;
+    state.expanded = false;
     panel.hidden = true;
     panel.classList.remove(`${wrapClass}__panel--unsupported`);
     const top = toggleBtn.querySelector(".btn-osu-big__text-top");
@@ -330,10 +335,10 @@ export function mountBeatmapsetInfoPreview({
       top.textContent = "Beatmap Preview";
     }
     stopContextWatch();
-    previewContextKey = "";
+    state.previewContextKey = "";
     stopSeekAnimationLoop();
-    lastLoadedKey = "";
-    busy = false;
+    state.lastLoadedKey = "";
+    state.busy = false;
     setPreviewControlsEnabled(false);
     setStatus("");
     try {
@@ -346,9 +351,10 @@ export function mountBeatmapsetInfoPreview({
   }
 
   function onPossiblePreviewContextChange() {
-    if (!pathRe.test(location.pathname) || !expanded || busy) return;
+    if (!pathRe.test(location.pathname) || !state.expanded || state.busy)
+      return;
     const k = previewContextKeyFromPage();
-    if (previewContextKey && k !== previewContextKey) {
+    if (state.previewContextKey && k !== state.previewContextKey) {
       collapsePreviewAndResetEngine();
     }
   }
@@ -395,14 +401,12 @@ export function mountBeatmapsetInfoPreview({
   canvasHost.appendChild(engineSlot);
   canvasHost.appendChild(transportOverlay);
 
-  /** @type {number} */
-  let transportFlashTimer = 0;
   const TRANSPORT_FLASH_HOLD_MS = 520;
 
   function clearTransportFlashTimer() {
-    if (transportFlashTimer) {
-      window.clearTimeout(transportFlashTimer);
-      transportFlashTimer = 0;
+    if (state.transportFlashTimer) {
+      window.clearTimeout(state.transportFlashTimer);
+      state.transportFlashTimer = 0;
     }
   }
 
@@ -412,11 +416,11 @@ export function mountBeatmapsetInfoPreview({
     transportPlayGlyph.hidden = isPlaying;
     transportPauseGlyph.hidden = !isPlaying;
     transportOverlay.classList.add(`${wrapClass}__transport-overlay--visible`);
-    transportFlashTimer = window.setTimeout(() => {
+    state.transportFlashTimer = window.setTimeout(() => {
       transportOverlay.classList.remove(
         `${wrapClass}__transport-overlay--visible`,
       );
-      transportFlashTimer = 0;
+      state.transportFlashTimer = 0;
     }, TRANSPORT_FLASH_HOLD_MS);
   }
 
@@ -507,11 +511,10 @@ export function mountBeatmapsetInfoPreview({
     hitsoundVolumeRange,
   );
 
-  let offsetInputCommittedMs = readStoredOffsetMs();
   const offsetInput = el("input", {
     type: "text",
     class: `${wrapClass}__offset-input`,
-    value: formatOffsetForField(offsetInputCommittedMs),
+    value: formatOffsetForField(state.offsetInputCommittedMs),
     inputMode: "numeric",
     disabled: true,
     "aria-label": "Gameplay preview audio offset in milliseconds",
@@ -524,20 +527,20 @@ export function mountBeatmapsetInfoPreview({
   function previewOffsetMsFromInput() {
     const p = parseOffsetTextStrict(offsetInput.value);
     if (p !== null) return p;
-    return offsetInputCommittedMs;
+    return state.offsetInputCommittedMs;
   }
 
   function commitOffsetFromInput() {
     const p = parseOffsetTextStrict(offsetInput.value);
     if (p === null) {
-      offsetInput.value = formatOffsetForField(offsetInputCommittedMs);
+      offsetInput.value = formatOffsetForField(state.offsetInputCommittedMs);
     } else {
-      offsetInputCommittedMs = p;
+      state.offsetInputCommittedMs = p;
       offsetInput.value = formatOffsetForField(p);
-      writeStoredOffsetMs(offsetInputCommittedMs);
+      writeStoredOffsetMs(state.offsetInputCommittedMs);
     }
     applyPreviewOffsetToEngine();
-    if (sharedEngine && lastLoadedKey) {
+    if (sharedEngine && state.lastLoadedKey) {
       syncPreviewMusicToWindow(sharedEngine);
     }
   }
@@ -718,14 +721,15 @@ export function mountBeatmapsetInfoPreview({
   }
 
   function stopSeekAnimationLoop() {
-    if (seekRafId) {
-      cancelAnimationFrame(seekRafId);
-      seekRafId = 0;
+    if (state.seekRafId) {
+      cancelAnimationFrame(state.seekRafId);
+      state.seekRafId = 0;
     }
   }
 
   function syncSeekUiFromEngine() {
-    if (!sharedEngine || !lastLoadedKey || seekPointerActive) return;
+    if (!sharedEngine || !state.lastLoadedKey || state.seekPointerActive)
+      return;
     try {
       const duration = sharedEngine.getDuration?.() ?? 0;
       const maxMs = Math.max(1, Number.isFinite(duration) ? duration : 0);
@@ -747,15 +751,16 @@ export function mountBeatmapsetInfoPreview({
   function startSeekAnimationLoop() {
     stopSeekAnimationLoop();
     const tick = () => {
-      seekRafId = 0;
-      if (!expanded) return;
+      state.seekRafId = 0;
+      if (!state.expanded) return;
       syncSeekUiFromEngine();
-      if (sharedEngine && lastLoadedKey) {
+      if (sharedEngine && state.lastLoadedKey) {
         syncPreviewMusicToWindow(sharedEngine);
       }
-      if (sharedEngine?.isPlaying) seekRafId = requestAnimationFrame(tick);
+      if (sharedEngine?.isPlaying)
+        state.seekRafId = requestAnimationFrame(tick);
     };
-    seekRafId = requestAnimationFrame(tick);
+    state.seekRafId = requestAnimationFrame(tick);
   }
 
   function applySeekFromInput() {
@@ -772,7 +777,7 @@ export function mountBeatmapsetInfoPreview({
 
   /** @param {number} deltaMs */
   function seekByDeltaMs(deltaMs) {
-    if (!sharedEngine || seekRange.disabled || !lastLoadedKey) return;
+    if (!sharedEngine || seekRange.disabled || !state.lastLoadedKey) return;
     let t;
     let duration;
     try {
@@ -803,11 +808,11 @@ export function mountBeatmapsetInfoPreview({
    */
   function onPreviewPanelKeydown(ev) {
     if (
-      !expanded ||
+      !state.expanded ||
       panel.hidden ||
-      !lastLoadedKey ||
+      !state.lastLoadedKey ||
       seekRange.disabled ||
-      busy
+      state.busy
     ) {
       return;
     }
@@ -935,7 +940,7 @@ export function mountBeatmapsetInfoPreview({
   }
 
   function updateCanvasPlayStateAria() {
-    if (!sharedEngine || !lastLoadedKey || seekRange.disabled) return;
+    if (!sharedEngine || !state.lastLoadedKey || seekRange.disabled) return;
     try {
       const playing = !!sharedEngine.isPlaying;
       canvasHost.setAttribute(
@@ -964,9 +969,9 @@ export function mountBeatmapsetInfoPreview({
   function togglePlaybackFromCanvas() {
     if (
       !sharedEngine ||
-      !lastLoadedKey ||
+      !state.lastLoadedKey ||
       seekRange.disabled ||
-      busy ||
+      state.busy ||
       canvasHost.classList.contains(`${wrapClass}__canvas-host--disabled`)
     ) {
       return;
@@ -990,7 +995,7 @@ export function mountBeatmapsetInfoPreview({
   }
 
   function invalidateLoadState() {
-    lastLoadedKey = "";
+    state.lastLoadedKey = "";
     setPreviewControlsEnabled(false);
     try {
       sharedEngine?.pause?.();
@@ -1010,12 +1015,12 @@ export function mountBeatmapsetInfoPreview({
 
   async function loadCurrentBeatmap() {
     if (!pathRe.test(location.pathname)) return;
-    if (!expanded) return;
+    if (!state.expanded) return;
 
     const ruleset = (getRuleset() || "osu").toLowerCase();
     if (ruleset !== "osu") {
       panel.classList.add(`${wrapClass}__panel--unsupported`);
-      lastLoadedKey = "";
+      state.lastLoadedKey = "";
       setPreviewControlsEnabled(false);
       setStatus("");
       try {
@@ -1025,7 +1030,7 @@ export function mountBeatmapsetInfoPreview({
       }
       destroySharedEngineHard();
       revokeBeatmapCoverObjectUrl();
-      busy = false;
+      state.busy = false;
       return;
     }
 
@@ -1046,8 +1051,8 @@ export function mountBeatmapsetInfoPreview({
         : "";
 
     const key = currentLoadKey();
-    if (sharedEngine && lastLoadedKey === key) {
-      if (!expanded) return;
+    if (sharedEngine && state.lastLoadedKey === key) {
+      if (!state.expanded) return;
       placeSharedEngineRoot(engineSlot);
       setStatus("");
       setPreviewControlsEnabled(true);
@@ -1057,15 +1062,15 @@ export function mountBeatmapsetInfoPreview({
       return;
     }
 
-    busy = true;
+    state.busy = true;
     setStatus("Loading…");
     setPreviewControlsEnabled(false);
 
     // B30: after every await, stop if the widget was disposed (the shared
     // engine may already belong to the next page) or a newer load started.
-    const seq = ++loadSeq;
-    const superseded = () => disposed || seq !== loadSeq;
-    const offPage = () => !expanded || !pathRe.test(location.pathname);
+    const seq = ++state.loadSeq;
+    const superseded = () => state.disposed || seq !== state.loadSeq;
+    const offPage = () => !state.expanded || !pathRe.test(location.pathname);
 
     try {
       const osuText = await fetchOsuFileText(beatmapId);
@@ -1093,7 +1098,7 @@ export function mountBeatmapsetInfoPreview({
         invalidateLoadState();
         return;
       }
-      lastLoadedKey = key;
+      state.lastLoadedKey = key;
       setStatus("");
       setPreviewControlsEnabled(true);
       applyPreviewVolumesToEngine();
@@ -1107,16 +1112,16 @@ export function mountBeatmapsetInfoPreview({
       invalidateLoadState();
     } finally {
       // A newer load in this widget keeps it busy.
-      if (seq === loadSeq) {
-        busy = false;
+      if (seq === state.loadSeq) {
+        state.busy = false;
         // A difficulty switch while loading was ignored (busy): check now.
-        if (!disposed) onPossiblePreviewContextChange();
+        if (!state.disposed) onPossiblePreviewContextChange();
       }
     }
   }
 
   seekRange.addEventListener("pointerdown", (ev) => {
-    seekPointerActive = true;
+    state.seekPointerActive = true;
     try {
       seekRange.setPointerCapture(ev.pointerId);
     } catch (_) {
@@ -1124,7 +1129,7 @@ export function mountBeatmapsetInfoPreview({
     }
   });
   seekRange.addEventListener("pointerup", (ev) => {
-    seekPointerActive = false;
+    state.seekPointerActive = false;
     try {
       seekRange.releasePointerCapture(ev.pointerId);
     } catch (_) {
@@ -1134,12 +1139,12 @@ export function mountBeatmapsetInfoPreview({
     syncSeekUiFromEngine();
   });
   seekRange.addEventListener("pointercancel", () => {
-    seekPointerActive = false;
+    state.seekPointerActive = false;
     syncSeekUiFromEngine();
   });
   seekRange.addEventListener("input", () => {
     applySeekFromInput();
-    if (!sharedEngine || !lastLoadedKey || seekRange.disabled) return;
+    if (!sharedEngine || !state.lastLoadedKey || seekRange.disabled) return;
     try {
       const duration = sharedEngine.getDuration?.() ?? 0;
       const ms = Number(seekRange.value);
@@ -1169,7 +1174,7 @@ export function mountBeatmapsetInfoPreview({
   });
   offsetInput.addEventListener("input", () => {
     applyPreviewOffsetToEngine();
-    if (sharedEngine && lastLoadedKey) {
+    if (sharedEngine && state.lastLoadedKey) {
       syncPreviewMusicToWindow(sharedEngine);
     }
   });
@@ -1191,23 +1196,25 @@ export function mountBeatmapsetInfoPreview({
   panel.addEventListener("keydown", onPreviewPanelKeydown);
 
   toggleBtn.addEventListener("click", async () => {
-    expanded = !expanded;
+    state.expanded = !state.expanded;
     // `hidden` is boolean; `""`/`null` coerce to false and leave the panel visible.
-    panel.hidden = !expanded;
+    panel.hidden = !state.expanded;
     const top = toggleBtn.querySelector(".btn-osu-big__text-top");
     if (top) {
-      top.textContent = expanded ? "Hide beatmap preview" : "Beatmap Preview";
+      top.textContent = state.expanded
+        ? "Hide beatmap preview"
+        : "Beatmap Preview";
     }
-    if (expanded) {
-      previewContextKey = previewContextKeyFromPage();
+    if (state.expanded) {
+      state.previewContextKey = previewContextKeyFromPage();
       startContextWatch();
       startSeekAnimationLoop();
-      if (!busy) {
+      if (!state.busy) {
         await loadCurrentBeatmap();
       }
     } else {
       stopContextWatch();
-      previewContextKey = "";
+      state.previewContextKey = "";
       panel.classList.remove(`${wrapClass}__panel--unsupported`);
       stopSeekAnimationLoop();
       try {
@@ -1231,8 +1238,8 @@ export function mountBeatmapsetInfoPreview({
 
   return {
     dispose: () => {
-      disposed = true;
-      loadSeq += 1;
+      state.disposed = true;
+      state.loadSeq += 1;
       stopContextWatch();
       window.removeEventListener("hashchange", onPossiblePreviewContextChange);
       window.removeEventListener("popstate", onPossiblePreviewContextChange);
