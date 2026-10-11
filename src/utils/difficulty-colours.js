@@ -2,6 +2,7 @@
  * Star difficulty background / text colours — aligned with osu-web
  * `getDiffColour` / `getDiffTextColour` (resources/js/utils/beatmap-helper.ts).
  * Background ramp matches; text ramp above SR 9 is lightened (osu uses black bg there).
+ * Both interpolate like osu-web's `d3.interpolateRgb.gamma(2.2)` (B108).
  */
 
 "use strict";
@@ -45,6 +46,34 @@ OsuExpertPlus.difficultyColours = (() => {
       .join("")}`;
   }
 
+  const GAMMA = 2.2;
+
+  /**
+   * One channel of d3's `interpolateRgb.gamma(GAMMA)`.
+   * @param {number} a  0–255
+   * @param {number} b  0–255
+   * @param {number} t  0–1
+   */
+  function gammaChannel(a, b, t) {
+    const ag = Math.pow(a, GAMMA);
+    return Math.pow(ag + t * (Math.pow(b, GAMMA) - ag), 1 / GAMMA);
+  }
+
+  /**
+   * @param {string} from  `#rrggbb`
+   * @param {string} to  `#rrggbb`
+   * @param {number} t  0–1
+   */
+  function interpolate(from, to, t) {
+    const a = hexToRgb(from);
+    const b = hexToRgb(to);
+    return rgbToHex(
+      gammaChannel(a.r, b.r, t),
+      gammaChannel(a.g, b.g, t),
+      gammaChannel(a.b, b.b, t),
+    );
+  }
+
   /** @param {number} sr */
   function getDiffColour(sr) {
     if (sr < 0.1) return "#AAAAAA";
@@ -54,13 +83,7 @@ OsuExpertPlus.difficultyColours = (() => {
       const d1 = DIFF_DOMAIN[i + 1];
       if (sr >= d0 && sr < d1) {
         const t = (sr - d0) / (d1 - d0);
-        const a = hexToRgb(DIFF_RANGE[i]);
-        const b = hexToRgb(DIFF_RANGE[i + 1]);
-        return rgbToHex(
-          a.r + (b.r - a.r) * t,
-          a.g + (b.g - a.g) * t,
-          a.b + (b.b - a.b) * t,
-        );
+        return interpolate(DIFF_RANGE[i], DIFF_RANGE[i + 1], t);
       }
     }
     return "#000000";
@@ -76,13 +99,7 @@ OsuExpertPlus.difficultyColours = (() => {
       const d1 = TEXT_SR_DOMAIN[i + 1];
       if (sr >= d0 && sr < d1) {
         const t = (sr - d0) / (d1 - d0);
-        const a = hexToRgb(TEXT_SR_RANGE[i]);
-        const b = hexToRgb(TEXT_SR_RANGE[i + 1]);
-        return rgbToHex(
-          a.r + (b.r - a.r) * t,
-          a.g + (b.g - a.g) * t,
-          a.b + (b.b - a.b) * t,
-        );
+        return interpolate(TEXT_SR_RANGE[i], TEXT_SR_RANGE[i + 1], t);
       }
     }
     return "#E4E2FF";
