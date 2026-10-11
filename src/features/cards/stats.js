@@ -15,6 +15,13 @@ const ALWAYS_SHOW_CSS = `
 const FULL_STATS_STYLE_ID = "osu-expertplus-beatmap-card-full-stats";
 /** On a stats item whose full number is shown. */
 const FULL_BEATMAP_STATS_ITEM_ATTR = "data-oep-full-stat-item";
+/**
+ * The cached count an item showed and the tooltip count seen with it (B107):
+ * osu-web updates the tooltip (and its abbreviated number) after a favourite
+ * click, but the cached beatmapset keeps the old count.
+ */
+const STAT_BASE_ATTR = "data-oep-full-stat-base";
+const STAT_TIP_ATTR = "data-oep-full-stat-tip";
 /** Our number, next to osu-web's abbreviated one (which is hidden, not changed). */
 const FULL_STAT_CLASS = "oep-full-stat";
 // Only right after our number: if osu-web re-renders the item without it,
@@ -45,6 +52,9 @@ export function countFromStatTooltip(tooltip) {
 /**
  * Full count for a stats item: the card's beatmapset JSON (`play_count`,
  * `favourite_count`) when the page loaded it, otherwise the tooltip.
+ * Once osu-web changes the tooltip (favourite click, B107), the difference
+ * is added to the cached count. React writes the new `title` even after the
+ * tooltip library moved the old one to `data-orig-title`, so `title` wins.
  * @param {Element} item
  * @returns {number|null}
  */
@@ -56,10 +66,19 @@ function fullStatCount(item) {
   const id = panel ? parseBeatmapsetId(panel) : null;
   const data = id ? beatmapsetCache.get(id) : undefined;
   const fromData = Number(isPlay ? data?.play_count : data?.favourite_count);
-  if (Number.isFinite(fromData) && fromData >= 0) return fromData;
-  return countFromStatTooltip(
-    item.getAttribute("data-orig-title") || item.getAttribute("title") || "",
+  const tip = countFromStatTooltip(
+    item.getAttribute("title") || item.getAttribute("data-orig-title") || "",
   );
+  if (!(Number.isFinite(fromData) && fromData >= 0)) return tip;
+  if (item.getAttribute(STAT_BASE_ATTR) !== String(fromData)) {
+    item.setAttribute(STAT_BASE_ATTR, String(fromData));
+    if (tip === null) item.removeAttribute(STAT_TIP_ATTR);
+    else item.setAttribute(STAT_TIP_ATTR, String(tip));
+    return fromData;
+  }
+  const tip0 = Number(item.getAttribute(STAT_TIP_ATTR) ?? NaN);
+  if (tip === null || !Number.isFinite(tip0)) return fromData;
+  return Math.max(0, fromData + (tip - tip0));
 }
 
 /**
@@ -68,22 +87,25 @@ function fullStatCount(item) {
  * @param {ParentNode} scope
  */
 export function applyFullBeatmapStatNumbers(scope) {
-  scope.querySelectorAll(STATS_ITEM_SEL).forEach((item) => {
-    const n = fullStatCount(item);
-    if (n === null) return;
-    const icon = item.querySelector(".beatmapset-panel__stats-item-icon");
-    const valSpan = icon?.nextElementSibling;
-    if (!valSpan || valSpan.tagName !== "SPAN") return;
-    const text = n.toLocaleString("en-US");
-    let ours = valSpan.classList.contains(FULL_STAT_CLASS) ? valSpan : null;
-    if (!ours) {
-      ours = document.createElement("span");
-      ours.className = FULL_STAT_CLASS;
-      valSpan.before(ours);
-    }
-    if (ours.textContent !== text) ours.textContent = text;
-    item.setAttribute(FULL_BEATMAP_STATS_ITEM_ATTR, "1");
-  });
+  scope.querySelectorAll(STATS_ITEM_SEL).forEach(applyFullStatToItem);
+}
+
+/** @param {Element} item  a play or favourite stats item */
+function applyFullStatToItem(item) {
+  const n = fullStatCount(item);
+  if (n === null) return;
+  const icon = item.querySelector(".beatmapset-panel__stats-item-icon");
+  const valSpan = icon?.nextElementSibling;
+  if (!valSpan || valSpan.tagName !== "SPAN") return;
+  const text = n.toLocaleString("en-US");
+  let ours = valSpan.classList.contains(FULL_STAT_CLASS) ? valSpan : null;
+  if (!ours) {
+    ours = document.createElement("span");
+    ours.className = FULL_STAT_CLASS;
+    valSpan.before(ours);
+  }
+  if (ours.textContent !== text) ours.textContent = text;
+  item.setAttribute(FULL_BEATMAP_STATS_ITEM_ATTR, "1");
 }
 
 /** @param {ParentNode} scope */
@@ -91,7 +113,11 @@ export function revertFullBeatmapStatNumbers(scope) {
   scope.querySelectorAll(`.${FULL_STAT_CLASS}`).forEach((n) => n.remove());
   scope
     .querySelectorAll(`[${FULL_BEATMAP_STATS_ITEM_ATTR}]`)
-    .forEach((item) => item.removeAttribute(FULL_BEATMAP_STATS_ITEM_ATTR));
+    .forEach((item) => {
+      item.removeAttribute(FULL_BEATMAP_STATS_ITEM_ATTR);
+      item.removeAttribute(STAT_BASE_ATTR);
+      item.removeAttribute(STAT_TIP_ATTR);
+    });
 }
 
 /**
@@ -161,6 +187,27 @@ export function startFullBeatmapStatNumbers(settings, manageStyle) {
               applyFullBeatmapStatNumbers(panel),
             );
         }
+      },
+    );
+    // osu-web re-renders a count in place (favourite click, B107).
+    observe.subscribe(
+      {
+        selector: STATS_ITEM_SEL,
+        attributes: ["title", "data-orig-title"],
+        characterData: true,
+        schedule: "sync",
+        signal: ac.signal,
+        label: "cards/full-stats-update",
+      },
+      ({ records }) => {
+        const items = new Set();
+        for (const r of records) {
+          const t =
+            r.target instanceof Element ? r.target : r.target.parentElement;
+          const item = t?.closest(STATS_ITEM_SEL);
+          if (item) items.add(item);
+        }
+        items.forEach(applyFullStatToItem);
       },
     );
     // Exact counts from the site's data replace tooltip-derived ones.

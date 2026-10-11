@@ -12,6 +12,7 @@ for (const key of [
   "Node",
   "Element",
   "HTMLElement",
+  "MutationObserver",
   "OsuExpertPlus",
 ]) {
   Object.defineProperty(globalThis, key, {
@@ -80,4 +81,48 @@ test("B26: cached JSON first, tooltip as fallback; site text untouched", () => {
   );
   a.remove();
   b.remove();
+});
+
+test("B107: a favourite click updates the full count", async () => {
+  const { startFullBeatmapStatNumbers } =
+    await import("../../src/features/cards/stats.js");
+  const p = panel(13, "Playcount: 100", "100");
+  const fav = p.querySelector(".beatmapset-panel__stats-item--favourite-count");
+  fav.setAttribute("title", "Favourites: 1,234");
+  beatmapsetCache.put([{ id: 13, play_count: 100, favourite_count: 1234 }]);
+  const settings = {
+    IDS: { FULL_BEATMAP_STAT_NUMBERS: "full" },
+    isEnabled: () => true,
+    onChange: () => () => {},
+  };
+  const stop = startFullBeatmapStatNumbers(
+    settings,
+    window.OsuExpertPlus.dom.manageStyle,
+  );
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+  try {
+    assert.equal(shown(p, "favourite-count"), "1,234");
+
+    // osu-web re-renders the tooltip after the click; the cache keeps 1234.
+    fav.setAttribute("title", "Favourites: 1,235");
+    await flush();
+    assert.equal(shown(p, "favourite-count"), "1,235");
+
+    // The tooltip library had moved the title away; React writes it again.
+    fav.setAttribute("data-orig-title", "Favourites: 1,235");
+    fav.removeAttribute("title");
+    await flush();
+    assert.equal(shown(p, "favourite-count"), "1,235");
+    fav.setAttribute("title", "Favourites: 1,234");
+    await flush();
+    assert.equal(shown(p, "favourite-count"), "1,234", "unfavourite");
+
+    // Newer site data resets the base.
+    beatmapsetCache.put([{ id: 13, play_count: 100, favourite_count: 1300 }]);
+    await flush();
+    assert.equal(shown(p, "favourite-count"), "1,300");
+  } finally {
+    stop();
+    p.remove();
+  }
 });
