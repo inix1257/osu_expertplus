@@ -3,6 +3,7 @@
  * viewer's own profile; the order is saved to the account (WS-42).
  */
 
+import { observe } from "../../core/observe.js";
 import { manageStyle } from "../legacy.js";
 import {
   HASH_LINK_SEL,
@@ -12,7 +13,6 @@ import {
   sectionIdFromHashHref,
 } from "./sections-dom.js";
 import { maybeCsrfToken } from "./csrf.js";
-import { mutationsIncludeSelector } from "./mutations.js";
 const CONTENTS_REORDER_STYLE_ID = "osu-expertplus-profile-contents-reorder";
 const CONTENTS_REORDER_ANCHOR_ATTR = "data-oep-contents-reorder-anchor";
 const CONTENTS_REORDER_DRAGGING_CLASS = "oep-contents-reorder--dragging";
@@ -138,11 +138,10 @@ function contentsReorderTargetFromPoint(clientX, clientY, source) {
 /** @returns {function} */
 export function startContentsReorderManager() {
   injectContentsReorderStyles();
+  const ac = new AbortController();
 
   let dragAnchor = null;
   let ghostEl = /** @type {HTMLElement|null} */ (null);
-  let obs = null;
-  let rebindTimer = 0;
   /** Section IDs in current visual order; null means DOM order is authoritative. */
   let currentTabOrder = /** @type {string[]|null} */ (null);
   /**
@@ -374,7 +373,6 @@ export function startContentsReorderManager() {
   };
 
   const bind = () => {
-    clearTimeout(rebindTimer);
     if (pointerSession) {
       endPointerSession();
       dragAnchor = null;
@@ -387,6 +385,7 @@ export function startContentsReorderManager() {
       .forEach((a) => {
         a.removeEventListener("pointerdown", onPointerDown);
         a.removeAttribute(CONTENTS_REORDER_ANCHOR_ATTR);
+        a.removeAttribute("title");
         a.removeAttribute("draggable");
         a.style.removeProperty("order");
         a.classList.remove(CONTENTS_REORDER_DRAGGING_CLASS);
@@ -409,22 +408,19 @@ export function startContentsReorderManager() {
   };
 
   bind();
-  obs = new MutationObserver((mutations) => {
-    if (
-      mutationsIncludeSelector(
-        mutations,
-        `${SECTION_PAGE_SEL}, ${HASH_LINK_SEL}`,
-      )
-    ) {
-      clearTimeout(rebindTimer);
-      rebindTimer = setTimeout(bind, 80);
-    }
-  });
-  obs.observe(document.documentElement, { childList: true, subtree: true });
+  observe.subscribe(
+    {
+      // Tabs and pages, not bare # links (spoilerboxes).
+      selector: `${SECTION_PAGE_SEL}, ${HASH_LINK_SEL}:not([href="#"])`,
+      schedule: 80,
+      signal: ac.signal,
+      label: "profile/contents-reorder",
+    },
+    bind,
+  );
 
   return () => {
-    clearTimeout(rebindTimer);
-    obs?.disconnect();
+    ac.abort();
     if (pointerSession) {
       endPointerSession();
       dragAnchor = null;
@@ -435,6 +431,7 @@ export function startContentsReorderManager() {
       .forEach((a) => {
         a.removeEventListener("pointerdown", onPointerDown);
         a.removeAttribute(CONTENTS_REORDER_ANCHOR_ATTR);
+        a.removeAttribute("title");
         a.removeAttribute("draggable");
         a.style.removeProperty("order");
         a.classList.remove(CONTENTS_REORDER_DRAGGING_CLASS);
