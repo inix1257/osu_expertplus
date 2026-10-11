@@ -123,3 +123,16 @@ test("turning the rate filter off keeps merged-hidden rows hidden (B09)", () => 
   clearMergedLeaderboard(root, "wildcard");
   assert.deepEqual(visibleNames(tbody), ["n1", "n2"]);
 });
+
+test("a row the rate filter hid is shown again when osu-web refills it with a normal score (B100)", () => {
+  const { root, tbody } = setup(row("a") + row("b", { rate: true }));
+  refreshBeatmapScoreboardTableEnhancements(root);
+  assert.deepEqual(visibleNames(tbody), ["a"]);
+
+  // osu-web switches to a cached board and reuses row b for another score.
+  const reused = tbody.rows[1];
+  reused.dataset.name = "c";
+  reused.querySelector("td").innerHTML = "";
+  refreshBeatmapScoreboardTableEnhancements(root);
+  assert.deepEqual(visibleNames(tbody), ["a", "c"]);
+});

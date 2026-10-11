@@ -180,8 +180,8 @@ function beatmapScoreboardRowIsApiInjectedForRateMarking(row) {
 }
 
 /**
- * Scan all visible leaderboard body rows and mark those with a custom rate
- * using RATE_EDIT_ROW_ATTR.  For each .mod__extender span, walks up to the
+ * Scan the leaderboard body rows (except those a merged leaderboard hides)
+ * and mark those with a custom rate using RATE_EDIT_ROW_ATTR.  For each .mod__extender span, walks up to the
  * nearest .mod container to read data-acronym from the sibling .mod__icon,
  * then delegates to isNonDefaultSpeed (src/osu/mods).  Only DT/NC/HT/DC
  * extenders are considered — DA difficulty-adjust extenders (e.g. "AR9") are
@@ -199,7 +199,9 @@ export function applyRateEditMarkingToScoreboardRows(scoreboardRoot) {
   if (!tbody) return;
   for (const row of tbody.querySelectorAll(SCOREBOARD_ROW_SEL)) {
     if (!(row instanceof HTMLElement)) continue;
-    if (isScoreboardRowHidden(row)) continue;
+    // Rows this filter hid are checked again: osu-web refills rows with
+    // other scores when it switches to a board it already has (B100).
+    if (isScoreboardRowHidden(row, "merged")) continue;
     const needs = beatmapScoreboardRowNeedsRateEditMarkFromDom(row);
     const has = row.hasAttribute(RATE_EDIT_ROW_ATTR);
     if (needs) {
