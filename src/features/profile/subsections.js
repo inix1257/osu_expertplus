@@ -3,8 +3,10 @@
  * (WS-42).
  */
 
-import { el, manageStyle } from "../legacy.js";
+import { listen } from "../../core/lifecycle.js";
+import { observe } from "../../core/observe.js";
 import { KEYS } from "../../core/storage.js";
+import { el, manageStyle } from "../legacy.js";
 import {
   SECTION_PAGE_SEL,
   SUBSECTION_TITLE_SEL,
@@ -12,7 +14,6 @@ import {
   readCollapsedSet,
   writeCollapsedSet,
 } from "./sections-dom.js";
-import { mutationsIncludeSelector } from "./mutations.js";
 import {
   RECENT_FAILS_HEADER_CLASS,
   RECENT_FAILS_WRAP_CLASS,
@@ -292,15 +293,19 @@ function wrapSubsectionTitleContent(h3, btn) {
 }
 
 /**
+ * Undo {@link wrapSubsectionTitleContent}: the label spans too, or the next
+ * wrap would nest them.
  * @param {HTMLElement} h3
  */
 function unwrapSubsectionTitleMain(h3) {
   const main = h3.querySelector(`:scope > .${SUBSECTION_TITLE_MAIN_CLASS}`);
   if (!(main instanceof HTMLElement)) return;
-  while (main.firstChild) {
-    h3.insertBefore(main.firstChild, main);
+  for (const label of main.querySelectorAll(
+    `.${SUBSECTION_TITLE_LABEL_CLASS}`,
+  )) {
+    label.replaceWith(...label.childNodes);
   }
-  main.remove();
+  main.replaceWith(...main.childNodes);
 }
 
 /** @param {string} key */
@@ -350,10 +355,6 @@ function teardownProfileSubsectionCollapse() {
   });
   document.querySelectorAll(`h3[${SUBSECTION_DONE_ATTR}]`).forEach((h3) => {
     if (!(h3 instanceof HTMLElement)) return;
-    const wrap =
-      /** @type {HTMLElement & { _oepSubsectionAc?: AbortController }} */ (h3);
-    wrap._oepSubsectionAc?.abort();
-    delete wrap._oepSubsectionAc;
     unwrapSubsectionTitleMain(h3);
     h3.querySelector(`button[${SUBSECTION_TOGGLE_ATTR}]`)?.remove();
     h3.removeAttribute(SUBSECTION_DONE_ATTR);
@@ -365,91 +366,121 @@ function teardownProfileSubsectionCollapse() {
 }
 
 /**
- * @param {HTMLElement} pageEl  div.js-sortable--page
- * @param {Set<string>} collapsedSet  live set; legacy slug keys are migrated into stable keys
- * @returns {boolean} true if collapsedSet was mutated (caller should persist)
+ * The storage key of a subsection, plus older keys to migrate from.
+ * @param {string} pageId
+ * @param {HTMLElement} h3
+ * @param {{ index: number, legacySlugs: Set<string> }} pass  per-page counters
+ * @returns {{ key: string, label: string, olderKeys: string[] }}
  */
-function enhanceSortablePageSubsections(pageEl, collapsedSet) {
+function subsectionKeys(pageId, h3, pass) {
+  const label = String(h3.textContent || "").trim() || pageId;
+  const legacyKey = `${pageId}::${subsectionSlugFromTitle(label, pass.legacySlugs)}`;
+  const namedMod = subsectionNamedModifierFromFollowingContent(h3);
+  const key = namedMod
+    ? `${pageId}::${namedMod}`
+    : `${pageId}::sub_${pass.index}`;
+  pass.index += 1;
+  return { key, label, olderKeys: [legacyKey] };
+}
+
+/**
+ * Add the toggle to a subsection title. Its key can change later (see
+ * {@link syncPageSubsections}), so handlers read it from the button.
+ * @param {HTMLElement} h3
+ * @param {string} key
+ * @param {string} label
+ * @param {AbortSignal} signal
+ */
+function enhanceSubsectionTitle(h3, key, label, signal) {
+  const btn = el("button", {
+    type: "button",
+    class: "oep-profile-subsection-collapse-toggle",
+    [SUBSECTION_TOGGLE_ATTR]: "1",
+    [SUBSECTION_TOGGLE_FOR_ATTR]: key,
+    [SUBSECTION_LABEL_ATTR]: label,
+  });
+  const toggle = () =>
+    toggleProfileSubsectionCollapsedKey(
+      btn.getAttribute(SUBSECTION_TOGGLE_FOR_ATTR) || "",
+    );
+  listen(
+    btn,
+    "click",
+    (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggle();
+    },
+    signal,
+  );
+  listen(
+    h3,
+    "click",
+    (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      if (t.closest(`button[${SUBSECTION_TOGGLE_ATTR}]`)) return;
+      if (t.closest("a[href]")) return;
+      toggle();
+    },
+    signal,
+  );
+  h3.insertBefore(btn, h3.firstChild);
+  wrapSubsectionTitleContent(h3, btn);
+  h3.classList.add(SUBSECTION_TITLE_CLASS);
+  h3.setAttribute(SUBSECTION_DONE_ATTR, "1");
+}
+
+/**
+ * Bring one section page's subsections up to date: new titles get a toggle,
+ * existing ones keep theirs (re-keyed if their key changed), and every
+ * title's body elements are tagged with its key. Older keys found in
+ * `collapsedSet` are migrated in place.
+ * @param {HTMLElement} pageEl  div.js-sortable--page
+ * @param {Set<string>} collapsedSet
+ * @param {AbortSignal} signal  the manager's listeners
+ * @returns {boolean} true if collapsedSet was changed (caller persists it)
+ */
+function syncPageSubsections(pageEl, collapsedSet, signal) {
   const pageId = pageEl.getAttribute("data-page-id");
   if (!pageId) return false;
   if (PROFILE_SUBSECTION_SKIP_PAGE_IDS.has(pageId)) return false;
-  const usedSlugs = new Set();
-  let subsectionIndex = 0;
+  const pass = { index: 0, legacySlugs: new Set() };
   let migrationDirty = false;
-  const h3s = pageEl.querySelectorAll(PROFILE_PAGE_SUBTITLE_H3_SELECTOR);
-  for (const h3 of h3s) {
+  for (const h3 of pageEl.querySelectorAll(PROFILE_PAGE_SUBTITLE_H3_SELECTOR)) {
     if (!(h3 instanceof HTMLElement)) continue;
     if (h3.closest(".js-sortable--page") !== pageEl) continue;
-    if (h3.hasAttribute(SUBSECTION_DONE_ATTR)) continue;
 
-    const label = String(h3.textContent || "").trim() || pageId;
-    const legacyKey = `${pageId}::${subsectionSlugFromTitle(label, usedSlugs)}`;
-    const namedMod = subsectionNamedModifierFromFollowingContent(h3);
-    const stableKey = namedMod
-      ? `${pageId}::${namedMod}`
-      : `${pageId}::sub_${subsectionIndex}`;
-    subsectionIndex += 1;
-
-    if (
-      migrateSubsectionCollapseLegacyKey(collapsedSet, legacyKey, stableKey)
-    ) {
-      migrationDirty = true;
+    const { key, label, olderKeys } = subsectionKeys(pageId, h3, pass);
+    for (const older of olderKeys) {
+      if (migrateSubsectionCollapseLegacyKey(collapsedSet, older, key)) {
+        migrationDirty = true;
+      }
     }
 
-    const isCollapsed = collapsedSet.has(stableKey);
+    const btn = h3.querySelector(`button[${SUBSECTION_TOGGLE_ATTR}]`);
+    if (!h3.hasAttribute(SUBSECTION_DONE_ATTR) || !btn) {
+      enhanceSubsectionTitle(h3, key, label, signal);
+    } else if (btn.getAttribute(SUBSECTION_TOGGLE_FOR_ATTR) !== key) {
+      btn.setAttribute(SUBSECTION_TOGGLE_FOR_ATTR, key);
+    }
 
-    const bodies = collectSubsectionBodyElements(h3);
-    bodies.forEach((b) => b.setAttribute(SUBSECTION_BODY_FOR_ATTR, stableKey));
-
-    const btn = el("button", {
-      type: "button",
-      class: "oep-profile-subsection-collapse-toggle",
-      [SUBSECTION_TOGGLE_ATTR]: "1",
-      [SUBSECTION_TOGGLE_FOR_ATTR]: stableKey,
-      [SUBSECTION_LABEL_ATTR]: label,
-      "aria-expanded": isCollapsed ? "false" : "true",
-      title: isCollapsed ? `Expand ${label}` : `Collapse ${label}`,
-      "aria-label": isCollapsed ? `Expand ${label}` : `Collapse ${label}`,
-    });
-    btn.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      toggleProfileSubsectionCollapsedKey(stableKey);
-    });
-
-    const subsectionAc = new AbortController();
-    /** @type {HTMLElement & { _oepSubsectionAc?: AbortController }} */
-    (h3)._oepSubsectionAc = subsectionAc;
-    h3.addEventListener(
-      "click",
-      (ev) => {
-        const t = ev.target;
-        if (!(t instanceof Element)) return;
-        if (t.closest(`button[${SUBSECTION_TOGGLE_ATTR}]`)) return;
-        if (t.closest("a[href]")) return;
-        toggleProfileSubsectionCollapsedKey(stableKey);
-      },
-      { signal: subsectionAc.signal },
-    );
-
-    h3.insertBefore(btn, h3.firstChild);
-    wrapSubsectionTitleContent(h3, btn);
-    h3.classList.add(SUBSECTION_TITLE_CLASS);
-    if (isCollapsed) h3.classList.add(SUBSECTION_TITLE_COLLAPSED_CLASS);
-    h3.setAttribute(SUBSECTION_DONE_ATTR, "1");
+    for (const b of collectSubsectionBodyElements(h3)) {
+      if (b.getAttribute(SUBSECTION_BODY_FOR_ATTR) !== key) {
+        b.setAttribute(SUBSECTION_BODY_FOR_ATTR, key);
+      }
+    }
   }
   return migrationDirty;
 }
 
-function scanProfileSubsections() {
-  teardownProfileSubsectionCollapse();
+/** @param {AbortSignal} signal */
+function scanProfileSubsections(signal) {
   const collapsedSet = readCollapsedSet(KEYS.PROFILE_SUBSECTIONS_COLLAPSED);
   let migrationDirty = false;
   getSectionPageNodes().forEach((page) => {
-    if (page instanceof HTMLElement) {
-      if (enhanceSortablePageSubsections(page, collapsedSet)) {
-        migrationDirty = true;
-      }
+    if (syncPageSubsections(page, collapsedSet, signal)) {
+      migrationDirty = true;
     }
   });
   if (migrationDirty) {
@@ -461,32 +492,22 @@ function scanProfileSubsections() {
 /** @returns {function} */
 export function startProfileSubsectionCollapseManager() {
   subsectionCollapseStyle.inject();
+  const ac = new AbortController();
 
-  let debounceTimer = 0;
-  const schedule = () => {
-    window.clearTimeout(debounceTimer);
-    debounceTimer = window.setTimeout(() => {
-      scanProfileSubsections();
-    }, 80);
-  };
-
-  scanProfileSubsections();
-
-  const obs = new MutationObserver((mutations) => {
-    if (
-      mutationsIncludeSelector(
-        mutations,
-        `${SECTION_PAGE_SEL}, ${PROFILE_PAGE_SUBTITLE_H3_SELECTOR}, .${RECENT_FAILS_WRAP_CLASS}`,
-      )
-    ) {
-      schedule();
-    }
-  });
-  obs.observe(document.documentElement, { childList: true, subtree: true });
+  scanProfileSubsections(ac.signal);
+  // Titles and their bodies render lazily, per section page.
+  observe.subscribe(
+    {
+      selector: `${SECTION_PAGE_SEL}, ${PROFILE_PAGE_SUBTITLE_H3_SELECTOR}, .${RECENT_FAILS_WRAP_CLASS}, .play-detail-list, .show-more-link`,
+      schedule: 80,
+      signal: ac.signal,
+      label: "profile/subsections",
+    },
+    () => scanProfileSubsections(ac.signal),
+  );
 
   return () => {
-    window.clearTimeout(debounceTimer);
-    obs.disconnect();
+    ac.abort();
     teardownProfileSubsectionCollapse();
     subsectionCollapseStyle.remove();
   };
