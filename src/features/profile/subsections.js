@@ -4,16 +4,21 @@
  */
 
 import { el, manageStyle } from "../legacy.js";
-import { getSectionPageNodes } from "./sections-dom.js";
+import { KEYS } from "../../core/storage.js";
+import {
+  SECTION_PAGE_SEL,
+  SUBSECTION_TITLE_SEL,
+  getSectionPageNodes,
+  readCollapsedSet,
+  writeCollapsedSet,
+} from "./sections-dom.js";
 import { mutationsIncludeSelector } from "./mutations.js";
 import {
   RECENT_FAILS_HEADER_CLASS,
   RECENT_FAILS_WRAP_CLASS,
 } from "./recent-scores/common.js";
-const PROFILE_SUBSECTIONS_COLLAPSED_GM_KEY =
-  "userProfile.profileSubsectionsCollapsed";
 /** Same as section collapse `SECTION_COLLAPSE_SUBTITLE_SELECTOR` (defined below). */
-const PROFILE_PAGE_SUBTITLE_H3_SELECTOR = "h3.title.title--page-extra-small";
+const PROFILE_PAGE_SUBTITLE_H3_SELECTOR = SUBSECTION_TITLE_SEL;
 /** osu `ProfileExtraPage` ids (`data-page-id`) where we skip h3 subsection UI (single block, no sub-titles). */
 const PROFILE_SUBSECTION_SKIP_PAGE_IDS = new Set(["medals"]);
 const SUBSECTION_COLLAPSE_STYLE_ID =
@@ -144,35 +149,6 @@ const subsectionCollapseStyle = manageStyle(
   SUBSECTION_COLLAPSE_STYLE_ID,
   SUBSECTION_COLLAPSE_CSS,
 );
-
-/** @returns {Set<string>} */
-export function readProfileSubsectionsCollapsedSet() {
-  try {
-    const raw = GM_getValue(PROFILE_SUBSECTIONS_COLLAPSED_GM_KEY, "");
-    if (raw == null || raw === "") return new Set();
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-    if (Array.isArray(parsed)) {
-      return new Set(parsed.filter((x) => typeof x === "string" && x));
-    }
-    if (parsed && typeof parsed === "object") {
-      return new Set(Object.keys(parsed).filter((k) => parsed[k] === true));
-    }
-  } catch (_) {}
-  return new Set();
-}
-
-/** @param {Set<string>} set */
-function writeProfileSubsectionsCollapsedSet(set) {
-  const obj = /** @type {Record<string, true>} */ ({});
-  set.forEach((id) => {
-    if (id) obj[id] = true;
-  });
-  if (!Object.keys(obj).length) {
-    GM_deleteValue(PROFILE_SUBSECTIONS_COLLAPSED_GM_KEY);
-    return;
-  }
-  GM_setValue(PROFILE_SUBSECTIONS_COLLAPSED_GM_KEY, JSON.stringify(obj));
-}
 
 /**
  * Legacy subsection key, only used to migrate old collapse state. It must
@@ -330,10 +306,10 @@ function unwrapSubsectionTitleMain(h3) {
 /** @param {string} key */
 function toggleProfileSubsectionCollapsedKey(key) {
   if (!key) return;
-  const set = readProfileSubsectionsCollapsedSet();
+  const set = readCollapsedSet(KEYS.PROFILE_SUBSECTIONS_COLLAPSED);
   if (set.has(key)) set.delete(key);
   else set.add(key);
-  writeProfileSubsectionsCollapsedSet(set);
+  writeCollapsedSet(KEYS.PROFILE_SUBSECTIONS_COLLAPSED, set);
   applyProfileSubsectionCollapseState(set);
 }
 
@@ -467,7 +443,7 @@ function enhanceSortablePageSubsections(pageEl, collapsedSet) {
 
 function scanProfileSubsections() {
   teardownProfileSubsectionCollapse();
-  const collapsedSet = readProfileSubsectionsCollapsedSet();
+  const collapsedSet = readCollapsedSet(KEYS.PROFILE_SUBSECTIONS_COLLAPSED);
   let migrationDirty = false;
   getSectionPageNodes().forEach((page) => {
     if (page instanceof HTMLElement) {
@@ -477,7 +453,7 @@ function scanProfileSubsections() {
     }
   });
   if (migrationDirty) {
-    writeProfileSubsectionsCollapsedSet(collapsedSet);
+    writeCollapsedSet(KEYS.PROFILE_SUBSECTIONS_COLLAPSED, collapsedSet);
   }
   applyProfileSubsectionCollapseState(collapsedSet);
 }
@@ -500,7 +476,7 @@ export function startProfileSubsectionCollapseManager() {
     if (
       mutationsIncludeSelector(
         mutations,
-        `div.js-sortable--page[data-page-id], ${PROFILE_PAGE_SUBTITLE_H3_SELECTOR}, .${RECENT_FAILS_WRAP_CLASS}`,
+        `${SECTION_PAGE_SEL}, ${PROFILE_PAGE_SUBTITLE_H3_SELECTOR}, .${RECENT_FAILS_WRAP_CLASS}`,
       )
     ) {
       schedule();

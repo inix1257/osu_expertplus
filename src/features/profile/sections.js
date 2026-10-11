@@ -4,24 +4,26 @@
  */
 
 import { el, manageStyle, settings } from "../legacy.js";
+import { KEYS } from "../../core/storage.js";
 import {
-  getProfileContentsAnchorRows,
+  HASH_LINK_SEL,
+  SECTION_PAGE_SEL,
+  SECTION_TITLE_SEL,
+  SUBSECTION_TITLE_SEL,
+  getContentsAnchorRows,
   getSectionPageNodes,
+  readCollapsedSet,
   sectionIdFromHashHref,
+  writeCollapsedSet,
 } from "./sections-dom.js";
-import {
-  applyProfileSubsectionCollapseState,
-  readProfileSubsectionsCollapsedSet,
-} from "./subsections.js";
+import { applyProfileSubsectionCollapseState } from "./subsections.js";
 import { mutationsIncludeSelector } from "./mutations.js";
 import { PROFILE_SECTION_COLLAPSE_REMOVE_FROM_PAGE_ID } from "./score-rows.js";
-const PROFILE_SECTIONS_COLLAPSED_GM_KEY =
-  "userProfile.profileSectionsCollapsed";
 const SECTION_COLLAPSE_PAGE_CLASS = "oep-profile-section--collapsed";
 const SECTION_COLLAPSE_BODY_HIDDEN_CLASS =
   "oep-profile-section-body--collapsed-hidden";
-const SECTION_COLLAPSE_MAIN_TITLE_SELECTOR = "h2.title.title--page-extra";
-const SECTION_COLLAPSE_SUBTITLE_SELECTOR = "h3.title.title--page-extra-small";
+const SECTION_COLLAPSE_MAIN_TITLE_SELECTOR = SECTION_TITLE_SEL;
+const SECTION_COLLAPSE_SUBTITLE_SELECTOR = SUBSECTION_TITLE_SEL;
 const SECTION_TAB_COLLAPSED_CLASS = "oep-profile-section-tab--collapsed";
 const SECTION_PAGE_TITLE_CLICK_ATTR =
   "data-oep-profile-section-page-title-click";
@@ -171,35 +173,6 @@ const sectionCollapseStyle = manageStyle(
   SECTION_COLLAPSE_CSS,
 );
 
-/** @returns {Set<string>} */
-function readProfileSectionsCollapsedSet() {
-  try {
-    const raw = GM_getValue(PROFILE_SECTIONS_COLLAPSED_GM_KEY, "");
-    if (raw == null || raw === "") return new Set();
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-    if (Array.isArray(parsed)) {
-      return new Set(parsed.filter((x) => typeof x === "string" && x));
-    }
-    if (parsed && typeof parsed === "object") {
-      return new Set(Object.keys(parsed).filter((k) => parsed[k] === true));
-    }
-  } catch (_) {}
-  return new Set();
-}
-
-/** @param {Set<string>} set */
-function writeProfileSectionsCollapsedSet(set) {
-  const obj = /** @type {Record<string, true>} */ ({});
-  set.forEach((id) => {
-    if (id) obj[id] = true;
-  });
-  if (!Object.keys(obj).length) {
-    GM_deleteValue(PROFILE_SECTIONS_COLLAPSED_GM_KEY);
-    return;
-  }
-  GM_setValue(PROFILE_SECTIONS_COLLAPSED_GM_KEY, JSON.stringify(obj));
-}
-
 function clearProfileSectionCollapseBodyHidden(page) {
   page
     .querySelectorAll(`.${SECTION_COLLAPSE_BODY_HIDDEN_CLASS}`)
@@ -310,11 +283,13 @@ function applyProfileSectionCollapseToPages(collapsed) {
     }
     syncProfileSectionPageTitleCollapsedSuffix(node, true);
   });
-  applyProfileSubsectionCollapseState(readProfileSubsectionsCollapsedSet());
+  applyProfileSubsectionCollapseState(
+    readCollapsedSet(KEYS.PROFILE_SUBSECTIONS_COLLAPSED),
+  );
 }
 
 function applyProfileSectionCollapseToTabAnchors(collapsed) {
-  getProfileContentsAnchorRows()
+  getContentsAnchorRows()
     .flat()
     .forEach((anchor) => {
       if (!(anchor instanceof HTMLAnchorElement)) return;
@@ -397,10 +372,10 @@ function onContentsTabChevronClick(ev) {
  */
 function toggleProfileSectionCollapsedId(sectionId) {
   if (!sectionId) return;
-  const set = readProfileSectionsCollapsedSet();
+  const set = readCollapsedSet(KEYS.PROFILE_SECTIONS_COLLAPSED);
   if (set.has(sectionId)) set.delete(sectionId);
   else set.add(sectionId);
-  writeProfileSectionsCollapsedSet(set);
+  writeCollapsedSet(KEYS.PROFILE_SECTIONS_COLLAPSED, set);
   applyProfileSectionCollapseToPages(set);
   applyProfileSectionCollapseToTabAnchors(set);
 }
@@ -455,7 +430,7 @@ export function startProfileSectionCollapseManager() {
   const unsubRemoveMode = settings().onChange(
     PROFILE_SECTION_COLLAPSE_REMOVE_FROM_PAGE_ID,
     () => {
-      const collapsed = readProfileSectionsCollapsedSet();
+      const collapsed = readCollapsedSet(KEYS.PROFILE_SECTIONS_COLLAPSED);
       applyProfileSectionCollapseToPages(collapsed);
     },
   );
@@ -465,7 +440,7 @@ export function startProfileSectionCollapseManager() {
     teardownProfileSectionPageTitleClick();
     teardownProfileContentsTabChevrons();
 
-    const collapsed = readProfileSectionsCollapsedSet();
+    const collapsed = readCollapsedSet(KEYS.PROFILE_SECTIONS_COLLAPSED);
     applyProfileSectionCollapseToPages(collapsed);
     applyProfileSectionCollapseToTabAnchors(collapsed);
 
@@ -483,7 +458,7 @@ export function startProfileSectionCollapseManager() {
   obs = new MutationObserver((mutations) => {
     const needsRebind = mutationsIncludeSelector(
       mutations,
-      'div.js-sortable--page[data-page-id], a[href^="#"], h2.title.title--page-extra',
+      `${SECTION_PAGE_SEL}, ${HASH_LINK_SEL}, ${SECTION_TITLE_SEL}`,
     );
 
     if (needsRebind) {

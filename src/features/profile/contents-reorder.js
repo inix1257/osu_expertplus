@@ -5,8 +5,10 @@
 
 import { manageStyle } from "../legacy.js";
 import {
+  HASH_LINK_SEL,
+  SECTION_PAGE_SEL,
+  getContentsAnchorRows,
   getSectionPageNodes,
-  getSortableContentsAnchorGroups,
   sectionIdFromHashHref,
 } from "./sections-dom.js";
 import { maybeCsrfToken } from "./csrf.js";
@@ -378,7 +380,7 @@ export function startContentsReorderManager() {
       dragAnchor = null;
       clearDragClasses();
     }
-    const groups = getSortableContentsAnchorGroups();
+    const groups = getContentsAnchorRows(3);
 
     document
       .querySelectorAll(`a[${CONTENTS_REORDER_ANCHOR_ATTR}]`)
@@ -411,7 +413,7 @@ export function startContentsReorderManager() {
     if (
       mutationsIncludeSelector(
         mutations,
-        'div.js-sortable--page[data-page-id], a[href^="#"]',
+        `${SECTION_PAGE_SEL}, ${HASH_LINK_SEL}`,
       )
     ) {
       clearTimeout(rebindTimer);

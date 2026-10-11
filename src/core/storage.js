@@ -169,6 +169,19 @@ export function getBool(key, fallback = false) {
 }
 
 /**
+ * Delete a GM value. Returns false when it could not be deleted.
+ * @param {string | StorageKey} key
+ */
+export function deleteKey(key) {
+  try {
+    GM_deleteValue(keyName(key));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Store a boolean. Returns false when it could not be saved.
  * @param {string | StorageKey} key
  * @param {boolean} value
