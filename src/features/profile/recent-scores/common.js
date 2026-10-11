@@ -76,8 +76,15 @@ export function findMostWatchedReplaysListRoot() {
   );
 }
 
+/**
+ * Takes osu-web's Recent heading and list out of the page.
+ * @param {HTMLElement} listRoot
+ * @returns {HTMLElement[]}  the removed nodes in page order, to put back
+ *   when Expert+ Recent is turned off (B102)
+ */
 export function removeOfficialRecentPlaysSection(listRoot) {
-  if (!(listRoot instanceof HTMLElement)) return;
+  if (!(listRoot instanceof HTMLElement)) return [];
+  const removed = [];
   // Remove the h3 heading immediately before the list regardless of language.
   const prev = listRoot.previousElementSibling;
   if (
@@ -85,8 +92,11 @@ export function removeOfficialRecentPlaysSection(listRoot) {
     prev.matches("h3.title.title--page-extra-small")
   ) {
     prev.remove();
+    removed.push(prev);
   }
   listRoot.remove();
+  removed.push(listRoot);
+  return removed;
 }
 
 export function beatmapHrefFromScore(score) {

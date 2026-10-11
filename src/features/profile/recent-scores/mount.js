@@ -60,6 +60,21 @@ function ensurePlayDetailStylesForRecent() {
 let _recentFailsDebounce = null;
 
 /**
+ * osu-web's Recent heading and list each wrap replaced, put back where the
+ * wrap is when Expert+ Recent is turned off (B102).
+ * @type {WeakMap<HTMLElement, HTMLElement[]>}
+ */
+const officialRecentByWrap = new WeakMap();
+
+/**
+ * @param {HTMLElement} wrap
+ * @param {HTMLElement} listRoot
+ */
+function replaceOfficialRecentPlays(wrap, listRoot) {
+  officialRecentByWrap.set(wrap, removeOfficialRecentPlaysSection(listRoot));
+}
+
+/**
  * @param {HTMLElement} innerList
  * @param {Object[]} scores
  * @param {HTMLElement|null} modTemplate
@@ -243,7 +258,7 @@ async function tryMountRecentScoresWithFails(userId, mode, isCancelled) {
     innerList.appendChild(
       el("p", { class: "oep-recent-fails-empty" }, RECENT_FAILS_EMPTY_MSG),
     );
-    removeOfficialRecentPlaysSection(listRoot);
+    replaceOfficialRecentPlays(wrap, listRoot);
     return;
   }
 
@@ -268,7 +283,7 @@ async function tryMountRecentScoresWithFails(userId, mode, isCancelled) {
       : RECENT_FAILS_EMPTY_MSG;
   populateRecentScoresInnerList(innerList, filtered, tpl, emptyMsg);
 
-  removeOfficialRecentPlaysSection(listRoot);
+  replaceOfficialRecentPlays(wrap, listRoot);
 }
 
 /**
@@ -343,9 +358,12 @@ export function startRecentScoresWithFailsObserver(userId, mode) {
     unsubRecentHitStatistics();
     unsubRecentPlaceNumbers();
     ac.abort();
-    document
-      .querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`)
-      .forEach((n) => n.remove());
+    document.querySelectorAll(`.${RECENT_FAILS_WRAP_CLASS}`).forEach((n) => {
+      // Turned off on this page: osu-web's own Recent comes back (B102).
+      const official = officialRecentByWrap.get(n);
+      if (official?.length) n.before(...official);
+      n.remove();
+    });
     disposeScoreOptionsMenus();
   };
 }
