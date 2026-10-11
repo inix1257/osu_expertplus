@@ -3,6 +3,7 @@
  * in-flight dedupe (WS-41).
  */
 
+import { isNonDefaultSpeed } from "../../osu/mods.js";
 import { settingIds } from "../legacy.js";
 // Modded SR: IO + POST /beatmaps/{id}/attributes; row data from title href + mod icons
 export const MODDED_SR_ID = settingIds().MODDED_STAR_RATING;
@@ -247,6 +248,35 @@ export function _extractRowData(rowEl) {
       (e) => e.dataset.acronym,
     ),
   };
+}
+
+/**
+ * True when a row's mods carry settings that change the star rating: a
+ * non-default DT/NC/HT/DC rate (osu-web's `.mod__extender`, e.g. "1.20x") or a
+ * customised Difficulty Adjust. The attributes API ignores mod settings and
+ * answers with the default-rate value, so these rows get no SR badge (B36).
+ * @param {Element} rowEl
+ * @returns {boolean}
+ */
+export function rowHasCustomDifficultySettings(rowEl) {
+  for (const icon of rowEl.querySelectorAll(".mod__icon[data-acronym]")) {
+    const acronym = (icon.getAttribute("data-acronym") ?? "")
+      .trim()
+      .toUpperCase();
+    const modEl = icon.closest(".mod") ?? icon.parentElement;
+    if (!modEl) continue;
+    if (acronym === "DA") {
+      if (modEl.querySelector(".mod__extender, .mod__customised-indicator")) {
+        return true;
+      }
+      continue;
+    }
+    if (!["DT", "NC", "HT", "DC"].includes(acronym)) continue;
+    const text = modEl.querySelector(".mod__extender")?.textContent ?? "";
+    const rate = parseFloat(text.replace(/[^\d.]/g, ""));
+    if (Number.isFinite(rate) && isNonDefaultSpeed(acronym, rate)) return true;
+  }
+  return false;
 }
 
 /** @type {Map<string, Promise<{ sr: number|null, maxCombo: number|null }>>} */

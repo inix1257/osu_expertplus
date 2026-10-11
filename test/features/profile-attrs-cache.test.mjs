@@ -102,3 +102,41 @@ test("only ranked, approved and loved maps are permanent (B37)", async () => {
   assert.equal(isPermanentBeatmap({}), false, "unknown is not permanent");
   assert.equal(isPermanentBeatmap(undefined), false);
 });
+
+const { rowHasCustomDifficultySettings } =
+  await import("../../src/features/profile/beatmap-attributes.js");
+
+function rowWithMods(html) {
+  const row = window.document.createElement("div");
+  row.className = "play-detail";
+  row.innerHTML = `<div class="mods">${html}</div>`;
+  return row;
+}
+
+const mod = (ac, extra = "") =>
+  `<div class="mod"><div class="mod__icon" data-acronym="${ac}"></div>${extra}</div>`;
+const ext = (text) => `<div class="mod__extender"><span>${text}</span></div>`;
+const cog = '<div class="mod__customised-indicator"></div>';
+
+test("B36: custom rates and customised DA hide the SR badge", () => {
+  const cases = [
+    [mod("DT"), false],
+    [mod("DT", ext("1.50x") + cog), false],
+    [mod("DT", ext("1.20x") + cog), true],
+    [mod("NC", ext("1.30×")), true],
+    [mod("HT", ext("0.75x")), false],
+    [mod("DC", ext("0.60x")), true],
+    [mod("HD") + mod("HR", cog), false],
+    [mod("DA"), false],
+    [mod("DA", ext("AR9") + cog), true],
+    [mod("DA", cog), true],
+    [mod("HD") + mod("DT", ext("1.10x")), true],
+  ];
+  for (const [html, expected] of cases) {
+    assert.equal(
+      rowHasCustomDifficultySettings(rowWithMods(html)),
+      expected,
+      html,
+    );
+  }
+});

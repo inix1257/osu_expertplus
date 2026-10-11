@@ -14,6 +14,7 @@ import {
   isPermanentBeatmap,
   rememberRowBeatmap,
   rowBeatmap,
+  rowHasCustomDifficultySettings,
 } from "./beatmap-attributes.js";
 import {
   _applyByBeatmapId,
@@ -50,6 +51,8 @@ async function _fetchAndApplySr(rowEl) {
   if (maxCombo != null) _applyApiMaxComboToComboInline(rowEl, maxCombo);
 
   if (sr === null || sr === undefined) return;
+  // B36: the API value would be the default-rate SR, not this score's.
+  if (rowHasCustomDifficultySettings(rowEl)) return;
 
   const beatmapSpan = rowEl.querySelector(".play-detail__beatmap");
   if (!beatmapSpan || rowEl.querySelector(".oep-sr-badge")) return;
