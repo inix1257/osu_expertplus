@@ -229,9 +229,13 @@ function createKirinoScoreRank(onChange) {
     if (uid == null || ac.signal.aborted) return;
     resetIfNeeded();
     if (status !== "idle") return;
+    // B52: the username must come from this profile's data, not the previous
+    // page's (the DOM can still hold it right after navigation).
+    const data = parseProfileInitialData();
+    if (String(data?.user?.id ?? "") !== String(uid)) return;
     status = "loading";
     const modeIdx = modeIndexForRuleset(getCurrentMode());
-    const uname = parseProfileInitialData()?.user?.username ?? "";
+    const uname = data.user.username ?? "";
     const fetchKey = key;
     const settle = (nextStatus, rank) => {
       if (ac.signal.aborted) return;
