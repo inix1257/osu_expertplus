@@ -245,6 +245,8 @@ OsuExpertPlus.beatmapPreview = (() => {
 
   /** Serializes first-time init so two rapid "expand" clicks cannot create two Pixi apps. */
   let acquireMutex = Promise.resolve();
+  /** The running `init()` of a new engine, so a destroy can wait for it (B31). */
+  let engineInitializing = null;
 
   const ENGINE_ROOT_PARK_STYLE =
     "position:fixed!important;left:-9999px!important;top:0!important;width:512px!important;height:288px!important;opacity:0!important;pointer-events:none!important;overflow:hidden!important;";
@@ -278,12 +280,21 @@ OsuExpertPlus.beatmapPreview = (() => {
     const run = acquireMutex.then(async () => {
       const BeatmapEngine = await loadBeatmapEngineClass();
       if (!sharedEngineRoot) {
-        sharedEngineRoot = document.createElement("div");
-        sharedEngineRoot.setAttribute("data-oep-beatmap-engine-root", "");
-        sharedEngineRoot.className = "oep-beatmap-preview-engine-root";
-        hostEl.replaceChildren(sharedEngineRoot);
-        sharedEngine = new BeatmapEngine(sharedEngineRoot, {});
-        await sharedEngine.init();
+        const root = document.createElement("div");
+        root.setAttribute("data-oep-beatmap-engine-root", "");
+        root.className = "oep-beatmap-preview-engine-root";
+        hostEl.replaceChildren(root);
+        const engine = new BeatmapEngine(root, {});
+        sharedEngineRoot = root;
+        sharedEngine = engine;
+        engineInitializing = engine.init();
+        try {
+          await engineInitializing;
+        } finally {
+          engineInitializing = null;
+        }
+        // Destroyed while initialising (preview collapsed, other ruleset).
+        if (sharedEngine !== engine) throw new Error("Preview closed.");
       } else {
         placeSharedEngineRoot(hostEl);
         try {
@@ -303,18 +314,26 @@ OsuExpertPlus.beatmapPreview = (() => {
    * and when switching to a non-osu! ruleset; SPA navigation only parks it.
    */
   function destroySharedEngineHard() {
-    try {
-      sharedEngine?.destroy?.();
-    } catch (_) {
-      void 0;
-    }
+    const engine = sharedEngine;
+    const root = sharedEngineRoot;
     sharedEngine = null;
-    try {
-      sharedEngineRoot?.remove();
-    } catch (_) {
-      void 0;
-    }
     sharedEngineRoot = null;
+    const teardown = () => {
+      try {
+        engine?.destroy?.();
+      } catch (_) {
+        void 0;
+      }
+      try {
+        root?.remove();
+      } catch (_) {
+        void 0;
+      }
+    };
+    // B31: an engine still in init() is destroyed once init settles; the
+    // acquire queue is never reset from outside, so acquires stay serialized.
+    if (engineInitializing) engineInitializing.then(teardown, teardown);
+    else teardown();
   }
 
   /**
@@ -846,7 +865,6 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         void 0;
       }
       destroySharedEngineHard();
-      acquireMutex = Promise.resolve();
       revokeBeatmapCoverObjectUrl();
     }
 
@@ -1676,7 +1694,6 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
           void 0;
         }
         destroySharedEngineHard();
-        acquireMutex = Promise.resolve();
         revokeBeatmapCoverObjectUrl();
         busy = false;
         return;
