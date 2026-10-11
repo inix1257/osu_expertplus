@@ -20,6 +20,7 @@ import {
   beatmapsetsFromUserList,
 } from "../../core/beatmapset-cache.js";
 import * as pageHooks from "../../core/page-hooks.js";
+import { isBeatmapsetsListing } from "../../core/routes.js";
 import {
   buildMetaBlock,
   insertTargetMeta,
@@ -361,19 +362,18 @@ function startProfileExtraPagesPrefetchIfNeeded() {
 /**
  * On SPA navigation to /beatmapsets, osu-web issues the initial search fetch as part of its own
  * routing — before calling pushState, and therefore before our hook is installed. Re-fetch the
- * first page ourselves so the cache is populated for already-visible panels.
+ * first page ourselves (through the site request queue) so the cache is populated for
+ * already-visible panels. Only on the listing itself, not /beatmapsets/discussions or
+ * /beatmapsets/events (B25).
  * @param {() => boolean} wantIngest
- * @param {typeof window.fetch | null} nativeFetch
  */
-function startListingSearchPrefetchIfNeeded(wantIngest, nativeFetch) {
+function startListingSearchPrefetchIfNeeded(wantIngest) {
   if (!wantIngest()) return;
-  if (!/^\/beatmapsets(?:\/?)(?!\d)/i.test(location.pathname)) return;
+  if (!isBeatmapsetsListing(location.pathname)) return;
   if (listingSearchPrefetchStarted) return;
   // If #json-beatmaps has content the page was SSR-rendered; first-page data is already ingested.
   const n = document.getElementById("json-beatmaps");
   if (n?.textContent?.trim()) return;
-  const doFetch = nativeFetch;
-  if (!doFetch) return;
   listingSearchPrefetchStarted = true;
   const params = new URLSearchParams(location.search);
   params.delete("cursor_string");
@@ -381,8 +381,7 @@ function startListingSearchPrefetchIfNeeded(wantIngest, nativeFetch) {
   const url = `/beatmapsets/search${qs ? "?" + qs : ""}`;
   void (async () => {
     try {
-      const r = await doFetch(url, {
-        credentials: "include",
+      const r = await OsuExpertPlus.api.siteFetch(url, {
         headers: { Accept: "application/json" },
       });
       if (!wantIngest()) return;
@@ -479,7 +478,7 @@ export function start(settings, options = {}) {
     if (on) {
       ingestFromJsonBeatmapsScript();
       profileExtraPrefetchWantIngest = wantIngest;
-      startListingSearchPrefetchIfNeeded(wantIngest, pageHooks.nativeFetch());
+      startListingSearchPrefetchIfNeeded(wantIngest);
       connectJsonBeatmapsObserver();
       scheduleAllPanels(document, settings, ac.signal);
     } else {
