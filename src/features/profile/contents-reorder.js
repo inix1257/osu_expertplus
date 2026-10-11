@@ -12,7 +12,6 @@ import {
   getSectionPageNodes,
   sectionIdFromHashHref,
 } from "./sections-dom.js";
-import { maybeCsrfToken } from "./csrf.js";
 const CONTENTS_REORDER_STYLE_ID = "osu-expertplus-profile-contents-reorder";
 const CONTENTS_REORDER_ANCHOR_ATTR = "data-oep-contents-reorder-anchor";
 const CONTENTS_REORDER_DRAGGING_CLASS = "oep-contents-reorder--dragging";
@@ -58,9 +57,18 @@ const CONTENTS_REORDER_CSS = `
   }
 `;
 
+const CONTENTS_REORDER_ERROR_CLASS = "oep-contents-reorder-error";
+const CONTENTS_REORDER_ERROR_CSS = `
+  .${CONTENTS_REORDER_ERROR_CLASS} {
+    margin: 0.35rem 0;
+    font-size: 12px;
+    color: hsl(var(--hsl-red-1, 0 70% 70%));
+  }
+`;
+
 const contentsReorderStyle = manageStyle(
   CONTENTS_REORDER_STYLE_ID,
-  CONTENTS_REORDER_CSS,
+  CONTENTS_REORDER_CSS + CONTENTS_REORDER_ERROR_CSS,
 );
 
 function injectContentsReorderStyles() {
@@ -71,28 +79,59 @@ function removeContentsReorderStyles() {
   contentsReorderStyle.remove();
 }
 
+/**
+ * PUT the section order to the account (the request osu-web's own drag and
+ * drop sends), through the site request queue.
+ * @param {string[]} sectionIds
+ */
 async function persistProfileSectionOrder(sectionIds) {
-  if (!Array.isArray(sectionIds) || sectionIds.length < 2) return;
   const payload = new URLSearchParams();
   sectionIds.forEach((id) =>
     payload.append("user_profile_customization[extras_order][]", id),
   );
+  await OsuExpertPlus.api.siteWrite("PUT", "/home/account/options", payload);
+}
 
-  const headers = {
-    Accept: "application/json, text/javascript, */*; q=0.01",
-    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "X-Requested-With": "XMLHttpRequest",
+/**
+ * Saves orders one request at a time (B48). An order requested while one is
+ * being saved replaces any order still waiting, so quick drops send only the
+ * last one. When the last attempt fails, `onFailed` gets the error and the
+ * last order the server accepted (`initial` until one is).
+ * @param {{
+ *   save: (ids: string[]) => Promise<unknown>,
+ *   initial: string[],
+ *   onFailed: (err: unknown, confirmed: string[]) => void,
+ * }} deps
+ */
+export function createOrderSaver({ save, initial, onFailed }) {
+  let confirmed = initial;
+  /** @type {string[]|null} */
+  let pending = null;
+  let running = false;
+
+  async function pump() {
+    running = true;
+    while (pending) {
+      const ids = pending;
+      pending = null;
+      try {
+        await save(ids);
+        confirmed = ids;
+      } catch (err) {
+        if (!pending) onFailed(err, confirmed);
+      }
+    }
+    running = false;
+  }
+
+  return {
+    /** @param {string[]} ids */
+    request(ids) {
+      if (!Array.isArray(ids) || ids.length < 2) return;
+      pending = ids;
+      if (!running) void pump();
+    },
   };
-  const csrf = maybeCsrfToken();
-  if (csrf) headers["X-CSRF-Token"] = csrf;
-
-  const resp = await fetch("/home/account/options", {
-    method: "PUT",
-    credentials: "include",
-    headers,
-    body: payload.toString(),
-  });
-  if (!resp.ok) throw new Error(`save failed (${resp.status})`);
 }
 
 function reorderSectionPagesByIds(sectionIds) {
@@ -219,16 +258,52 @@ export function startContentsReorderManager() {
       );
   };
 
-  const saveOrderFrom = async (anchors) => {
+  /** Put tabs and section pages back in `ids` order (a failed save). */
+  const restoreOrder = (ids) => {
+    currentTabOrder = ids;
+    getContentsAnchorRows(3).forEach((anchors) => {
+      const row = anchors[0]?.parentElement;
+      if (row instanceof HTMLElement) applyTabCssOrder(getOrderedAnchors(row));
+    });
+    reorderSectionPagesByIds(ids);
+  };
+
+  /** @param {unknown} err */
+  const showSaveError = (err) => {
+    const row = getContentsAnchorRows(3)[0]?.[0]?.parentElement;
+    if (!(row instanceof HTMLElement)) return;
+    row.parentElement
+      ?.querySelector(`:scope > .${CONTENTS_REORDER_ERROR_CLASS}`)
+      ?.remove();
+    const status = /** @type {{ status?: number }} */ (err)?.status;
+    const notice = document.createElement("div");
+    notice.className = CONTENTS_REORDER_ERROR_CLASS;
+    notice.setAttribute("role", "alert");
+    notice.textContent = `Could not save the section order${
+      status ? ` (${status})` : ""
+    }; the previous order is back.`;
+    row.insertAdjacentElement("afterend", notice);
+    window.setTimeout(() => notice.remove(), 8000);
+  };
+
+  const saver = createOrderSaver({
+    save: persistProfileSectionOrder,
+    initial: getSectionPageNodes()
+      .map((p) => p.getAttribute("data-page-id") || "")
+      .filter(Boolean),
+    onFailed: (err, confirmed) => {
+      if (ac.signal.aborted) return;
+      restoreOrder(confirmed);
+      showSaveError(err);
+    },
+  });
+
+  const saveOrderFrom = (anchors) => {
     const ids = anchors
       .map((a) => sectionIdFromHashHref(a.getAttribute("href") || ""))
       .filter(Boolean);
     reorderSectionPagesByIds(ids);
-    try {
-      await persistProfileSectionOrder(ids);
-    } catch {
-      /* order stays reordered in DOM only */
-    }
+    saver.request(ids);
   };
 
   function clearRowDropIndicators(row) {
@@ -338,7 +413,7 @@ export function startContentsReorderManager() {
             .map((a) => sectionIdFromHashHref(a.getAttribute("href") || ""))
             .filter(Boolean);
           applyTabCssOrder(newAnchors);
-          void saveOrderFrom(newAnchors);
+          saveOrderFrom(newAnchors);
         }
         const suppressClick = (ce) => {
           ce.preventDefault();
@@ -421,6 +496,7 @@ export function startContentsReorderManager() {
 
   return () => {
     ac.abort();
+    document.querySelector(`.${CONTENTS_REORDER_ERROR_CLASS}`)?.remove();
     if (pointerSession) {
       endPointerSession();
       dragAnchor = null;
