@@ -122,7 +122,14 @@ function buildStatsRow(score) {
     if (parts.length) parts.push(sep());
     parts.push(el("span", { class: cell.className }, String(cell.value)));
   }
-  return el("div", { class: "oep-score-stats" }, ...parts);
+  const row = el("div", { class: "oep-score-stats" }, ...parts);
+  // Sizes the text so long counts fit the column on one line (styles.js).
+  row.style.setProperty("--oep-stats-chars", String(row.textContent.length));
+  row.style.setProperty(
+    "--oep-stats-seps",
+    String(Math.max(0, (parts.length - 1) / 2)),
+  );
+  return row;
 }
 
 /**
