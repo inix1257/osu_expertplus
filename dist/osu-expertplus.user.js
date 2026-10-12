@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.3.2
+// @version      0.3.3
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -2249,11 +2249,13 @@
         great: n("great"),
         large_tick_hit: n("large_tick_hit"),
         small_tick_hit: n("small_tick_hit"),
-        miss: n("miss")
+        small_tick_miss: n("small_tick_miss"),
+        miss: n("miss") + n("large_tick_miss")
       } : {
         great: leg("300"),
         large_tick_hit: leg("100"),
         small_tick_hit: leg("50"),
+        small_tick_miss: leg("katu"),
         miss: leg("miss")
       };
     }
@@ -2295,7 +2297,8 @@
       meh: "50",
       miss: "miss",
       large_tick_hit: "100",
-      small_tick_hit: "50"
+      small_tick_hit: "50",
+      small_tick_miss: "drp-miss"
     }),
     scoreboard: Object.freeze({
       perfect: "mania-perfect",
@@ -2305,7 +2308,8 @@
       meh: "50",
       miss: "miss",
       large_tick_hit: "ctb-l",
-      small_tick_hit: "ctb-drp"
+      small_tick_hit: "ctb-drp",
+      small_tick_miss: "drp-miss"
     })
   });
   var STATS_DISPLAY = Object.freeze({
@@ -2318,7 +2322,13 @@
   var STAT_ORDER = Object.freeze({
     osu: ["great", "ok", "meh", "miss"],
     taiko: ["great", "ok", "miss"],
-    fruits: ["great", "large_tick_hit", "small_tick_hit", "miss"],
+    fruits: [
+      "great",
+      "large_tick_hit",
+      "small_tick_hit",
+      "small_tick_miss",
+      "miss"
+    ],
     mania: ["perfect", "great", "good", "ok", "meh", "miss"]
   });
   function statsCells(score, options) {
@@ -5907,6 +5917,22 @@
     position: relative;
     z-index: 1;
     isolation: isolate;
+  }
+  /* Narrow layout (osu-web's < 900px): the status row (status, dots, star
+     range) is absolutely placed right under the main area (top: 100%) and the
+     panel normally reserves --mobile-extra-bar-height for it. Our rows make the
+     main area taller, so reserve the bar below whatever height it ends up (#2). */
+  @media (max-width: 899px) {
+    .beatmapset-panel:has(.${BLOCK_CLASS}),
+    .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}),
+    .beatmapset-panel:has(.${STAR_RANGE_CLASS}) {
+      padding-bottom: var(--mobile-extra-bar-height);
+    }
+    .beatmapset-panel:has(.${BLOCK_CLASS}) .beatmapset-panel__content,
+    .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}) .beatmapset-panel__content,
+    .beatmapset-panel:has(.${STAR_RANGE_CLASS}) .beatmapset-panel__content {
+      min-height: var(--main-height);
+    }
   }
   .beatmapset-panel:has(.${BLOCK_CLASS}) .beatmapset-panel__play-container,
   .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}) .beatmapset-panel__play-container,
@@ -20723,6 +20749,13 @@ ${lines.join("\n")}
   }
 
   // src/features/profile/score-stats.js
+  var FRUITS_STAT_NAMES = Object.freeze({
+    great: "Fruits",
+    large_tick_hit: "Drops",
+    small_tick_hit: "Droplets",
+    small_tick_miss: "Droplet misses",
+    miss: "Misses"
+  });
   var PERFECT_COMBO_ATTR = "data-oep-perfect-combo";
   function _applyApiMaxComboToComboInline(rowEl, maxCombo) {
     const comboSpan = rowEl.querySelector(".oep-combo-inline");
@@ -20779,9 +20812,16 @@ ${lines.join("\n")}
   function buildStatsRow(score) {
     const sep = () => el("span", { class: "oep-score-stats__sep" }, "/");
     const parts = [];
+    const names = rulesetFromId(score?.ruleset_id ?? 0) === "fruits" ? FRUITS_STAT_NAMES : {};
     for (const cell of statsCells(score, STATS_DISPLAY.profile)) {
       if (parts.length) parts.push(sep());
-      parts.push(el("span", { class: cell.className }, String(cell.value)));
+      parts.push(
+        el(
+          "span",
+          { class: cell.className, title: names[cell.key] ?? null },
+          String(cell.value)
+        )
+      );
     }
     const row = el("div", { class: "oep-score-stats" }, ...parts);
     row.style.setProperty("--oep-stats-chars", String(row.textContent.length));
@@ -23067,6 +23107,7 @@ ${lines.join("\n")}
   ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--100     { color: #84e03a; }
   ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--50      { color: #e0b03a; }
   ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--miss    { color: #e05c5c; }
+  ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--drp-miss { color: #e8a07a; }
   ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--perfect { color: #ffd700; }
   ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--good    { color: #6ee0c0; }
   .play-detail-list .oep-score-stats {
@@ -23095,6 +23136,7 @@ ${lines.join("\n")}
   .play-detail-list .oep-score-stats__val--100     { color: #84e03a; }
   .play-detail-list .oep-score-stats__val--50      { color: #e0b03a; }
   .play-detail-list .oep-score-stats__val--miss    { color: #e05c5c; }
+  .play-detail-list .oep-score-stats__val--drp-miss { color: #e8a07a; }
   .play-detail-list .oep-score-stats__val--perfect { color: #ffd700; }
   .play-detail-list .oep-score-stats__val--good    { color: #6ee0c0; }
 
