@@ -420,6 +420,9 @@ OsuExpertPlus.settingsPanel = (() => {
       flex: 1;
       min-width: 0;
     }
+    .osu-expertplus-panel__text[title] {
+      cursor: help;
+    }
     .osu-expertplus-panel__label {
       font-size: 12px;
       font-weight: 600;
@@ -954,9 +957,13 @@ OsuExpertPlus.settingsPanel = (() => {
     for (const [groupName, groupFeatures] of groups) {
       const groupRows = [];
       for (const feature of groupFeatures) {
+        // The description is a paragraph, so it is a hover tooltip, not a line.
         const text = el(
           "div",
-          { class: "osu-expertplus-panel__text" },
+          {
+            class: "osu-expertplus-panel__text",
+            title: feature.description || null,
+          },
           el("div", { class: "osu-expertplus-panel__label" }, feature.label),
         );
         const row = el(
