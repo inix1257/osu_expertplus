@@ -40,19 +40,37 @@ function getUserIdFromUrl() {
 }
 
 /**
+ * Parsed initial data per node, kept while the node's JSON text is unchanged.
+ * The blob is large and callers ask for it several times per update.
+ * @type {WeakMap<Element, { raw: string, data: Object|null }>}
+ */
+const initialDataCache = new WeakMap();
+
+/** @param {HTMLElement} node */
+function parseInitialDataNode(node) {
+  const raw = node.dataset.initialData ?? "";
+  const cached = initialDataCache.get(node);
+  if (cached && cached.raw === raw) return cached.data;
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (_) {
+    data = null;
+  }
+  initialDataCache.set(node, { raw, data });
+  return data;
+}
+
+/**
  * The first React initial-data blob on the page that has a user. A node with
- * invalid JSON is skipped, not the end of the search (B69).
+ * invalid JSON is skipped, not the end of the search (B69). The object is
+ * shared between callers: read it, don't change it.
  * @returns {Object|null}
  */
 export function parseProfileInitialData() {
   const nodes = document.querySelectorAll(INITIAL_DATA_SEL);
   for (const node of nodes) {
-    let data;
-    try {
-      data = JSON.parse(node.dataset.initialData);
-    } catch (_) {
-      continue;
-    }
+    const data = parseInitialDataNode(node);
     if (data?.user?.id != null) return data;
   }
   return null;
