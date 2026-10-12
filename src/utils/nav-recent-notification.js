@@ -22,6 +22,10 @@ OsuExpertPlus.navRecentNotification = (() => {
   /** Tooltip offset below / right of the cursor (px). */
   const TIP_OFFSET_PX = 16;
   const TICK_MS = 1000;
+  /** osu-web adds this to <body> when the header shrinks on scroll. */
+  const PINNED_CLASS = "js-header-is-pinned";
+  /** Length of osu-web's header shrink / grow transition (ms). */
+  const HEADER_TRANSITION_MS = 300;
   /** osu-web cuts notification `content` and appends this. */
   const TRUNCATION_SUFFIX = "...";
 
@@ -44,10 +48,27 @@ OsuExpertPlus.navRecentNotification = (() => {
       overflow: hidden;
       cursor: pointer;
       z-index: 1;
+      /* Back from the pinned header: drop in once the header has grown back. */
+      transition:
+        opacity 200ms ease-out ${HEADER_TRANSITION_MS}ms,
+        transform 200ms ease-out ${HEADER_TRANSITION_MS}ms,
+        visibility 0s linear ${HEADER_TRANSITION_MS}ms;
+    }
+    /* Pinned (scrolled) header: fade up and out alongside the header shrinking. */
+    .${PINNED_CLASS} .${PILL_CLASS} {
+      opacity: 0;
+      transform: translateY(-6px);
+      visibility: hidden;
+      pointer-events: none;
+      transition:
+        opacity 150ms ease-in,
+        transform ${HEADER_TRANSITION_MS}ms ease-in,
+        visibility 0s linear ${HEADER_TRANSITION_MS}ms;
     }
     .${PILL_CLASS}[hidden],
     .nav2:has(.nav-click-popup.js-click-menu--active) .${PILL_CLASS},
-    body:has(.nav2 .nav-click-popup.js-click-menu--active) .${TIP_CLASS} {
+    body:has(.nav2 .nav-click-popup.js-click-menu--active) .${TIP_CLASS},
+    .${PINNED_CLASS} .${TIP_CLASS} {
       display: none;
     }
     .${PILL_CLASS}:hover {
@@ -231,6 +252,23 @@ OsuExpertPlus.navRecentNotification = (() => {
 
     const onResize = () => tick();
 
+    /** When `PINNED_CLASS` last flipped on <body> (performance.now()). */
+    let headerChangedAt = -Infinity;
+    let wasPinned = false;
+    let settleTimer = null;
+    const bodyObserver = new MutationObserver(() => {
+      const pinned = document.body.classList.contains(PINNED_CLASS);
+      if (pinned === wasPinned) return;
+      wasPinned = pinned;
+      headerChangedAt = performance.now();
+      if (pinned) {
+        hovering = false;
+        hideTip();
+      }
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(tick, HEADER_TRANSITION_MS + 20);
+    });
+
     function positionTip(clientX, clientY) {
       if (!tip || tip.hidden) return;
       const margin = 8;
@@ -342,8 +380,13 @@ OsuExpertPlus.navRecentNotification = (() => {
         if (hovering) showTip(n);
       }
 
-      // Right edge matches the counter pill; left edge reaches the Twitter button.
       p.hidden = false;
+      // Keep the resting (unpinned) spot while the header is pinned or animating;
+      // measuring then would park the pill where the shrunk counter sits.
+      if (document.body.classList.contains(PINNED_CLASS)) return;
+      if (performance.now() - headerChangedAt < HEADER_TRANSITION_MS) return;
+
+      // Right edge matches the counter pill; left edge reaches the Twitter button.
       const base = p.offsetParent;
       if (!base) return;
       const b = base.getBoundingClientRect();
@@ -357,6 +400,11 @@ OsuExpertPlus.navRecentNotification = (() => {
     function start() {
       if (timer) return;
       style.inject();
+      wasPinned = document.body.classList.contains(PINNED_CLASS);
+      bodyObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
       tick();
       timer = setInterval(tick, TICK_MS);
       window.addEventListener("resize", onResize);
@@ -365,6 +413,9 @@ OsuExpertPlus.navRecentNotification = (() => {
     function stop() {
       clearInterval(timer);
       timer = null;
+      bodyObserver.disconnect();
+      clearTimeout(settleTimer);
+      settleTimer = null;
       window.removeEventListener("resize", onResize);
       pill?.remove();
       pill = null;
