@@ -13,7 +13,7 @@ import {
 } from "./recent-scores/common.js";
 import { SCORE_PERIOD_HIGHLIGHT_ID, SCORE_PLACE_CLASS } from "./score-rows.js";
 // Top ranks: period highlight vs card-bg layout are separate style tags so turning off
-// "Score age period highlight" does not strip CSS required for score-card backgrounds.
+// "Highlight scores by date" does not strip CSS required for score-card backgrounds.
 const RANKS_PERIOD_HIGHLIGHT_STYLE_ID =
   "osu-expertplus-profile-ranks-period-highlight";
 const RANKS_CARD_BG_LAYOUT_STYLE_ID =
