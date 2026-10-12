@@ -32,12 +32,7 @@ const baselineRules = {
 
 export default [
   {
-    ignores: [
-      "dist/",
-      "docs/",
-      "node_modules/",
-      "test/fixtures/legacy/",
-    ],
+    ignores: ["dist/", "docs/", "node_modules/", "test/fixtures/legacy/"],
   },
   js.configs.recommended,
   {
