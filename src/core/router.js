@@ -102,8 +102,9 @@ export class Router {
   }
 
   /**
-   * pushState/replaceState wrap, popstate (clears path first), + pathname poll
-   * (Inertia may cache pre-wrap history).
+   * pushState/replaceState wrap and popstate (clears path first). The wrap
+   * lands on the page's own history, so osu-web's Turbo visits and React tab
+   * changes all pass through it; no pathname poll is needed.
    */
   _watchNavigation() {
     const navigate = this._navigate.bind(this);
@@ -123,15 +124,5 @@ export class Router {
       this._currentPath = null;
       navigate(location.pathname);
     });
-
-    // Pathname poll: catches history calls that bypass our wrap; 200ms + dedupe avoids double init
-    let polledPath = location.pathname;
-    setInterval(() => {
-      const path = location.pathname;
-      if (path !== polledPath) {
-        polledPath = path;
-        navigate(path);
-      }
-    }, 200);
   }
 }
