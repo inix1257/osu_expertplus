@@ -185,6 +185,18 @@ const PLAY_DETAIL_CSS = `
       width: var(--oep-combo-stats-col);
       max-width: var(--oep-combo-stats-col);
       overflow: hidden;
+      container-type: inline-size;
+    }
+    /* Long counts shrink the text to fit the column on one line, down to
+       10px; past that they wrap. Each separator adds 8px of gap and margin
+       that does not scale. */
+    ${SCORE_LIST_LAYOUT_SEL} .oep-combo-stats-col .oep-score-stats {
+      font-size: clamp(
+        10px,
+        (100cqi - var(--oep-stats-seps, 0) * 8px) /
+          (var(--oep-stats-chars, 1) * 0.55),
+        13px
+      );
     }
   }
 
