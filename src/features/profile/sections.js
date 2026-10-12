@@ -47,6 +47,13 @@ const SECTION_COLLAPSE_CSS = `
   .${SECTION_COLLAPSE_BODY_HIDDEN_CLASS} {
     display: none !important;
   }
+  /* React rewrites className when a lazy-load body finishes loading, which
+     drops the class above, so the usual layout is also hidden from the page. */
+  div.js-sortable--page.${SECTION_COLLAPSE_PAGE_CLASS}
+    > .page-extra
+    > :not(${SECTION_COLLAPSE_MAIN_TITLE_SELECTOR}):not(${SECTION_COLLAPSE_SUBTITLE_SELECTOR}):not(div.u-relative:has(> ${SECTION_COLLAPSE_MAIN_TITLE_SELECTOR})) {
+    display: none !important;
+  }
   html.${SECTION_COLLAPSE_HARD_MODE_CLASS}
     div.js-sortable--page.${SECTION_COLLAPSE_PAGE_CLASS}
     > div.u-relative
