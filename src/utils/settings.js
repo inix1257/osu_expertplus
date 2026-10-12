@@ -24,7 +24,7 @@ OsuExpertPlus.settings = (() => {
       id: "userProfile.beatmapCardExtraInfo",
       label: "Extra metadata on beatmap cards",
       description:
-        "On user profiles and on /beatmapsets: shows “from {source}” between the artist and mapper lines (reserved line when empty) and BPM plus longest drain length below the mapper line (from cached beatmapset JSON, no extra API calls). Uses osu’s listing JSON, search responses, and profile `extra-pages/beatmaps` (fetch/XHR hooks; one session prefetch if needed).",
+        "On user profiles and the beatmap listing: shows the song’s source (“from …”) under the artist, and BPM and length under the mapper.",
       group: "Beatmap Card",
       default: true,
     },
@@ -32,7 +32,7 @@ OsuExpertPlus.settings = (() => {
       id: "userProfile.beatmapCardDifficultyRange",
       label: "Star rating on beatmap cards",
       description:
-        "On user profiles and on /beatmapsets: after each mode’s difficulty dots, shows the highest nomod star rating as a coloured pill (Font Awesome up-chevron, star, and value; from cached `difficulty_rating` per beatmap; same JSON sources as extra metadata).",
+        "On user profiles and the beatmap listing: shows the set’s highest star rating (no mods) as a coloured badge after each mode’s difficulty dots.",
       group: "Beatmap Card",
       default: true,
     },
@@ -40,7 +40,7 @@ OsuExpertPlus.settings = (() => {
       id: "userProfile.fullBeatmapStatNumbers",
       label: "Full numbers on beatmap card stats",
       description:
-        "On user profiles and on /beatmapsets: shows exact play and favourite counts (e.g. 159,915 instead of 159.9K) from each card’s tooltip/title in the HTML.",
+        "On user profiles and the beatmap listing: shows exact play and favourite counts (e.g. 159,915 instead of 159.9K).",
       group: "Beatmap Card",
       default: true,
     },
@@ -88,7 +88,7 @@ OsuExpertPlus.settings = (() => {
       id: "userProfile.bwsRanking",
       label: "Extra rankings in profile header",
       description:
-        "Shows extra rankings in the profile header next to global and country: BWS (badge-weighted) and ranked-score rank from api.kirino.sh. BWS uses keyword-filtered badge count and rank ^ (0.9937 ^ (badges ^ 2)); optional session-only badge input.",
+        "Shows extra rankings in the profile header next to global and country: BWS (badge-weighted rank) and ranked-score rank from api.kirino.sh. The badge count used for BWS can be changed for the current visit.",
       group: "User Profile",
       default: true,
     },
@@ -168,7 +168,7 @@ OsuExpertPlus.settings = (() => {
       id: "beatmapDetail.discussionDefaultToTotal",
       label: "Beatmap discussion on Total tab",
       description:
-        "On beatmap discussion pages, redirect default/praise landing routes to /discussion/-/generalAll/total.",
+        "Opening a beatmap discussion page without choosing a tab shows the Total tab (all discussions) instead of osu!’s default.",
       group: "Beatmap Detail",
       default: true,
     },
@@ -184,7 +184,7 @@ OsuExpertPlus.settings = (() => {
       id: "beatmapDetail.beatmapPreview",
       label: "Gameplay preview on beatmap info",
       description:
-        "On beatmapset info pages, adds an expandable osu!standard gameplay preview (osu-beatmap-renderer + PixiJS loaded from jsDelivr when you open it). Uses the site preview MP3.",
+        "On beatmapset info pages, adds an expandable osu!standard gameplay preview played with the song preview. The renderer is downloaded from jsDelivr the first time you open it.",
       group: "Beatmap Detail",
       default: true,
     },
@@ -224,7 +224,7 @@ OsuExpertPlus.settings = (() => {
       id: "beatmapDetail.apiExtendedLeaderboard",
       label: "Load up to 100 scores on beatmap leaderboard",
       description:
-        "On beatmap scoreboards, bumps the `/beatmaps/{id}/scores` API limit from osu!’s default (50) to 100 so the first page loads more rows at once. Turn off to use the site default.",
+        "On beatmap scoreboards, loads the top 100 scores instead of osu!’s default 50.",
       group: "Beatmap Detail",
       default: true,
     },
@@ -232,7 +232,7 @@ OsuExpertPlus.settings = (() => {
       id: "beatmapDetail.scoreboardPlayerLookup",
       label: "Leaderboard player lookup bar",
       description:
-        "On beatmapset scoreboards, shows the username field to look up a player’s scores on the current difficulty; results replace the main leaderboard table (same idea as wildcard merge). Requires osu! API OAuth (Client ID + Secret) in Expert+ settings; without credentials the bar stays visible but disabled with a short notice.",
+        "On beatmapset scoreboards, adds a username field that looks up a player’s scores on the current difficulty and shows them in the leaderboard. Requires osu! API credentials (Client ID and Secret above).",
       group: "Beatmap Detail",
       default: true,
     },
@@ -256,7 +256,7 @@ OsuExpertPlus.settings = (() => {
       id: "beatmapDetail.scoreboardGlobalRank",
       label: "Player global rank on leaderboard",
       description:
-        "On beatmap scoreboards, shows each player’s global rank next to their username. Fetches ranks via a batched `/users` API call (up to 50 players per request, throttled between batches) rather than one request per row, and caches results briefly to avoid refetching on every leaderboard refresh.",
+        "On beatmap scoreboards, shows each player’s global rank next to their username. Requires osu! API credentials.",
       group: "Beatmap Detail",
       default: true,
     },
