@@ -21,7 +21,12 @@ OsuExpertPlus.navRecentNotification = (() => {
   const GAP_PX = 4;
   /** Tooltip offset below / right of the cursor (px). */
   const TIP_OFFSET_PX = 16;
-  const TICK_MS = 1000;
+  /**
+   * Safety re-check while the tab is visible, for store changes that leave the
+   * counter untouched. Everything else is event driven.
+   */
+  const FALLBACK_TICK_MS = 10000;
+  const CONTAINER_SEL = ".nav2 .nav2__notification-container";
   /** osu-web adds this to <body> when the header shrinks on scroll. */
   const PINNED_CLASS = "js-header-is-pinned";
   /** Length of osu-web's header shrink / grow transition (ms). */
@@ -244,6 +249,8 @@ OsuExpertPlus.navRecentNotification = (() => {
    */
   function install(settingsApi) {
     let timer = null;
+    /** @type {AbortController|null} */
+    let navAbort = null;
     let pill = null;
     let tip = null;
     /** Notification currently shown in the pill. */
@@ -251,6 +258,23 @@ OsuExpertPlus.navRecentNotification = (() => {
     let hovering = false;
 
     const onResize = () => tick();
+
+    /** Coalesces bursts of counter mutations into one tick. */
+    let tickQueued = false;
+    function queueTick() {
+      if (tickQueued) return;
+      tickQueued = true;
+      setTimeout(() => {
+        tickQueued = false;
+        if (timer) tick();
+      }, 50);
+    }
+
+    // osu-web re-renders the unread counters whenever the notification store
+    // changes, so watching them replaces polling the store.
+    const counterObserver = new MutationObserver(queueTick);
+    let watchedContainer = null;
+    let watchedBody = null;
 
     /** When `PINNED_CLASS` last flipped on <body> (performance.now()). */
     let headerChangedAt = -Infinity;
@@ -347,10 +371,48 @@ OsuExpertPlus.navRecentNotification = (() => {
       return r && r.width > 0 ? r : container.getBoundingClientRect();
     }
 
+    /** Re-attach the observers after Turbo swapped <body> and the header. */
+    function watchHeader(container) {
+      if (container !== watchedContainer) {
+        counterObserver.disconnect();
+        watchedContainer = container;
+        if (container) {
+          counterObserver.observe(container, {
+            subtree: true,
+            childList: true,
+            characterData: true,
+          });
+        }
+      }
+      if (document.body !== watchedBody) {
+        bodyObserver.disconnect();
+        watchedBody = document.body;
+        wasPinned = document.body.classList.contains(PINNED_CLASS);
+        bodyObserver.observe(document.body, {
+          attributes: true,
+          attributeFilter: ["class"],
+        });
+      }
+    }
+
+    /** Only touch the style when the value changed. */
+    function setStyle(node, prop, value) {
+      if (node.style[prop] !== value) node.style[prop] = value;
+    }
+
+    function onVisibility() {
+      if (document.visibilityState === "visible") tick();
+    }
+
+    // The header shrink / grow animation can outlast HEADER_TRANSITION_MS
+    // (slow frames, hidden tabs): measure again once it really ended.
+    function onTransitionEnd(e) {
+      if (e.target instanceof Element && e.target.closest(".nav2")) queueTick();
+    }
+
     function tick() {
-      const container = document.querySelector(
-        ".nav2 .nav2__notification-container",
-      );
+      const container = document.querySelector(CONTAINER_SEL);
+      watchHeader(container);
       if (!container?.parentElement) {
         pill?.remove();
         pill = null;
@@ -392,28 +454,46 @@ OsuExpertPlus.navRecentNotification = (() => {
       const b = base.getBoundingClientRect();
       const r = container.getBoundingClientRect();
       const left = leftEdgeRect(container).left;
-      p.style.left = `${left - b.left - base.clientLeft}px`;
-      p.style.width = `${r.right - left}px`;
-      p.style.top = `${r.bottom - b.top - base.clientTop + GAP_PX}px`;
+      setStyle(p, "left", `${left - b.left - base.clientLeft}px`);
+      setStyle(p, "width", `${r.right - left}px`);
+      setStyle(p, "top", `${r.bottom - b.top - base.clientTop + GAP_PX}px`);
     }
 
     function start() {
       if (timer) return;
       style.inject();
-      wasPinned = document.body.classList.contains(PINNED_CLASS);
-      bodyObserver.observe(document.body, {
-        attributes: true,
-        attributeFilter: ["class"],
-      });
+      timer = setInterval(() => {
+        if (document.visibilityState === "visible") tick();
+      }, FALLBACK_TICK_MS);
+      // A Turbo visit replaces the header: pick up the new one.
+      navAbort = new AbortController();
+      OsuExpertPlus.core.observe.subscribe(
+        {
+          selector: ".nav2",
+          schedule: 50,
+          signal: navAbort.signal,
+          label: "header/nav-recent-notification",
+        },
+        tick,
+      );
       tick();
-      timer = setInterval(tick, TICK_MS);
       window.addEventListener("resize", onResize);
+      document.addEventListener("visibilitychange", onVisibility);
+      document.addEventListener("transitionend", onTransitionEnd, true);
+      document.fonts?.ready.then(() => timer && tick());
     }
 
     function stop() {
       clearInterval(timer);
       timer = null;
+      navAbort?.abort();
+      navAbort = null;
+      counterObserver.disconnect();
+      watchedContainer = null;
       bodyObserver.disconnect();
+      watchedBody = null;
+      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("transitionend", onTransitionEnd, true);
       clearTimeout(settleTimer);
       settleTimer = null;
       window.removeEventListener("resize", onResize);
