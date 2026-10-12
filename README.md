@@ -8,7 +8,7 @@ note: there might be potential behavior conflicts with other userscripts, so use
 
 # Install
 
-1. Install a userscript manager — [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) usually works
+1. Install a userscript manager — [Tampermonkey](https://www.tampermonkey.net/) on Chrome, Edge or Firefox is supported. [Violentmonkey](https://violentmonkey.github.io/) usually works too
 2. [Download the script](https://github.com/inix1257/osu_expertplus/raw/refs/heads/main/dist/osu-expertplus.user.js) to install. If you have userscript manager installed, you can just click the link and install it
 
 # osu! Expert+
