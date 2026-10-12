@@ -314,6 +314,7 @@ const PLAY_DETAIL_CSS = `
   ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--100     { color: #84e03a; }
   ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--50      { color: #e0b03a; }
   ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--miss    { color: #e05c5c; }
+  ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--drp-miss { color: #e8a07a; }
   ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--perfect { color: #ffd700; }
   ${SCORE_LIST_LAYOUT_SEL} .oep-score-stats__val--good    { color: #6ee0c0; }
   .play-detail-list .oep-score-stats {
@@ -342,6 +343,7 @@ const PLAY_DETAIL_CSS = `
   .play-detail-list .oep-score-stats__val--100     { color: #84e03a; }
   .play-detail-list .oep-score-stats__val--50      { color: #e0b03a; }
   .play-detail-list .oep-score-stats__val--miss    { color: #e05c5c; }
+  .play-detail-list .oep-score-stats__val--drp-miss { color: #e8a07a; }
   .play-detail-list .oep-score-stats__val--perfect { color: #ffd700; }
   .play-detail-list .oep-score-stats__val--good    { color: #6ee0c0; }
 

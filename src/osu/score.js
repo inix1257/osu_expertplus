@@ -183,17 +183,21 @@ export function normalizeStatistics(statistics, ruleset, options) {
   }
   if (ruleset === "fruits") {
     const lazer = LAZER_ANY_KEYS.some((k) => st[k] != null);
+    // #21: droplet misses too, and a missed drop breaks combo like a missed
+    // fruit, so it counts as a miss (as on the leaderboard, B95).
     return lazer
       ? {
           great: n("great"),
           large_tick_hit: n("large_tick_hit"),
           small_tick_hit: n("small_tick_hit"),
-          miss: n("miss"),
+          small_tick_miss: n("small_tick_miss"),
+          miss: n("miss") + n("large_tick_miss"),
         }
       : {
           great: leg("300"),
           large_tick_hit: leg("100"),
           small_tick_hit: leg("50"),
+          small_tick_miss: leg("katu"),
           miss: leg("miss"),
         };
   }
@@ -245,6 +249,7 @@ const STAT_CLASS = Object.freeze({
     miss: "miss",
     large_tick_hit: "100",
     small_tick_hit: "50",
+    small_tick_miss: "drp-miss",
   }),
   scoreboard: Object.freeze({
     perfect: "mania-perfect",
@@ -255,6 +260,7 @@ const STAT_CLASS = Object.freeze({
     miss: "miss",
     large_tick_hit: "ctb-l",
     small_tick_hit: "ctb-drp",
+    small_tick_miss: "drp-miss",
   }),
 });
 
@@ -280,7 +286,13 @@ export const STATS_DISPLAY = Object.freeze({
 const STAT_ORDER = Object.freeze({
   osu: ["great", "ok", "meh", "miss"],
   taiko: ["great", "ok", "miss"],
-  fruits: ["great", "large_tick_hit", "small_tick_hit", "miss"],
+  fruits: [
+    "great",
+    "large_tick_hit",
+    "small_tick_hit",
+    "small_tick_miss",
+    "miss",
+  ],
   mania: ["perfect", "great", "good", "ok", "meh", "miss"],
 });
 

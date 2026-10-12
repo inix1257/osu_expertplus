@@ -10,6 +10,7 @@ import {
   scoreIndicatesPerfectCombo,
   statsCells,
 } from "../../osu/score.js";
+import { rulesetFromId } from "../../osu/ruleset.js";
 import { el } from "../legacy.js";
 import { rememberRowBeatmap } from "./beatmap-attributes.js";
 import {
@@ -19,6 +20,15 @@ import {
   _applyByBeatmapId,
   _buildScoresByBeatmapId,
 } from "./score-rows.js";
+/** Tooltips for the osu!catch stats row, in osu!'s own words. */
+const FRUITS_STAT_NAMES = Object.freeze({
+  great: "Fruits",
+  large_tick_hit: "Drops",
+  small_tick_hit: "Droplets",
+  small_tick_miss: "Droplet misses",
+  miss: "Misses",
+});
+
 /** On the achieved-combo number when the API flagged the score as perfect. */
 const PERFECT_COMBO_ATTR = "data-oep-perfect-combo";
 
@@ -118,9 +128,18 @@ function injectComboAfterAccuracy(rowEl, score) {
 function buildStatsRow(score) {
   const sep = () => el("span", { class: "oep-score-stats__sep" }, "/");
   const parts = [];
+  // Five catch numbers are hard to tell apart without labels (#21).
+  const names =
+    rulesetFromId(score?.ruleset_id ?? 0) === "fruits" ? FRUITS_STAT_NAMES : {};
   for (const cell of statsCells(score, STATS_DISPLAY.profile)) {
     if (parts.length) parts.push(sep());
-    parts.push(el("span", { class: cell.className }, String(cell.value)));
+    parts.push(
+      el(
+        "span",
+        { class: cell.className, title: names[cell.key] ?? null },
+        String(cell.value),
+      ),
+    );
   }
   const row = el("div", { class: "oep-score-stats" }, ...parts);
   // Sizes the text so long counts fit the column on one line (styles.js).

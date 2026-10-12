@@ -147,12 +147,25 @@ test("normalizeStatistics: taiko, fruits, mania (lazer and legacy)", () => {
     [
       "fruits",
       { great: 600, large_tick_hit: 50, small_tick_hit: 300, miss: 2 },
-      { great: 600, large_tick_hit: 50, small_tick_hit: 300, miss: 2 },
+      {
+        great: 600,
+        large_tick_hit: 50,
+        small_tick_hit: 300,
+        small_tick_miss: 0,
+        miss: 2,
+      },
     ],
+    // #21: droplet misses are kept; a missed drop counts as a miss.
     [
       "fruits",
-      { great: 600, small_tick_miss: 4 },
-      { great: 600, large_tick_hit: 0, small_tick_hit: 0, miss: 0 },
+      { great: 600, small_tick_miss: 4, large_tick_miss: 1, miss: 2 },
+      {
+        great: 600,
+        large_tick_hit: 0,
+        small_tick_hit: 0,
+        small_tick_miss: 4,
+        miss: 3,
+      },
     ],
     [
       "fruits",
@@ -163,7 +176,13 @@ test("normalizeStatistics: taiko, fruits, mania (lazer and legacy)", () => {
         count_katu: 4,
         count_miss: 2,
       },
-      { great: 600, large_tick_hit: 50, small_tick_hit: 300, miss: 2 },
+      {
+        great: 600,
+        large_tick_hit: 50,
+        small_tick_hit: 300,
+        small_tick_miss: 4,
+        miss: 2,
+      },
     ],
     [
       "mania",
@@ -234,12 +253,14 @@ test("statsCells: order and class names per scheme", () => {
     "300",
     "100",
     "50",
+    "drp-miss",
     "miss",
   ]);
   assert.deepEqual(cls(statsCells(fruits, STATS_DISPLAY.scoreboard)), [
     "300",
     "ctb-l",
     "ctb-drp",
+    "drp-miss",
     "miss",
   ]);
   const taiko = { ruleset_id: 1, statistics: { great: 3, ok: 2 } };
