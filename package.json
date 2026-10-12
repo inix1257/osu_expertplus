@@ -1,6 +1,6 @@
 {
   "name": "osu-expertplus",
-  "version": "0.2.27",
+  "version": "0.3.0",
   "private": true,
   "description": "Userscript that adds QoL features to osu.ppy.sh",
   "license": "UNLICENSED",
