@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.3.0
+// @version      0.3.1
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -4536,14 +4536,14 @@
     const FEATURES = [
       {
         id: "header.navRecentNotification",
-        label: "Latest chat / notification under header badges",
+        label: "Latest notification preview in header",
         description: "Shows the newest unread chat message or notification as a one-line “username: content” pill under the chat/notification counter in the top-right header, stretched left to the Twitter button (click it to open the matching popup). Hover shows the full text; truncated comments and discussion posts are fetched once with a read-only request. Uses the page’s own notification data, so nothing is marked as read.",
         group: "Header",
         default: true
       },
       {
         id: "userProfile.alwaysShowStats",
-        label: "Play count & favourites on beatmap cards",
+        label: "Always show play count and favourites on beatmap cards",
         description: "On user profiles and on /beatmapsets: keeps play count and favourite count visible on each beatmap card without hovering.",
         group: "Beatmap Card",
         default: true
@@ -4551,70 +4551,28 @@
       {
         id: "userProfile.beatmapCardExtraInfo",
         label: "Extra metadata on beatmap cards",
-        description: "On user profiles and on /beatmapsets: shows “from {source}” between the artist and mapper lines (reserved line when empty) and BPM plus longest drain length below the mapper line (from cached beatmapset JSON, no extra API calls). Uses osu’s listing JSON, search responses, and profile `extra-pages/beatmaps` (fetch/XHR hooks; one session prefetch if needed).",
+        description: "On user profiles and the beatmap listing: shows the song’s source (“from …”) under the artist, and BPM and length under the mapper.",
         group: "Beatmap Card",
         default: true
       },
       {
         id: "userProfile.beatmapCardDifficultyRange",
-        label: "Star rating on beatmap cards",
-        description: "On user profiles and on /beatmapsets: after each mode’s difficulty dots, shows the highest nomod star rating as a coloured pill (Font Awesome up-chevron, star, and value; from cached `difficulty_rating` per beatmap; same JSON sources as extra metadata).",
+        label: "Highest star rating on beatmap cards",
+        description: "On user profiles and the beatmap listing: shows the set’s highest star rating (no mods) as a coloured badge after each mode’s difficulty dots.",
         group: "Beatmap Card",
         default: true
       },
       {
         id: "userProfile.fullBeatmapStatNumbers",
-        label: "Full numbers on beatmap card stats",
-        description: "On user profiles and on /beatmapsets: shows exact play and favourite counts (e.g. 159,915 instead of 159.9K) from each card’s tooltip/title in the HTML.",
+        label: "Exact play and favourite counts on beatmap cards",
+        description: "On user profiles and the beatmap listing: shows exact play and favourite counts (e.g. 159,915 instead of 159.9K).",
         group: "Beatmap Card",
         default: true
       },
       {
-        id: "userProfile.scoreHitStatistics",
-        label: "Hit statistics on profile scores",
-        description: "On best performance, pinned, first place, and Expert+ Recent scores (Historical): adds a colour-coded hit row (great / ok / meh / miss). Beatmapset leaderboards keep hit-stat colours regardless of this option.",
-        group: "User Profile",
-        default: true
-      },
-      {
-        id: "userProfile.moddedStarRating",
-        label: "Modded star rating on difficulties",
-        description: "Fetches and displays the accurate star rating with mods applied next to each difficulty name. Requires API credentials.",
-        group: "User Profile",
-        default: true
-      },
-      {
-        id: "userProfile.scoreCardBackgrounds",
-        label: "Beatmap background on score cards",
-        description: "Shows the beatmap cover art as a background image on each score card in the Ranks section and on Expert+ Recent scores (Historical tab).",
-        group: "User Profile",
-        default: true
-      },
-      {
-        id: "userProfile.scoreCardPlaceNumber",
-        label: "Score place number on rank cards",
-        description: "On Best performance: shows #1, #2, … before the beatmap title. On Expert+ Recent scores (Historical): #1 is the most recent visible score, then #2, … (respects Show failed scores).",
-        group: "User Profile",
-        default: true
-      },
-      {
-        id: "scores.periodHighlight",
-        label: "Score age period highlight",
-        description: "On user profile Top Ranks only: bar to highlight scores by how recent they are (weeks through years), with reverse and reset.",
-        group: "User Profile",
-        default: true
-      },
-      {
         id: "userProfile.bwsRanking",
-        label: "Extra rankings in profile header",
-        description: "Shows extra rankings in the profile header next to global and country: BWS (badge-weighted) and ranked-score rank from api.kirino.sh. BWS uses keyword-filtered badge count and rank ^ (0.9937 ^ (badges ^ 2)); optional session-only badge input.",
-        group: "User Profile",
-        default: true
-      },
-      {
-        id: "userProfile.recentScoresWithFails",
-        label: "Expert+ Recent scores (with failed scores)",
-        description: "On the Historical tab, replaces osu!’s Recent plays with Expert+’s list from the API: failed scores (Show failed scores), hit statistics, pp decimals, place numbers and a score options menu. Turning it off takes full effect after reloading the profile.",
+        label: "BWS and ranked score rank in profile header",
+        description: "Shows extra rankings in the profile header next to global and country: BWS (badge-weighted rank) and ranked-score rank from api.kirino.sh. The badge count used for BWS can be changed for the current visit.",
         group: "User Profile",
         default: true
       },
@@ -4641,15 +4599,57 @@
       },
       {
         id: "userProfile.profileSectionCollapseRemoveFromPage",
-        label: "Hide collapsed profile sections",
+        label: "Hide collapsed sections completely",
         description: "When enabled, collapsing a section via Contents hides the whole block until you expand it from Contents again. When disabled (default), the section heading stays on the page with “(collapsed)” and you can expand it by clicking the heading.",
         group: "User Profile",
         default: false
       },
       {
+        id: "userProfile.scoreHitStatistics",
+        label: "Hit statistics on profile scores",
+        description: "On pinned, best performance and first place scores, and on Recent plays with failed scores (Historical): adds a colour-coded hit row (great / ok / meh / miss). Beatmap leaderboards keep hit-stat colours regardless of this option.",
+        group: "Scores",
+        default: true
+      },
+      {
+        id: "userProfile.moddedStarRating",
+        label: "Star rating with mods on profile scores",
+        description: "On profile scores, shows the star rating with the score’s mods applied. Requires osu! API credentials.",
+        group: "Scores",
+        default: true
+      },
+      {
         id: "userProfile.scorePpDecimals",
-        label: "PP decimals on scores",
-        description: "On profile best performance, pinned, first place, Expert+ Recent (Historical), and on beatmapset leaderboards: shows pp to two decimal places (e.g. 610.27pp) instead of rounding to an integer in the visible text (full value stays in the tooltip/title where the site provides it).",
+        label: "pp decimals on scores",
+        description: "On profile best performance, pinned, first place and Recent plays (Historical), and on beatmap leaderboards: shows pp to two decimal places (e.g. 610.27pp) instead of rounding to an integer in the visible text (full value stays in the tooltip/title where the site provides it).",
+        group: "Scores",
+        default: true
+      },
+      {
+        id: "userProfile.scoreCardBackgrounds",
+        label: "Beatmap background on profile scores",
+        description: "Shows the beatmap cover art behind each score in the profile Scores section and in Recent plays with failed scores (Historical).",
+        group: "Scores",
+        default: true
+      },
+      {
+        id: "userProfile.scoreCardPlaceNumber",
+        label: "Place numbers on profile scores",
+        description: "On best performance: shows #1, #2, … before the beatmap title. On Recent plays with failed scores (Historical): #1 is the most recent visible score, then #2, … (respects Show failed scores).",
+        group: "Scores",
+        default: true
+      },
+      {
+        id: "scores.periodHighlight",
+        label: "Highlight scores by date",
+        description: "In the profile Scores section: a bar that highlights scores set within a chosen period (weeks to years), with reverse and reset.",
+        group: "Scores",
+        default: true
+      },
+      {
+        id: "userProfile.recentScoresWithFails",
+        label: "Recent plays with failed scores",
+        description: "On the Historical tab, replaces osu!’s Recent plays with Expert+’s list from the API: failed scores (Show failed scores), hit statistics, pp decimals, place numbers and a score options menu. Turning it off takes full effect after reloading the profile.",
         group: "Scores",
         default: true
       },
@@ -4669,93 +4669,93 @@
       },
       {
         id: "beatmapDetail.metadataDescriptionModalButtons",
-        label: "Full description & metadata buttons",
+        label: "Full description and metadata buttons",
         description: 'On beatmapset pages, adds the "Show metadata" button under the artist and the "Full description" button in the info panel (each opens a modal).',
-        group: "Beatmap Detail",
-        default: true
-      },
-      {
-        id: "beatmapDetail.discussionDefaultToTotal",
-        label: "Beatmap discussion on Total tab",
-        description: "On beatmap discussion pages, redirect default/praise landing routes to /discussion/-/generalAll/total.",
-        group: "Beatmap Detail",
-        default: true
-      },
-      {
-        id: "beatmapDetail.omdbBeatmapsetRatings",
-        label: "OMDB difficulty ratings on beatmapset pages",
-        description: "On beatmapset pages, shows an OMDB link to this mapset above the difficulty name. Difficulty stats, distribution popover, and star voting (0 at the left edge of the first star, then 0.5–5) need an OMDB API key in Expert+ settings.",
-        group: "Beatmap Detail",
-        default: true
-      },
-      {
-        id: "beatmapDetail.beatmapPreview",
-        label: "Gameplay preview on beatmap info",
-        description: "On beatmapset info pages, adds an expandable osu!standard gameplay preview (osu-beatmap-renderer + PixiJS loaded from jsDelivr when you open it). Uses the site preview MP3.",
-        group: "Beatmap Detail",
-        default: true
-      },
-      {
-        id: "beatmapDetail.backgroundButton",
-        label: "Open background button on beatmapset pages",
-        description: "On beatmapset pages, adds a square header button that opens the full-size beatmap background (assets.ppy.sh) in a new tab.",
-        group: "Beatmap Detail",
-        default: true
-      },
-      {
-        id: "beatmapDetail.mp3DownloadButton",
-        label: "MP3 download button on beatmapset pages",
-        description: "On beatmapset pages, adds a square header button that downloads the song as MP3 from osu.ppyd.sh, a third-party site not run by ppy.",
-        group: "Beatmap Detail",
-        default: true
-      },
-      {
-        id: "beatmapDetail.beatmapsetPreviewAudioButton",
-        label: "Open preview audio button on beatmapset pages",
-        description: "On beatmapset info pages, adds a square header button (with icon) that opens the official preview MP3 at b.ppy.sh in a new tab.",
-        group: "Beatmap Detail",
-        default: false
-      },
-      {
-        id: "beatmapDetail.beatconnectDownloadButton",
-        label: "Beatconnect download on beatmapset pages",
-        description: "On beatmapset pages, shows a Beatconnect.io download button beside the main .osz download link.",
-        group: "Beatmap Detail",
-        default: true
-      },
-      {
-        id: "beatmapDetail.apiExtendedLeaderboard",
-        label: "Load up to 100 scores on beatmap leaderboard",
-        description: "On beatmap scoreboards, bumps the `/beatmaps/{id}/scores` API limit from osu!’s default (50) to 100 so the first page loads more rows at once. Turn off to use the site default.",
-        group: "Beatmap Detail",
-        default: true
-      },
-      {
-        id: "beatmapDetail.scoreboardPlayerLookup",
-        label: "Leaderboard player lookup bar",
-        description: "On beatmapset scoreboards, shows the username field to look up a player’s scores on the current difficulty; results replace the main leaderboard table (same idea as wildcard merge). Requires osu! API OAuth (Client ID + Secret) in Expert+ settings; without credentials the bar stays visible but disabled with a short notice.",
-        group: "Beatmap Detail",
-        default: true
-      },
-      {
-        id: "beatmapDetail.scoreboardModGrid",
-        label: "Grid layout for scoreboard mod filters",
-        description: "On beatmapset scoreboards, replaces the default horizontal mod strip with Expert+’s grouped grid (stable / Lazer, difficulty rows, reset, collapsible “Mod filters”). Turn off to use osu!’s original mod strip layout.",
-        group: "Beatmap Detail",
+        group: "Beatmap Page",
         default: true
       },
       {
         id: "beatmapDetail.pickerDiffNames",
-        label: "Difficulty names next to picker icons",
-        description: "On beatmapset pages, shows each difficulty’s name and nomod star rating next to its icon in the (still horizontal, wrapping) picker tray.",
-        group: "Beatmap Detail",
+        label: "Difficulty names in the difficulty selector",
+        description: "On beatmapset pages, shows each difficulty’s name and nomod star rating next to its icon in the difficulty selector.",
+        group: "Beatmap Page",
+        default: true
+      },
+      {
+        id: "beatmapDetail.omdbBeatmapsetRatings",
+        label: "OMDB ratings",
+        description: "On beatmapset pages, shows an OMDB link to this mapset above the difficulty name. Difficulty stats, distribution popover, and star voting (0 at the left edge of the first star, then 0.5–5) need an OMDB API key in Expert+ settings.",
+        group: "Beatmap Page",
+        default: true
+      },
+      {
+        id: "beatmapDetail.beatmapPreview",
+        label: "Gameplay preview",
+        description: "On beatmapset info pages, adds an expandable osu!standard gameplay preview played with the song preview. The renderer is downloaded from jsDelivr the first time you open it.",
+        group: "Beatmap Page",
+        default: true
+      },
+      {
+        id: "beatmapDetail.backgroundButton",
+        label: "Open background button",
+        description: "On beatmapset pages, adds a square header button that opens the full-size beatmap background (assets.ppy.sh) in a new tab.",
+        group: "Beatmap Page",
+        default: true
+      },
+      {
+        id: "beatmapDetail.beatmapsetPreviewAudioButton",
+        label: "Open preview audio button",
+        description: "On beatmapset info pages, adds a square header button (with icon) that opens the official preview MP3 at b.ppy.sh in a new tab.",
+        group: "Beatmap Page",
+        default: false
+      },
+      {
+        id: "beatmapDetail.mp3DownloadButton",
+        label: "MP3 download button (third-party)",
+        description: "On beatmapset pages, adds a square header button that downloads the song as MP3 from osu.ppyd.sh, a third-party site not run by ppy.",
+        group: "Beatmap Page",
+        default: true
+      },
+      {
+        id: "beatmapDetail.beatconnectDownloadButton",
+        label: "Beatconnect download button",
+        description: "On beatmapset pages, shows a Beatconnect.io download button beside the main .osz download link.",
+        group: "Beatmap Page",
+        default: true
+      },
+      {
+        id: "beatmapDetail.discussionDefaultToTotal",
+        label: "Open discussions on the Total tab",
+        description: "Opening a beatmap discussion page without choosing a tab shows the Total tab (all discussions) instead of osu!’s default.",
+        group: "Beatmap Page",
+        default: true
+      },
+      {
+        id: "beatmapDetail.apiExtendedLeaderboard",
+        label: "Show top 100 scores",
+        description: "On beatmap leaderboards, loads the top 100 scores instead of osu!’s default 50.",
+        group: "Leaderboard",
+        default: true
+      },
+      {
+        id: "beatmapDetail.scoreboardPlayerLookup",
+        label: "Player search bar",
+        description: "On beatmap leaderboards, adds a username field that looks up a player’s scores on the current difficulty and shows them in the leaderboard. Requires osu! API credentials (Client ID and Secret above).",
+        group: "Leaderboard",
+        default: true
+      },
+      {
+        id: "beatmapDetail.scoreboardModGrid",
+        label: "Grouped mod filter grid",
+        description: "On beatmap leaderboards, replaces the default horizontal mod strip with Expert+’s grouped grid (stable / Lazer, difficulty rows, reset, collapsible “Mod filters”). Turn off to use osu!’s original mod strip layout.",
+        group: "Leaderboard",
         default: true
       },
       {
         id: "beatmapDetail.scoreboardGlobalRank",
-        label: "Player global rank on leaderboard",
-        description: "On beatmap scoreboards, shows each player’s global rank next to their username. Fetches ranks via a batched `/users` API call (up to 50 players per request, throttled between batches) rather than one request per row, and caches results briefly to avoid refetching on every leaderboard refresh.",
-        group: "Beatmap Detail",
+        label: "Player global ranks",
+        description: "On beatmap leaderboards, shows each player’s global rank next to their username. Requires osu! API credentials.",
+        group: "Leaderboard",
         default: true
       }
     ];
@@ -20703,7 +20703,13 @@ ${lines.join("\n")}
       if (parts.length) parts.push(sep());
       parts.push(el("span", { class: cell.className }, String(cell.value)));
     }
-    return el("div", { class: "oep-score-stats" }, ...parts);
+    const row = el("div", { class: "oep-score-stats" }, ...parts);
+    row.style.setProperty("--oep-stats-chars", String(row.textContent.length));
+    row.style.setProperty(
+      "--oep-stats-seps",
+      String(Math.max(0, (parts.length - 1) / 2))
+    );
+    return row;
   }
   function injectStatsRow(rowEl, score) {
     if (rowEl.hasAttribute(SCORE_STATS_ATTR)) return;
@@ -20789,7 +20795,7 @@ ${lines.join("\n")}
   // src/features/profile/recent-scores/common.js
   var RECENT_FAILS_WRAP_CLASS = "oep-recent-scores-with-fails";
   var RECENT_FAILS_HEADER_CLASS = "oep-recent-fails-header";
-  var RECENT_FAILS_EMPTY_MSG = "No scores found.";
+  var RECENT_FAILS_EMPTY_MSG = "No scores in the last 24 hours.";
   var RECENT_FAILS_EMPTY_FILTERED_MSG = "No passing scores in this list (fails hidden).";
   var recentScoresFullCache = /* @__PURE__ */ new WeakMap();
   function apiScoreIsFail(score) {
@@ -22852,6 +22858,18 @@ ${lines.join("\n")}
       width: var(--oep-combo-stats-col);
       max-width: var(--oep-combo-stats-col);
       overflow: hidden;
+      container-type: inline-size;
+    }
+    /* Long counts shrink the text to fit the column on one line, down to
+       10px; past that they wrap. Each separator adds 8px of gap and margin
+       that does not scale. */
+    ${SCORE_LIST_LAYOUT_SEL} .oep-combo-stats-col .oep-score-stats {
+      font-size: clamp(
+        10px,
+        (100cqi - var(--oep-stats-seps, 0) * 8px) /
+          (var(--oep-stats-chars, 1) * 0.55),
+        13px
+      );
     }
   }
 
@@ -24039,6 +24057,13 @@ ${lines.join("\n")}
   var SECTION_TAB_LINK_SEL = `${HASH_LINK_SEL}:not([href="#"])`;
   var SECTION_COLLAPSE_CSS = `
   .${SECTION_COLLAPSE_BODY_HIDDEN_CLASS} {
+    display: none !important;
+  }
+  /* React rewrites className when a lazy-load body finishes loading, which
+     drops the class above, so the usual layout is also hidden from the page. */
+  div.js-sortable--page.${SECTION_COLLAPSE_PAGE_CLASS}
+    > .page-extra
+    > :not(${SECTION_COLLAPSE_MAIN_TITLE_SELECTOR}):not(${SECTION_COLLAPSE_SUBTITLE_SELECTOR}):not(div.u-relative:has(> ${SECTION_COLLAPSE_MAIN_TITLE_SELECTOR})) {
     display: none !important;
   }
   html.${SECTION_COLLAPSE_HARD_MODE_CLASS}
@@ -25316,6 +25341,9 @@ ${lines.join("\n")}
       flex: 1;
       min-width: 0;
     }
+    .osu-expertplus-panel__text[title] {
+      cursor: help;
+    }
     .osu-expertplus-panel__label {
       font-size: 12px;
       font-weight: 600;
@@ -25782,7 +25810,10 @@ ${lines.join("\n")}
         for (const feature of groupFeatures) {
           const text = el2(
             "div",
-            { class: "osu-expertplus-panel__text" },
+            {
+              class: "osu-expertplus-panel__text",
+              title: feature.description || null
+            },
             el2("div", { class: "osu-expertplus-panel__label" }, feature.label)
           );
           const row = el2(
