@@ -232,11 +232,10 @@ function bindProfileMediaOpenButton(opts) {
       : null;
   ro?.observe(mediaHost);
   ro?.observe(profileInfo);
-  window.addEventListener("scroll", syncOpenBtnLayout, true);
+  // The position is relative to .profile-info, so scrolling never changes it.
   window.addEventListener("resize", syncOpenBtnLayout);
 
   return () => {
-    window.removeEventListener("scroll", syncOpenBtnLayout, true);
     window.removeEventListener("resize", syncOpenBtnLayout);
     ro?.disconnect();
     btn.remove();
