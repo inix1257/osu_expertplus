@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.3.1
+// @version      0.3.2
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -3358,6 +3358,13 @@
 
   // src/core/router.js
   var log3 = createLogger("router");
+  function wrapReachesPage() {
+    try {
+      return pageWindow().history.pushState === history.pushState;
+    } catch {
+      return false;
+    }
+  }
   function runCleanup(fn) {
     try {
       fn();
@@ -3424,8 +3431,11 @@
       }
     }
     /**
-     * pushState/replaceState wrap, popstate (clears path first), + pathname poll
-     * (Inertia may cache pre-wrap history).
+     * pushState/replaceState wrap and popstate (clears path first). Under
+     * Tampermonkey in Chrome the wrap lands on the page's own history, so
+     * osu-web's Turbo visits and React tab changes all pass through it. Where it
+     * does not (Firefox Xray keeps it on the sandbox's view), a pathname poll
+     * stands in.
      */
     _watchNavigation() {
       const navigate = this._navigate.bind(this);
@@ -3440,14 +3450,16 @@
         this._currentPath = null;
         navigate(location.pathname);
       });
-      let polledPath = location.pathname;
-      setInterval(() => {
-        const path = location.pathname;
-        if (path !== polledPath) {
-          polledPath = path;
-          navigate(path);
-        }
-      }, 200);
+      if (!wrapReachesPage()) {
+        let polledPath = location.pathname;
+        setInterval(() => {
+          const path = location.pathname;
+          if (path !== polledPath) {
+            polledPath = path;
+            navigate(path);
+          }
+        }, 200);
+      }
     }
   };
 
@@ -5167,7 +5179,8 @@
     const TIP_CLASS = "oep-nav-recent-tip";
     const GAP_PX = 4;
     const TIP_OFFSET_PX = 16;
-    const TICK_MS = 1e3;
+    const FALLBACK_TICK_MS = 1e4;
+    const CONTAINER_SEL = ".nav2 .nav2__notification-container";
     const PINNED_CLASS = "js-header-is-pinned";
     const HEADER_TRANSITION_MS = 300;
     const TRUNCATION_SUFFIX = "...";
@@ -5348,11 +5361,24 @@
     }
     function install2(settingsApi) {
       let timer = null;
+      let navAbort = null;
       let pill = null;
       let tip = null;
       let current = null;
       let hovering = false;
       const onResize = () => tick();
+      let tickQueued = false;
+      function queueTick() {
+        if (tickQueued) return;
+        tickQueued = true;
+        setTimeout(() => {
+          tickQueued = false;
+          if (timer) tick();
+        }, 50);
+      }
+      const counterObserver = new MutationObserver(queueTick);
+      let watchedContainer = null;
+      let watchedBody = null;
       let headerChangedAt = -Infinity;
       let wasPinned = false;
       let settleTimer = null;
@@ -5438,10 +5464,40 @@
         const r = twitter?.getBoundingClientRect();
         return r && r.width > 0 ? r : container.getBoundingClientRect();
       }
+      function watchHeader(container) {
+        if (container !== watchedContainer) {
+          counterObserver.disconnect();
+          watchedContainer = container;
+          if (container) {
+            counterObserver.observe(container, {
+              subtree: true,
+              childList: true,
+              characterData: true
+            });
+          }
+        }
+        if (document.body !== watchedBody) {
+          bodyObserver.disconnect();
+          watchedBody = document.body;
+          wasPinned = document.body.classList.contains(PINNED_CLASS);
+          bodyObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ["class"]
+          });
+        }
+      }
+      function setStyle(node, prop, value) {
+        if (node.style[prop] !== value) node.style[prop] = value;
+      }
+      function onVisibility() {
+        if (document.visibilityState === "visible") tick();
+      }
+      function onTransitionEnd(e) {
+        if (e.target instanceof Element && e.target.closest(".nav2")) queueTick();
+      }
       function tick() {
-        const container = document.querySelector(
-          ".nav2 .nav2__notification-container"
-        );
+        const container = document.querySelector(CONTAINER_SEL);
+        watchHeader(container);
         if (!container?.parentElement) {
           pill?.remove();
           pill = null;
@@ -5472,26 +5528,43 @@
         const b = base.getBoundingClientRect();
         const r = container.getBoundingClientRect();
         const left = leftEdgeRect(container).left;
-        p.style.left = `${left - b.left - base.clientLeft}px`;
-        p.style.width = `${r.right - left}px`;
-        p.style.top = `${r.bottom - b.top - base.clientTop + GAP_PX}px`;
+        setStyle(p, "left", `${left - b.left - base.clientLeft}px`);
+        setStyle(p, "width", `${r.right - left}px`);
+        setStyle(p, "top", `${r.bottom - b.top - base.clientTop + GAP_PX}px`);
       }
       function start2() {
         if (timer) return;
         style2.inject();
-        wasPinned = document.body.classList.contains(PINNED_CLASS);
-        bodyObserver.observe(document.body, {
-          attributes: true,
-          attributeFilter: ["class"]
-        });
+        timer = setInterval(() => {
+          if (document.visibilityState === "visible") tick();
+        }, FALLBACK_TICK_MS);
+        navAbort = new AbortController();
+        OsuExpertPlus.core.observe.subscribe(
+          {
+            selector: ".nav2",
+            schedule: 50,
+            signal: navAbort.signal,
+            label: "header/nav-recent-notification"
+          },
+          tick
+        );
         tick();
-        timer = setInterval(tick, TICK_MS);
         window.addEventListener("resize", onResize);
+        document.addEventListener("visibilitychange", onVisibility);
+        document.addEventListener("transitionend", onTransitionEnd, true);
+        document.fonts?.ready.then(() => timer && tick());
       }
       function stop() {
         clearInterval(timer);
         timer = null;
+        navAbort?.abort();
+        navAbort = null;
+        counterObserver.disconnect();
+        watchedContainer = null;
         bodyObserver.disconnect();
+        watchedBody = null;
+        document.removeEventListener("visibilitychange", onVisibility);
+        document.removeEventListener("transitionend", onTransitionEnd, true);
         clearTimeout(settleTimer);
         settleTimer = null;
         window.removeEventListener("resize", onResize);
@@ -19186,15 +19259,24 @@ ${lines.join("\n")}
     const m = location.pathname.match(/^\/users\/(\d+)/);
     return m ? m[1] : null;
   }
+  var initialDataCache = /* @__PURE__ */ new WeakMap();
+  function parseInitialDataNode(node) {
+    const raw = node.dataset.initialData ?? "";
+    const cached = initialDataCache.get(node);
+    if (cached && cached.raw === raw) return cached.data;
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (_) {
+      data = null;
+    }
+    initialDataCache.set(node, { raw, data });
+    return data;
+  }
   function parseProfileInitialData() {
     const nodes = document.querySelectorAll(INITIAL_DATA_SEL);
     for (const node of nodes) {
-      let data;
-      try {
-        data = JSON.parse(node.dataset.initialData);
-      } catch (_) {
-        continue;
-      }
+      const data = parseInitialDataNode(node);
       if (data?.user?.id != null) return data;
     }
     return null;
@@ -20354,10 +20436,8 @@ ${lines.join("\n")}
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncOpenBtnLayout) : null;
     ro?.observe(mediaHost);
     ro?.observe(profileInfo);
-    window.addEventListener("scroll", syncOpenBtnLayout, true);
     window.addEventListener("resize", syncOpenBtnLayout);
     return () => {
-      window.removeEventListener("scroll", syncOpenBtnLayout, true);
       window.removeEventListener("resize", syncOpenBtnLayout);
       ro?.disconnect();
       btn.remove();
