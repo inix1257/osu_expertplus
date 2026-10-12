@@ -40,6 +40,22 @@ export const style = manageStyle(
     z-index: 1;
     isolation: isolate;
   }
+  /* Narrow layout (osu-web's < 900px): the status row (status, dots, star
+     range) is absolutely placed right under the main area (top: 100%) and the
+     panel normally reserves --mobile-extra-bar-height for it. Our rows make the
+     main area taller, so reserve the bar below whatever height it ends up (#2). */
+  @media (max-width: 899px) {
+    .beatmapset-panel:has(.${BLOCK_CLASS}),
+    .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}),
+    .beatmapset-panel:has(.${STAR_RANGE_CLASS}) {
+      padding-bottom: var(--mobile-extra-bar-height);
+    }
+    .beatmapset-panel:has(.${BLOCK_CLASS}) .beatmapset-panel__content,
+    .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}) .beatmapset-panel__content,
+    .beatmapset-panel:has(.${STAR_RANGE_CLASS}) .beatmapset-panel__content {
+      min-height: var(--main-height);
+    }
+  }
   .beatmapset-panel:has(.${BLOCK_CLASS}) .beatmapset-panel__play-container,
   .beatmapset-panel:has(.${SOURCE_SLOT_CLASS}) .beatmapset-panel__play-container,
   .beatmapset-panel:has(.${STAR_RANGE_CLASS}) .beatmapset-panel__play-container,
