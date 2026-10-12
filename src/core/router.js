@@ -1,6 +1,7 @@
 /** URL → page module; re-inits on SPA navigation. */
 
 import { createLogger } from "./log.js";
+import { pageWindow } from "./page-window.js";
 import {
   ACCOUNT_EDIT_RE,
   BEATMAPSET_DISCUSSION_RE,
@@ -10,6 +11,15 @@ import {
 } from "./routes.js";
 
 const log = createLogger("router");
+
+/** Whether page code calling history.pushState runs our wrap. */
+function wrapReachesPage() {
+  try {
+    return pageWindow().history.pushState === history.pushState;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Context passed to `init(match, ctx)`. `signal` aborts when the page is left,
@@ -102,9 +112,11 @@ export class Router {
   }
 
   /**
-   * pushState/replaceState wrap and popstate (clears path first). The wrap
-   * lands on the page's own history, so osu-web's Turbo visits and React tab
-   * changes all pass through it; no pathname poll is needed.
+   * pushState/replaceState wrap and popstate (clears path first). Under
+   * Tampermonkey in Chrome the wrap lands on the page's own history, so
+   * osu-web's Turbo visits and React tab changes all pass through it. Where it
+   * does not (Firefox Xray keeps it on the sandbox's view), a pathname poll
+   * stands in.
    */
   _watchNavigation() {
     const navigate = this._navigate.bind(this);
@@ -124,5 +136,16 @@ export class Router {
       this._currentPath = null;
       navigate(location.pathname);
     });
+
+    if (!wrapReachesPage()) {
+      let polledPath = location.pathname;
+      setInterval(() => {
+        const path = location.pathname;
+        if (path !== polledPath) {
+          polledPath = path;
+          navigate(path);
+        }
+      }, 200);
+    }
   }
 }
