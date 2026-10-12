@@ -12,7 +12,8 @@ import {
 import { _applyApiMaxComboToComboInline } from "../score-stats.js";
 export const RECENT_FAILS_WRAP_CLASS = "oep-recent-scores-with-fails";
 export const RECENT_FAILS_HEADER_CLASS = "oep-recent-fails-header";
-export const RECENT_FAILS_EMPTY_MSG = "No scores found.";
+/** The recent scores endpoints only return the last 24 hours, as on osu-web. */
+export const RECENT_FAILS_EMPTY_MSG = "No scores in the last 24 hours.";
 export const RECENT_FAILS_EMPTY_FILTERED_MSG =
   "No passing scores in this list (fails hidden).";
 
