@@ -212,7 +212,8 @@ export function buildScoreOptionsMenu(score) {
       class: SCORE_OPTIONS_BTN_CLASS,
       title: "Options",
     },
-    el("i", { class: "fas fa-ellipsis-h" }),
+    // Vertical, like the menus on osu-web's own score rows.
+    el("i", { class: "fas fa-ellipsis-v" }),
   );
   btn.addEventListener("click", (e) => {
     e.stopPropagation();

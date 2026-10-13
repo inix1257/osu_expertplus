@@ -59,6 +59,85 @@ function ensurePlayDetailStylesForRecent() {
 
 let _recentFailsDebounce = null;
 
+/** Rows shown at first and added per "show more", like osu-web's Recent plays. */
+const RECENT_INITIAL_ROWS = 5;
+const RECENT_MORE_ROWS = 20;
+const RECENT_ROW_HIDDEN_CLASS = "oep-recent-score-row--hidden";
+const RECENT_SHOW_MORE_CLASS = "oep-recent-show-more";
+/**
+ * Rows the viewer has revealed per list, kept when the list is redrawn
+ * (e.g. toggling failed scores).
+ * @type {WeakMap<HTMLElement, number>}
+ */
+const visibleRowsByList = new WeakMap();
+
+/** osu-web's profile "show more" button markup. */
+function buildShowMoreButton() {
+  const icon = (side) =>
+    el(
+      "span",
+      {
+        class: `show-more-link__label-icon show-more-link__label-icon--${side}`,
+      },
+      el("span", { class: "fas fa-angle-down" }),
+    );
+  return el(
+    "button",
+    {
+      type: "button",
+      class: `show-more-link show-more-link--profile-page ${RECENT_SHOW_MORE_CLASS}`,
+    },
+    el(
+      "span",
+      { class: "show-more-link__label" },
+      icon("left"),
+      el("span", { class: "show-more-link__label-text" }, "show more"),
+      icon("right"),
+    ),
+  );
+}
+
+/**
+ * Show the first rows of the list and a "show more" button after it for the
+ * rest (#10). Hidden rows are display:none, so their lazy SR / background
+ * loading waits until they are revealed.
+ * @param {HTMLElement} innerList
+ * @param {HTMLElement[]} rows
+ */
+function limitRecentRows(innerList, rows) {
+  let btn = innerList.nextElementSibling;
+  if (!btn?.classList.contains(RECENT_SHOW_MORE_CLASS)) {
+    btn = buildShowMoreButton();
+    btn.addEventListener("click", () => {
+      const list = btn.previousElementSibling;
+      if (!(list instanceof HTMLElement)) return;
+      const shown =
+        (visibleRowsByList.get(list) ?? RECENT_INITIAL_ROWS) + RECENT_MORE_ROWS;
+      visibleRowsByList.set(list, shown);
+      applyRowLimit(list, btn);
+    });
+    innerList.after(btn);
+  }
+  if (!visibleRowsByList.has(innerList)) {
+    visibleRowsByList.set(innerList, RECENT_INITIAL_ROWS);
+  }
+  applyRowLimit(innerList, btn, rows);
+}
+
+/**
+ * @param {HTMLElement} list
+ * @param {HTMLElement} btn
+ * @param {HTMLElement[]} [rows]
+ */
+function applyRowLimit(list, btn, rows) {
+  const all = rows ?? [...list.querySelectorAll(":scope > .play-detail")];
+  const shown = visibleRowsByList.get(list) ?? RECENT_INITIAL_ROWS;
+  all.forEach((r, i) =>
+    r.classList.toggle(RECENT_ROW_HIDDEN_CLASS, i >= shown),
+  );
+  btn.hidden = all.length <= shown;
+}
+
 /**
  * osu-web's Recent heading and list each wrap replaced, put back where the
  * wrap is when Expert+ Recent is turned off (B102).
@@ -100,6 +179,7 @@ function populateRecentScoresInnerList(
     innerList.appendChild(
       el("p", { class: "oep-recent-fails-empty" }, emptyMessage),
     );
+    limitRecentRows(innerList, []);
     return;
   }
   const tpl = modTemplate instanceof HTMLElement ? modTemplate : null;
@@ -122,6 +202,7 @@ function populateRecentScoresInnerList(
 
     innerList.appendChild(r);
   });
+  limitRecentRows(innerList, rows);
   decorateScoreList(
     { listEl: innerList, type: RECENT_SECTION_TYPE },
     { revertOff: true },

@@ -467,6 +467,9 @@ const PLAY_DETAIL_CSS = `
   .oep-recent-score-card-link {
     cursor: pointer;
   }
+  .oep-recent-score-row--hidden {
+    display: none !important;
+  }
 
   .oep-score-options-wrap {
     position: relative;
