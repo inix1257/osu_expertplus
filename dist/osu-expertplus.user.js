@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.3.3
+// @version      0.3.4
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -22213,7 +22213,8 @@ ${lines.join("\n")}
         class: SCORE_OPTIONS_BTN_CLASS,
         title: "Options"
       },
-      el("i", { class: "fas fa-ellipsis-h" })
+      // Vertical, like the menus on osu-web's own score rows.
+      el("i", { class: "fas fa-ellipsis-v" })
     );
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -23260,6 +23261,9 @@ ${lines.join("\n")}
   .oep-recent-score-card-link {
     cursor: pointer;
   }
+  .oep-recent-score-row--hidden {
+    display: none !important;
+  }
 
   .oep-score-options-wrap {
     position: relative;
@@ -23340,6 +23344,60 @@ ${lines.join("\n")}
     playDetailStyle.inject();
   }
   var _recentFailsDebounce = null;
+  var RECENT_INITIAL_ROWS = 5;
+  var RECENT_MORE_ROWS = 50;
+  var RECENT_ROW_HIDDEN_CLASS = "oep-recent-score-row--hidden";
+  var RECENT_SHOW_MORE_CLASS = "oep-recent-show-more";
+  var visibleRowsByList = /* @__PURE__ */ new WeakMap();
+  function buildShowMoreButton() {
+    const icon = (side) => el(
+      "span",
+      {
+        class: `show-more-link__label-icon show-more-link__label-icon--${side}`
+      },
+      el("span", { class: "fas fa-angle-down" })
+    );
+    return el(
+      "button",
+      {
+        type: "button",
+        class: `show-more-link show-more-link--profile-page ${RECENT_SHOW_MORE_CLASS}`
+      },
+      el(
+        "span",
+        { class: "show-more-link__label" },
+        icon("left"),
+        el("span", { class: "show-more-link__label-text" }, "show more"),
+        icon("right")
+      )
+    );
+  }
+  function limitRecentRows(innerList, rows) {
+    let btn = innerList.nextElementSibling;
+    if (!btn?.classList.contains(RECENT_SHOW_MORE_CLASS)) {
+      btn = buildShowMoreButton();
+      btn.addEventListener("click", () => {
+        const list = btn.previousElementSibling;
+        if (!(list instanceof HTMLElement)) return;
+        const shown = (visibleRowsByList.get(list) ?? RECENT_INITIAL_ROWS) + RECENT_MORE_ROWS;
+        visibleRowsByList.set(list, shown);
+        applyRowLimit(list, btn);
+      });
+      innerList.after(btn);
+    }
+    if (!visibleRowsByList.has(innerList)) {
+      visibleRowsByList.set(innerList, RECENT_INITIAL_ROWS);
+    }
+    applyRowLimit(innerList, btn, rows);
+  }
+  function applyRowLimit(list, btn, rows) {
+    const all = rows ?? [...list.querySelectorAll(":scope > .play-detail")];
+    const shown = visibleRowsByList.get(list) ?? RECENT_INITIAL_ROWS;
+    all.forEach(
+      (r, i) => r.classList.toggle(RECENT_ROW_HIDDEN_CLASS, i >= shown)
+    );
+    btn.hidden = all.length <= shown;
+  }
   var officialRecentByWrap = /* @__PURE__ */ new WeakMap();
   function replaceOfficialRecentPlays(wrap, listRoot) {
     officialRecentByWrap.set(wrap, removeOfficialRecentPlaysSection(listRoot));
@@ -23358,6 +23416,7 @@ ${lines.join("\n")}
       innerList.appendChild(
         el("p", { class: "oep-recent-fails-empty" }, emptyMessage)
       );
+      limitRecentRows(innerList, []);
       return;
     }
     const tpl = modTemplate instanceof HTMLElement ? modTemplate : null;
@@ -23377,6 +23436,7 @@ ${lines.join("\n")}
       }
       innerList.appendChild(r);
     });
+    limitRecentRows(innerList, rows);
     decorateScoreList(
       { listEl: innerList, type: RECENT_SECTION_TYPE },
       { revertOff: true }
