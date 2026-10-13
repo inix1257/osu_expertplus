@@ -61,7 +61,7 @@ let _recentFailsDebounce = null;
 
 /** Rows shown at first and added per "show more", like osu-web's Recent plays. */
 const RECENT_INITIAL_ROWS = 5;
-const RECENT_MORE_ROWS = 20;
+const RECENT_MORE_ROWS = 50;
 const RECENT_ROW_HIDDEN_CLASS = "oep-recent-score-row--hidden";
 const RECENT_SHOW_MORE_CLASS = "oep-recent-show-more";
 /**
