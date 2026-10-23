@@ -19158,8 +19158,9 @@ ${lines.join("\n")}
   .${PROFILE_BADGES_WRAP_CLASS}--collapsed .profile-badges {
     display: none;
   }
+  /* Collapsed: no height of its own; the toggle floats over the next section. */
   .${PROFILE_BADGES_WRAP_CLASS}--collapsed {
-    min-height: 36px;
+    height: 0;
   }
   .oep-profile-badges-toggle {
     position: absolute;
