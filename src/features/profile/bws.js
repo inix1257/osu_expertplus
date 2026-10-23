@@ -124,8 +124,10 @@ function bwsBadgeExcludedByKeywords(descriptionPlain) {
 }
 
 function analyzeBadgesForBws() {
+  // osu-web now renders each badge as `img.profile-badge`; older markup used
+  // `.profile-badges__badge`.
   const nodes = document.querySelectorAll(
-    ".profile-badges .profile-badges__badge",
+    ".profile-badges .profile-badge, .profile-badges .profile-badges__badge",
   );
   let total = 0;
   let eligible = 0;

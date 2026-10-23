@@ -46,7 +46,7 @@ function renderProfile({ globalRank = 10000, badges = [] } = {}) {
     <div class="profile-badges">${badges
       .map(
         (b) =>
-          `<a class="profile-badges__badge" data-html-title="${b.replace(/"/g, "&quot;")}"></a>`,
+          `<img class="profile-badge" data-html-title="${b.replace(/"/g, "&quot;")}"></a>`,
       )
       .join("")}</div>
     <div class="profile-detail-stats__chart-numbers--top">
