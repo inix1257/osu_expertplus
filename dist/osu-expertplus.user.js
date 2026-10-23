@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.3.4
+// @version      0.3.5
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -19476,7 +19476,7 @@ ${lines.join("\n")}
   }
   function analyzeBadgesForBws() {
     const nodes = document.querySelectorAll(
-      ".profile-badges .profile-badges__badge"
+      ".profile-badges .profile-badge, .profile-badges .profile-badges__badge"
     );
     let total = 0;
     let eligible = 0;
