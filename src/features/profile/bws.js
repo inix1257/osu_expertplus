@@ -105,15 +105,28 @@ function bwsStripHtmlToText(htmlOrText) {
   return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
 }
 
+const BWS_BADGE_TITLE_SELECTOR =
+  "[title], [data-html-title], [data-orig-title]";
+
+/**
+ * Description of one badge. The title can sit on the badge itself or on a
+ * descendant: osu-web renders `div.profile-badge > a > img.profile-badge__image`
+ * with `data-html-title` on the img.
+ */
 function bwsBadgeDescriptionText(badgeEl) {
   if (!(badgeEl instanceof HTMLElement)) return "";
   const parts = [];
-  const t1 = badgeEl.getAttribute("title");
-  if (t1) parts.push(t1);
-  const ht = badgeEl.getAttribute("data-html-title");
-  if (ht) parts.push(bwsStripHtmlToText(ht));
-  const ot = badgeEl.getAttribute("data-orig-title");
-  if (ot) parts.push(ot);
+  for (const n of [
+    badgeEl,
+    ...badgeEl.querySelectorAll(BWS_BADGE_TITLE_SELECTOR),
+  ]) {
+    const t1 = n.getAttribute("title");
+    if (t1) parts.push(t1);
+    const ht = n.getAttribute("data-html-title");
+    if (ht) parts.push(bwsStripHtmlToText(ht));
+    const ot = n.getAttribute("data-orig-title");
+    if (ot) parts.push(ot);
+  }
   return parts.join(" ").trim();
 }
 
