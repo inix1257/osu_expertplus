@@ -35,6 +35,7 @@ const BWS_BADGE_EXCLUSION_PHRASES = [
   "community choice",
   "pending cup",
   "newspaper cup",
+  "locus",
 ];
 
 const BWS_RANKING_CSS = `
