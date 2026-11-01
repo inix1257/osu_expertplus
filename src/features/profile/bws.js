@@ -36,6 +36,17 @@ const BWS_BADGE_EXCLUSION_PHRASES = [
   "pending cup",
   "newspaper cup",
   "locus",
+  "labour of love",
+  "community favourite",
+  "skinning",
+  "project loved",
+  "moderation",
+  "management",
+  "developer",
+  "community projects",
+  // Score charts and playlist leaderboards, not tournaments.
+  "restricted chart",
+  "top scorer",
 ];
 
 const BWS_RANKING_CSS = `
