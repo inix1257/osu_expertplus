@@ -402,28 +402,10 @@ export function paintOmdbStarUnits(units, score) {
 }
 
 /**
- * OMDB mapset link + short hint when the feature is on but no API key is set.
- * @returns {() => void}
+ * Vote-row stand-in without an API key: points at the settings key field.
+ * @returns {HTMLElement}
  */
-export function mountOmdbBeatmapsetLinkOnlyRow(header, beatmapsetId) {
-  const diffName = header.querySelector(".beatmapset-header__diff-name");
-  const box = header.querySelector(".beatmapset-header__beatmap-picker-box");
-  if (!diffName || !box) return () => {};
-
-  const stale = box.querySelector('[data-oep-omdb-row="1"]');
-  if (stale) stale.remove();
-
-  const omdbLabel = el(
-    "a",
-    {
-      class: `${OEP_OMDB_ROW_CLASS}__label`,
-      href: `https://omdb.nyahh.net/mapset/${encodeURIComponent(String(beatmapsetId))}`,
-      target: "_blank",
-      rel: "noopener noreferrer",
-      title: "Open this beatmapset on OMDB",
-    },
-    "OMDB",
-  );
+function buildOmdbKeyHintRow() {
   const keyLink = el(
     "a",
     {
@@ -438,34 +420,28 @@ export function mountOmdbBeatmapsetLinkOnlyRow(header, beatmapsetId) {
     e.stopPropagation();
     OsuExpertPlus.settingsPanel?.open?.();
   });
-  const bodyEl = el(
-    "span",
-    {
-      class: `${OEP_OMDB_ROW_CLASS}__body ${OEP_OMDB_ROW_CLASS}__body--muted`,
-    },
-    "Add an ",
-    keyLink,
-    " to load OMDB ratings here",
+  return el(
+    "div",
+    { class: OEP_OMDB_VOTE_CLASS, "data-oep-omdb-key-hint": "1" },
+    el(
+      "span",
+      { class: `${OEP_OMDB_VOTE_CLASS}__status` },
+      "Add an ",
+      keyLink,
+      " to rate difficulties here",
+    ),
   );
-  const statsRow = el("div", { class: OEP_OMDB_ROW_CLASS }, omdbLabel, bodyEl);
-  const wrap = el("div", {
-    class: OEP_OMDB_WRAP_CLASS,
-    "data-oep-omdb-row": "1",
-  });
-  wrap.appendChild(statsRow);
-  box.insertBefore(wrap, diffName);
-
-  return () => {
-    wrap.remove();
-  };
 }
 
 /**
  * Inserts an OMDB stats row above `.beatmapset-header__diff-name`.
  * Tracks hovered vs active picker link (same behaviour as the difficulty title).
+ * Without an API key the row is read-only: each shown difficulty is fetched
+ * from the public endpoint and voting is replaced by a key hint.
  * @returns {() => void}
  */
 export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
+  const readOnly = !omdb().isConfigured();
   const diffName = header.querySelector(".beatmapset-header__diff-name");
   const picker = header.querySelector(PICKER_SEL);
   const box = header.querySelector(".beatmapset-header__beatmap-picker-box");
@@ -658,7 +634,7 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
     "data-oep-omdb-row": "1",
   });
   wrap.appendChild(statsRow);
-  wrap.appendChild(voteRow);
+  wrap.appendChild(readOnly ? buildOmdbKeyHintRow() : voteRow);
   box.insertBefore(wrap, diffName);
 
   const beatmapIdsInSet = new Set();
@@ -676,6 +652,12 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
 
   /** @type {Map<number, object>} */
   let byBeatmapId = new Map();
+  /**
+   * Read-only mode: per-difficulty public requests, kept for this mount so
+   * picker hovers fetch each difficulty once.
+   * @type {Map<number, { state: "loading"|"ready"|"error", entry?: object|null, error?: string }>}
+   */
+  const publicById = new Map();
   let hoveredBeatmapId = null;
   /** @type {number|null} */
   let hoverStarScore = null;
@@ -723,8 +705,62 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
     }
   }
 
+  /**
+   * @param {number} id
+   */
+  function loadPublicBeatmap(id) {
+    if (publicById.has(id)) return;
+    publicById.set(id, { state: "loading" });
+    omdb()
+      .fetchPublicBeatmapRatings(id)
+      .then(
+        (entry) => publicById.set(id, { state: "ready", entry }),
+        (err) =>
+          publicById.set(id, {
+            state: "error",
+            error: err?.message
+              ? String(err.message)
+              : "Could not load OMDB ratings.",
+          }),
+      )
+      .then(() => {
+        if (currentDisplayedBeatmapId() === id) scheduleSync();
+      });
+  }
+
+  function syncPublicDisplay() {
+    const id = currentDisplayedBeatmapId();
+    if (id == null) {
+      bodyEl.textContent = "";
+      bodyEl.classList.add(`${OEP_OMDB_ROW_CLASS}__body--muted`);
+      return;
+    }
+    loadPublicBeatmap(id);
+    const st = publicById.get(id);
+    if (st?.state === "ready") {
+      renderOmdbRatingRowBody(
+        bodyEl,
+        st.entry ?? undefined,
+        omdbDistUi,
+        header,
+      );
+      return;
+    }
+    bodyEl.textContent =
+      st?.state === "error" ? st.error || "" : "Loading OMDB…";
+    bodyEl.classList.toggle(
+      `${OEP_OMDB_ROW_CLASS}__body--error`,
+      st?.state === "error",
+    );
+    bodyEl.classList.remove(`${OEP_OMDB_ROW_CLASS}__body--muted`);
+  }
+
   function syncDisplay() {
     if (disposed || !pathRe.test(location.pathname)) return;
+    if (readOnly) {
+      syncPublicDisplay();
+      return;
+    }
     if (loadState !== "ready") {
       bodyEl.textContent = loadState === "error" ? loadError : "Loading OMDB…";
       bodyEl.classList.toggle(
@@ -874,30 +910,32 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
   voteControls.addEventListener("mouseleave", onVoteControlsMouseLeave);
   clearBtn.addEventListener("click", () => submitVote(-2));
 
-  omdb()
-    .fetchBeatmapsetRatings(beatmapsetId)
-    .then((list) => {
-      if (disposed || !pathRe.test(location.pathname)) return;
-      byBeatmapId = new Map();
-      for (const item of list || []) {
-        const bid = item?.BeatmapID ?? item?.beatmapID ?? item?.beatmap_id;
-        if (bid != null) byBeatmapId.set(Number(bid), item);
-      }
-      omdbSetFetchSucceeded = true;
-      loadState = "ready";
-      bodyEl.classList.remove(`${OEP_OMDB_ROW_CLASS}__body--error`);
-      voteRow.style.display = "";
-      syncDisplay();
-    })
-    .catch((err) => {
-      if (disposed) return;
-      loadState = "error";
-      loadError = err?.message
-        ? String(err.message)
-        : "Could not load OMDB ratings.";
-      voteRow.style.display = "none";
-      syncDisplay();
-    });
+  if (!readOnly) {
+    omdb()
+      .fetchBeatmapsetRatings(beatmapsetId)
+      .then((list) => {
+        if (disposed || !pathRe.test(location.pathname)) return;
+        byBeatmapId = new Map();
+        for (const item of list || []) {
+          const bid = item?.BeatmapID ?? item?.beatmapID ?? item?.beatmap_id;
+          if (bid != null) byBeatmapId.set(Number(bid), item);
+        }
+        omdbSetFetchSucceeded = true;
+        loadState = "ready";
+        bodyEl.classList.remove(`${OEP_OMDB_ROW_CLASS}__body--error`);
+        voteRow.style.display = "";
+        syncDisplay();
+      })
+      .catch((err) => {
+        if (disposed) return;
+        loadState = "error";
+        loadError = err?.message
+          ? String(err.message)
+          : "Could not load OMDB ratings.";
+        voteRow.style.display = "none";
+        syncDisplay();
+      });
+  }
 
   picker.addEventListener("mouseover", onPickerMouseOver);
   picker.addEventListener("mouseleave", onPickerMouseLeave);
@@ -925,15 +963,13 @@ export function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
 }
 
 /**
- * The OMDB row: ratings and voting with an OMDB API key, otherwise a link to
- * the beatmapset on OMDB.
+ * The OMDB row: ratings and voting with an OMDB API key, otherwise read-only
+ * ratings from the public endpoint.
  * @param {HTMLElement} header  `.beatmapset-header`
  * @param {string} beatmapsetId
  * @param {RegExp} pathRe
  * @returns {() => void}
  */
 export function mountOmdbRow(header, beatmapsetId, pathRe) {
-  return omdb().isConfigured()
-    ? mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe)
-    : mountOmdbBeatmapsetLinkOnlyRow(header, beatmapsetId);
+  return mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe);
 }

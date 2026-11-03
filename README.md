@@ -40,7 +40,7 @@ A userscript for [osu.ppy.sh](https://osu.ppy.sh). Some QoL changes are included
 
 - Show copyable beatmap metadata and full description
 - Show username and avatar on favourite list
-- OMDB integration: difficulty ratings & star voting (needs an OMDB API key)
+- OMDB integration: difficulty ratings & star voting (voting needs an OMDB API key)
 - Gameplay preview on beatmapset pages
 - Improved mod selection on beatmapset pages
 - Period filter for recent scores on leaderboard
