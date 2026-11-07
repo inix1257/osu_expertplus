@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.3.6
+// @version      0.3.7
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -4515,6 +4515,35 @@
       }
       return list;
     }
+    function fetchPublicBeatmapRatings(beatmapId) {
+      const url = `${API_BASE}/api/public/v1/beatmap/${encodeURIComponent(String(beatmapId))}`;
+      return new Promise((resolve2, reject) => {
+        GM_xmlhttpRequest({
+          method: "GET",
+          url,
+          onload(r) {
+            const raw = String(r.responseText || "");
+            if (r.status < 200 || r.status >= 300) {
+              reject(new Error(`OMDB HTTP ${r.status}`));
+              return;
+            }
+            let data;
+            try {
+              data = JSON.parse(raw);
+            } catch {
+              reject(new Error("OMDB returned an unexpected response."));
+              return;
+            }
+            if (data?.error === "Difficulty not found") resolve2(null);
+            else if (data?.error) reject(new Error(`OMDB: ${data.error}`));
+            else resolve2(data);
+          },
+          onerror: () => reject(new Error("Could not reach OMDB.")),
+          ontimeout: () => reject(new Error("OMDB timed out.")),
+          timeout: 2e4
+        });
+      });
+    }
     async function rateBeatmap(beatmapId, score) {
       const key = getApiKey();
       if (!key) throw new Error("OMDB API key not configured");
@@ -4548,6 +4577,7 @@
       clearApiKey,
       isConfigured,
       fetchBeatmapsetRatings,
+      fetchPublicBeatmapRatings,
       rateBeatmap
     };
   })();
@@ -8494,24 +8524,7 @@
       }
     }
   }
-  function mountOmdbBeatmapsetLinkOnlyRow(header, beatmapsetId) {
-    const diffName = header.querySelector(".beatmapset-header__diff-name");
-    const box = header.querySelector(".beatmapset-header__beatmap-picker-box");
-    if (!diffName || !box) return () => {
-    };
-    const stale = box.querySelector('[data-oep-omdb-row="1"]');
-    if (stale) stale.remove();
-    const omdbLabel = el(
-      "a",
-      {
-        class: `${OEP_OMDB_ROW_CLASS}__label`,
-        href: `https://omdb.nyahh.net/mapset/${encodeURIComponent(String(beatmapsetId))}`,
-        target: "_blank",
-        rel: "noopener noreferrer",
-        title: "Open this beatmapset on OMDB"
-      },
-      "OMDB"
-    );
+  function buildOmdbKeyHintRow() {
     const keyLink = el(
       "a",
       {
@@ -8526,27 +8539,20 @@
       e.stopPropagation();
       OsuExpertPlus.settingsPanel?.open?.();
     });
-    const bodyEl = el(
-      "span",
-      {
-        class: `${OEP_OMDB_ROW_CLASS}__body ${OEP_OMDB_ROW_CLASS}__body--muted`
-      },
-      "Add an ",
-      keyLink,
-      " to load OMDB ratings here"
+    return el(
+      "div",
+      { class: OEP_OMDB_VOTE_CLASS, "data-oep-omdb-key-hint": "1" },
+      el(
+        "span",
+        { class: `${OEP_OMDB_VOTE_CLASS}__status` },
+        "Add an ",
+        keyLink,
+        " to rate difficulties here"
+      )
     );
-    const statsRow = el("div", { class: OEP_OMDB_ROW_CLASS }, omdbLabel, bodyEl);
-    const wrap = el("div", {
-      class: OEP_OMDB_WRAP_CLASS,
-      "data-oep-omdb-row": "1"
-    });
-    wrap.appendChild(statsRow);
-    box.insertBefore(wrap, diffName);
-    return () => {
-      wrap.remove();
-    };
   }
   function mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) {
+    const readOnly = !omdb().isConfigured();
     const diffName = header.querySelector(".beatmapset-header__diff-name");
     const picker = header.querySelector(PICKER_SEL);
     const box = header.querySelector(".beatmapset-header__beatmap-picker-box");
@@ -8724,7 +8730,7 @@
       "data-oep-omdb-row": "1"
     });
     wrap.appendChild(statsRow);
-    wrap.appendChild(voteRow);
+    wrap.appendChild(readOnly ? buildOmdbKeyHintRow() : voteRow);
     box.insertBefore(wrap, diffName);
     const beatmapIdsInSet = /* @__PURE__ */ new Set();
     for (const b of readBeatmapsetJson()?.beatmaps ?? []) {
@@ -8734,6 +8740,7 @@
     let loadState = "loading";
     let loadError = "";
     let byBeatmapId = /* @__PURE__ */ new Map();
+    const publicById = /* @__PURE__ */ new Map();
     let hoveredBeatmapId = null;
     let hoverStarScore = null;
     let voteBusy = false;
@@ -8775,8 +8782,50 @@
         clearBtn.setAttribute("aria-hidden", "true");
       }
     }
+    function loadPublicBeatmap(id) {
+      if (publicById.has(id)) return;
+      publicById.set(id, { state: "loading" });
+      omdb().fetchPublicBeatmapRatings(id).then(
+        (entry) => publicById.set(id, { state: "ready", entry }),
+        (err) => publicById.set(id, {
+          state: "error",
+          error: err?.message ? String(err.message) : "Could not load OMDB ratings."
+        })
+      ).then(() => {
+        if (currentDisplayedBeatmapId() === id) scheduleSync();
+      });
+    }
+    function syncPublicDisplay() {
+      const id = currentDisplayedBeatmapId();
+      if (id == null) {
+        bodyEl.textContent = "";
+        bodyEl.classList.add(`${OEP_OMDB_ROW_CLASS}__body--muted`);
+        return;
+      }
+      loadPublicBeatmap(id);
+      const st = publicById.get(id);
+      if (st?.state === "ready") {
+        renderOmdbRatingRowBody(
+          bodyEl,
+          st.entry ?? void 0,
+          omdbDistUi,
+          header
+        );
+        return;
+      }
+      bodyEl.textContent = st?.state === "error" ? st.error || "" : "Loading OMDB…";
+      bodyEl.classList.toggle(
+        `${OEP_OMDB_ROW_CLASS}__body--error`,
+        st?.state === "error"
+      );
+      bodyEl.classList.remove(`${OEP_OMDB_ROW_CLASS}__body--muted`);
+    }
     function syncDisplay() {
       if (disposed || !pathRe.test(location.pathname)) return;
+      if (readOnly) {
+        syncPublicDisplay();
+        return;
+      }
       if (loadState !== "ready") {
         bodyEl.textContent = loadState === "error" ? loadError : "Loading OMDB…";
         bodyEl.classList.toggle(
@@ -8899,25 +8948,27 @@
     }
     voteControls.addEventListener("mouseleave", onVoteControlsMouseLeave);
     clearBtn.addEventListener("click", () => submitVote(-2));
-    omdb().fetchBeatmapsetRatings(beatmapsetId).then((list) => {
-      if (disposed || !pathRe.test(location.pathname)) return;
-      byBeatmapId = /* @__PURE__ */ new Map();
-      for (const item of list || []) {
-        const bid = item?.BeatmapID ?? item?.beatmapID ?? item?.beatmap_id;
-        if (bid != null) byBeatmapId.set(Number(bid), item);
-      }
-      omdbSetFetchSucceeded = true;
-      loadState = "ready";
-      bodyEl.classList.remove(`${OEP_OMDB_ROW_CLASS}__body--error`);
-      voteRow.style.display = "";
-      syncDisplay();
-    }).catch((err) => {
-      if (disposed) return;
-      loadState = "error";
-      loadError = err?.message ? String(err.message) : "Could not load OMDB ratings.";
-      voteRow.style.display = "none";
-      syncDisplay();
-    });
+    if (!readOnly) {
+      omdb().fetchBeatmapsetRatings(beatmapsetId).then((list) => {
+        if (disposed || !pathRe.test(location.pathname)) return;
+        byBeatmapId = /* @__PURE__ */ new Map();
+        for (const item of list || []) {
+          const bid = item?.BeatmapID ?? item?.beatmapID ?? item?.beatmap_id;
+          if (bid != null) byBeatmapId.set(Number(bid), item);
+        }
+        omdbSetFetchSucceeded = true;
+        loadState = "ready";
+        bodyEl.classList.remove(`${OEP_OMDB_ROW_CLASS}__body--error`);
+        voteRow.style.display = "";
+        syncDisplay();
+      }).catch((err) => {
+        if (disposed) return;
+        loadState = "error";
+        loadError = err?.message ? String(err.message) : "Could not load OMDB ratings.";
+        voteRow.style.display = "none";
+        syncDisplay();
+      });
+    }
     picker.addEventListener("mouseover", onPickerMouseOver);
     picker.addEventListener("mouseleave", onPickerMouseLeave);
     window.addEventListener("hashchange", onHashChange, { passive: true });
@@ -8940,7 +8991,7 @@
     };
   }
   function mountOmdbRow(header, beatmapsetId, pathRe) {
-    return omdb().isConfigured() ? mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe) : mountOmdbBeatmapsetLinkOnlyRow(header, beatmapsetId);
+    return mountOmdbBeatmapsetRatingsRow(header, beatmapsetId, pathRe);
   }
 
   // src/features/beatmapset/picker-diff-names.js
@@ -19396,7 +19447,19 @@ ${lines.join("\n")}
     "mapper",
     "community choice",
     "pending cup",
-    "newspaper cup"
+    "newspaper cup",
+    "locus",
+    "labour of love",
+    "community favourite",
+    "skinning",
+    "project loved",
+    "moderation",
+    "management",
+    "developer",
+    "community projects",
+    // Score charts and playlist leaderboards, not tournaments.
+    "restricted chart",
+    "top scorer"
   ];
   var BWS_RANKING_CSS = `
   .profile-detail-stats__chart-numbers--top .profile-detail-stats__values.${BWS_VALUES_ROW_CLASS},
@@ -19459,15 +19522,21 @@ ${lines.join("\n")}
     const doc = new DOMParser().parseFromString(String(htmlOrText), "text/html");
     return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
   }
+  var BWS_BADGE_TITLE_SELECTOR = "[title], [data-html-title], [data-orig-title]";
   function bwsBadgeDescriptionText(badgeEl) {
     if (!(badgeEl instanceof HTMLElement)) return "";
     const parts = [];
-    const t1 = badgeEl.getAttribute("title");
-    if (t1) parts.push(t1);
-    const ht = badgeEl.getAttribute("data-html-title");
-    if (ht) parts.push(bwsStripHtmlToText(ht));
-    const ot = badgeEl.getAttribute("data-orig-title");
-    if (ot) parts.push(ot);
+    for (const n of [
+      badgeEl,
+      ...badgeEl.querySelectorAll(BWS_BADGE_TITLE_SELECTOR)
+    ]) {
+      const t1 = n.getAttribute("title");
+      if (t1) parts.push(t1);
+      const ht = n.getAttribute("data-html-title");
+      if (ht) parts.push(bwsStripHtmlToText(ht));
+      const ot = n.getAttribute("data-orig-title");
+      if (ot) parts.push(ot);
+    }
     return parts.join(" ").trim();
   }
   function bwsBadgeExcludedByKeywords(descriptionPlain) {
