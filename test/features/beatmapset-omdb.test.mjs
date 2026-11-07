@@ -117,3 +117,57 @@ test("OMDB row: a saved vote whose refresh fails is not an error (B58)", async (
   );
   dispose();
 });
+
+test("OMDB row: without a key it loads each shown difficulty from the public endpoint", async () => {
+  const requested = [];
+  const window = setup({
+    isConfigured: () => false,
+    fetchBeatmapsetRatings: () => assert.fail("set endpoint needs a key"),
+    fetchPublicBeatmapRatings: async (id) => {
+      requested.push(id);
+      return id === 71
+        ? { BeatmapID: 71, WeightedAvg: 3.5, RatingCount: 10 }
+        : null;
+    },
+  });
+  const header = window.document.querySelector(".beatmapset-header");
+  const dispose = mountOmdbRow(header, "7", PATH);
+  assert.equal(body(window).textContent, "Loading OMDB…");
+  await tick();
+  await tick();
+  assert.match(body(window).textContent, /3\.5/);
+
+  hoverOther(window);
+  await tick();
+  await tick();
+  await tick();
+  assert.equal(
+    body(window).textContent,
+    "No ratings for this difficulty on OMDB.",
+  );
+  hoverOther(window);
+  await tick();
+  assert.deepEqual(requested, [71, 72]);
+
+  assert.ok(window.document.querySelector("[data-oep-omdb-key-hint]"));
+  assert.equal(window.document.querySelector("[data-oep-omdb-vote]"), null);
+  dispose();
+});
+
+test("OMDB row: without a key a failed request shows its error", async () => {
+  const window = setup({
+    isConfigured: () => false,
+    fetchPublicBeatmapRatings: async () => {
+      throw new Error("Could not reach OMDB.");
+    },
+  });
+  const header = window.document.querySelector(".beatmapset-header");
+  const dispose = mountOmdbRow(header, "7", PATH);
+  await tick();
+  await tick();
+  assert.equal(body(window).textContent, "Could not reach OMDB.");
+  assert.ok(
+    body(window).classList.contains("oep-beatmapset-omdb-row__body--error"),
+  );
+  dispose();
+});

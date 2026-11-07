@@ -70,6 +70,44 @@ OsuExpertPlus.omdb = (() => {
   }
 
   /**
+   * GET /api/public/v1/beatmap/{id} — one difficulty's ratings, no API key
+   * (no `OwnRating`). Goes through GM_xmlhttpRequest: the endpoint sends no
+   * ACAO header. A missing or unrated difficulty answers 200 with
+   * `{ error: "Difficulty not found" }`, returned here as null.
+   * @param {string|number} beatmapId
+   * @returns {Promise<object|null>}
+   */
+  function fetchPublicBeatmapRatings(beatmapId) {
+    const url = `${API_BASE}/api/public/v1/beatmap/${encodeURIComponent(String(beatmapId))}`;
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url,
+        onload(r) {
+          const raw = String(r.responseText || "");
+          if (r.status < 200 || r.status >= 300) {
+            reject(new Error(`OMDB HTTP ${r.status}`));
+            return;
+          }
+          let data;
+          try {
+            data = JSON.parse(raw);
+          } catch {
+            reject(new Error("OMDB returned an unexpected response."));
+            return;
+          }
+          if (data?.error === "Difficulty not found") resolve(null);
+          else if (data?.error) reject(new Error(`OMDB: ${data.error}`));
+          else resolve(data);
+        },
+        onerror: () => reject(new Error("Could not reach OMDB.")),
+        ontimeout: () => reject(new Error("OMDB timed out.")),
+        timeout: 20000,
+      });
+    });
+  }
+
+  /**
    * GET /api/rate.php?id=&key=&score= — score 0.0–5.0 (0.5 steps), or -2 to clear your rating.
    * @param {string|number} beatmapId
    * @param {number} score
@@ -109,6 +147,7 @@ OsuExpertPlus.omdb = (() => {
     clearApiKey,
     isConfigured,
     fetchBeatmapsetRatings,
+    fetchPublicBeatmapRatings,
     rateBeatmap,
   };
 })();
