@@ -4,6 +4,7 @@
  */
 
 import { flagFilename, formatRelativeShort } from "../../osu/format.js";
+import { tooltipTitle } from "../../osu/tooltip.js";
 import {
   hitstatValue,
   hitstatValueForAttribute,
@@ -439,9 +440,10 @@ export function applyNativeRowToTopItem(item, row) {
       .querySelector(".oep-beatmap-scoreboard-pp-value")
       ?.textContent?.trim() ?? "";
   const timeEl = row.querySelector("time.js-tooltip-time");
-  // osu-web rows put the ISO time in `title` (no `datetime`) (B79).
+  // osu-web rows put the ISO time in `title` (no `datetime`) (B79), which
+  // moves to `data-orig-title` once hovered.
   const timeIso =
-    timeEl?.getAttribute("datetime") || timeEl?.getAttribute("title") || "";
+    timeEl?.getAttribute("datetime") || tooltipTitle(timeEl) || "";
   const timeText = timeEl?.textContent?.trim() ?? "";
   const rowMods = row.querySelector(".mods");
 

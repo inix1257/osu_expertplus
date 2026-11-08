@@ -7,6 +7,7 @@
 import { observe } from "../../core/observe.js";
 import { formatDecimal, parseLocaleNumber } from "../../osu/format.js";
 import { hitstatClassFromLabel } from "../../osu/score.js";
+import { tooltipTitle } from "../../osu/tooltip.js";
 import { settingIds, settings } from "../legacy.js";
 import {
   findBeatmapScoreboardRoot,
@@ -57,14 +58,14 @@ export function syncBeatmapScoreboardPpDecimals(scoreboardRoot) {
       const td = row.cells?.[colMap.pp];
       if (!td) continue;
       const span = td.querySelector(
-        "a.beatmap-scoreboard-table__cell-content > span[title], span.beatmap-scoreboard-table__cell-content > span[title]",
+        "a.beatmap-scoreboard-table__cell-content > span:is([title], [data-orig-title]), span.beatmap-scoreboard-table__cell-content > span:is([title], [data-orig-title])",
       );
       if (!(span instanceof HTMLSpanElement)) continue;
       const textNode = Array.from(span.childNodes).find(
         (n) => n.nodeType === Node.TEXT_NODE,
       );
       if (!textNode) continue;
-      const full = span.getAttribute("title");
+      const full = tooltipTitle(span);
       const n = parseLocaleNumber(full || "");
       if (!Number.isFinite(n)) continue;
 
@@ -75,7 +76,9 @@ export function syncBeatmapScoreboardPpDecimals(scoreboardRoot) {
             String(textNode.textContent || "").trim(),
           );
         }
-        textNode.textContent = formatDecimal(n);
+        // Same text is still a DOM write the refill check wakes up for.
+        const next = formatDecimal(n);
+        if (textNode.textContent !== next) textNode.textContent = next;
       } else if (span.hasAttribute(SCOREBOARD_PP_ORIGINAL_ATTR)) {
         textNode.textContent =
           span.getAttribute(SCOREBOARD_PP_ORIGINAL_ATTR) ||
@@ -190,8 +193,9 @@ export function syncBeatmapScoreboardPpValueColor(scoreboardRoot) {
 
 /**
  * Which score each table row shows, in table order: the player id and the
- * row's osu-web `title` values (full pp, ISO time, mods). Expert+ elements
- * (the rank badge) are left out, so the pass's own edits do not change it.
+ * row's osu-web `title` values (ISO time, flag, mods), hovered or not.
+ * Elements with an Expert+ class (the rank badge, the pp span) are left out,
+ * so the pass's own edits do not change it.
  * @param {HTMLElement} root
  * @returns {string}
  */
@@ -203,9 +207,13 @@ function scoreboardRowsKey(root) {
     (row) =>
       [
         row.querySelector("[data-user-id]")?.getAttribute("data-user-id"),
+        // Hovering moves a title to `data-orig-title`; that must not count
+        // as a refill, or every hover re-ran the pass and the sort.
         ...Array.from(
-          row.querySelectorAll("[title]:not([class*='oep'])"),
-          (n) => n.getAttribute("title"),
+          row.querySelectorAll(
+            "[title]:not([class*='oep']), [data-orig-title]:not([class*='oep'])",
+          ),
+          tooltipTitle,
         ),
       ].join("|"),
   ).join("\n");

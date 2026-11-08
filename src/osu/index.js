@@ -9,3 +9,4 @@ export * from "./format.js";
 export * from "./mods.js";
 export * from "./ruleset.js";
 export * from "./score.js";
+export * from "./tooltip.js";
