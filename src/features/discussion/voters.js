@@ -5,6 +5,7 @@
  */
 
 import { observe } from "../../core/observe.js";
+import { tooltipTitle } from "../../osu/tooltip.js";
 import {
   beatmapsetIdFromPath,
   isBeatmapsetDiscussion,
@@ -70,7 +71,7 @@ export function startDiscussionVotersTooltips(beatmapsetId) {
     if (!(node instanceof Element))
       return fallbackId ? `User ${fallbackId}` : "User";
     const val =
-      node.getAttribute("title") ||
+      tooltipTitle(node) ||
       node.getAttribute("aria-label") ||
       node.getAttribute("data-tooltip") ||
       node.getAttribute("alt") ||

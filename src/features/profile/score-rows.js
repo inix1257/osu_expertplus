@@ -12,6 +12,7 @@ import {
   settings,
 } from "../legacy.js";
 import { parseApiNumber } from "../../osu/format.js";
+import { tooltipTitle } from "../../osu/tooltip.js";
 import { RECENT_FAILS_WRAP_CLASS } from "./recent-scores/common.js";
 // Score lists: PP from span title → 2dp; hit-stat row from API (fetchScores)
 export const SCORE_PP_DECIMALS_ID = settingIds().SCORE_PP_DECIMALS;
@@ -29,25 +30,28 @@ const PP_DECIMALS_ATTR = "data-oep-pp-original";
 export const PP_RAW_ATTR = "data-oep-pp-raw";
 
 export function applyPpDecimals(listEl) {
-  listEl.querySelectorAll(".play-detail__pp > span[title]").forEach((span) => {
-    const full = span.getAttribute("title");
-    if (!full) return;
+  // A hovered span keeps its title in `data-orig-title` (osu-web tooltip).
+  listEl
+    .querySelectorAll(".play-detail__pp > span:is([title], [data-orig-title])")
+    .forEach((span) => {
+      const full = tooltipTitle(span);
+      if (!full) return;
 
-    const textNode = Array.from(span.childNodes).find(
-      (n) => n.nodeType === Node.TEXT_NODE,
-    );
-    if (!textNode) return;
+      const textNode = Array.from(span.childNodes).find(
+        (n) => n.nodeType === Node.TEXT_NODE,
+      );
+      if (!textNode) return;
 
-    const raw = span.getAttribute(PP_RAW_ATTR);
-    const n = raw != null ? parseApiNumber(raw) : parseLocaleNumber(full);
-    if (!Number.isFinite(n)) return;
+      const raw = span.getAttribute(PP_RAW_ATTR);
+      const n = raw != null ? parseApiNumber(raw) : parseLocaleNumber(full);
+      if (!Number.isFinite(n)) return;
 
-    const expected = formatDecimalPp(n) + "\u200A"; // hair space
-    if (textNode.textContent === expected) return;
+      const expected = formatDecimalPp(n) + "\u200A"; // hair space
+      if (textNode.textContent === expected) return;
 
-    span.setAttribute(PP_DECIMALS_ATTR, textNode.textContent.trim());
-    textNode.textContent = expected;
-  });
+      span.setAttribute(PP_DECIMALS_ATTR, textNode.textContent.trim());
+      textNode.textContent = expected;
+    });
 }
 
 export function revertPpDecimals(listEl) {

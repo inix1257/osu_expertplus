@@ -59,6 +59,7 @@ function useDom(lang, rows) {
     "document",
     "location",
     "HTMLElement",
+    "HTMLTableElement",
     "HTMLTableCellElement",
     "HTMLTableRowElement",
     "HTMLTimeElement",
@@ -280,4 +281,78 @@ test("injected rows sort by their plain numbers in any locale (B97)", async () =
   assert.equal(text(map.score), "141.639.015");
   assert.equal(text(map.accuracy), "99,66%");
   assert.equal(text(map.combo), "2.384x");
+});
+
+/** osu-web's tooltip moves `title` to `data-orig-title` on first hover. */
+function hover(el) {
+  el.setAttribute("data-orig-title", el.getAttribute("title"));
+  el.removeAttribute("title");
+}
+
+test("hovered cells keep their date and pp sort keys", () => {
+  const doc = useDom(
+    "en",
+    row({
+      rank: "#1",
+      score: "1",
+      acc: "1%",
+      combo: "1x",
+      pp: "903",
+      ppTitle: "902.982",
+      time: "2026-10-23T11:59:04Z",
+    }),
+  );
+  const table = doc.querySelector("table");
+  const tr = table.querySelector("tbody tr");
+  const map = buildBeatmapScoreboardColumnMap(tr, table);
+  hover(tr.querySelector("time"));
+  hover(tr.cells[map.pp].querySelector("span"));
+  assert.equal(
+    beatmapScoreboardRowSortPrimary(tr, map, "date"),
+    Date.parse("2026-10-23T11:59:04Z"),
+  );
+  assert.equal(beatmapScoreboardRowSortPrimary(tr, map, "pp"), 902.982);
+});
+
+test("date sort does not move a row after its time is hovered", async () => {
+  const {
+    applyBeatmapScoreboardLeaderboardSort,
+    writeBeatmapScoreboardSortState,
+  } = await import("../../src/features/scoreboard/sort.js");
+  const times = [
+    "2026-03-14T05:49:20Z",
+    "2026-11-02T04:16:25Z",
+    "2026-10-23T11:59:04Z",
+    "2026-04-17T18:30:36Z",
+  ];
+  const doc = useDom(
+    "en",
+    times
+      .map((time, i) =>
+        row({
+          rank: `#${i + 1}`,
+          score: String(1000 - i),
+          acc: "1%",
+          combo: "1x",
+          pp: "1",
+          ppTitle: "1",
+          time,
+        }),
+      )
+      .join(""),
+  );
+  const root = doc.body;
+  const order = () =>
+    [...doc.querySelectorAll("tbody time")].map(
+      (t) => t.getAttribute("title") || t.getAttribute("data-orig-title"),
+    );
+  writeBeatmapScoreboardSortState("date", "desc");
+  applyBeatmapScoreboardLeaderboardSort(root);
+  const sorted = [...times].sort().reverse();
+  assert.deepEqual(order(), sorted);
+  // hover the second row's time, as the cursor would, and sort again
+  hover(doc.querySelectorAll("tbody time")[1]);
+  applyBeatmapScoreboardLeaderboardSort(root);
+  assert.deepEqual(order(), sorted);
+  writeBeatmapScoreboardSortState("score", "desc");
 });

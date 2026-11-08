@@ -18,6 +18,7 @@ import {
   syncScoreListPpDecimalsWidthClass,
 } from "./score-rows.js";
 import { applyHideWeightedPp } from "./score-stats.js";
+import { tooltipTitle } from "../../osu/tooltip.js";
 
 /** Section type of the Expert+ Recent list (not one of osu-web's lists). */
 export const RECENT_SECTION_TYPE = "recent";
@@ -38,7 +39,7 @@ function ppDecimalsOverwritten(mutations) {
     if (m.type !== "characterData") return false;
     const span = m.target.parentElement;
     if (!(span instanceof HTMLSpanElement)) return false;
-    const titleAttr = span.getAttribute("title");
+    const titleAttr = tooltipTitle(span);
     if (!titleAttr || !span.parentElement?.matches(".play-detail__pp"))
       return false;
     const n = parseLocaleNumber(titleAttr);

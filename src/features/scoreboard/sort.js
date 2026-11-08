@@ -6,6 +6,7 @@
 import { leaderboardScoreId, scoreDisplayValues } from "../../osu/score.js";
 import { observe } from "../../core/observe.js";
 import { parseLocaleNumber } from "../../osu/format.js";
+import { tooltipTitle } from "../../osu/tooltip.js";
 import { el } from "../legacy.js";
 import {
   SCORE_USER_SEARCH_RESULT_ATTR,
@@ -242,8 +243,9 @@ export function beatmapScoreboardTdNumberForSort(td) {
   // Injected rows keep the plain number (B97).
   const plain = td.getAttribute(SCOREBOARD_SORT_VALUE_ATTR);
   if (plain != null && Number.isFinite(Number(plain))) return Number(plain);
+  // A hovered span has its title in `data-orig-title` (osu-web tooltip).
   const span = td.querySelector(
-    "a.beatmap-scoreboard-table__cell-content span[title], span.beatmap-scoreboard-table__cell-content span[title], span[title]",
+    "a.beatmap-scoreboard-table__cell-content span:is([title], [data-orig-title]), span.beatmap-scoreboard-table__cell-content span:is([title], [data-orig-title]), span:is([title], [data-orig-title])",
   );
   // Titles (pp) and cell texts are both in the page locale. Group
   // separators are left to parseLocaleNumber: stripping commas first read
@@ -253,11 +255,7 @@ export function beatmapScoreboardTdNumberForSort(td) {
       .replace(/[x×%]/gi, "")
       .replace(/\bpp\b/gi, "")
       .trim();
-  for (const raw of [
-    span?.getAttribute("title"),
-    span?.textContent,
-    td.textContent,
-  ]) {
+  for (const raw of [tooltipTitle(span), span?.textContent, td.textContent]) {
     const n = parseLocaleNumber(clean(raw));
     if (Number.isFinite(n)) return n;
   }
@@ -272,11 +270,10 @@ export function beatmapScoreboardTdDateMsForSort(td) {
   if (!(td instanceof HTMLTableCellElement)) return -Infinity;
   const timeEl = td.querySelector("time");
   if (!(timeEl instanceof HTMLTimeElement)) return -Infinity;
-  const raw =
-    timeEl.getAttribute("datetime") ||
-    timeEl.getAttribute("title") ||
-    timeEl.dateTime ||
-    "";
+  // osu-web rows keep the ISO time only in `title`, which its tooltip moves
+  // to `data-orig-title` on hover: reading `title` alone sent a hovered row
+  // to the end of a date sort, and the next row slid under the cursor.
+  const raw = timeEl.getAttribute("datetime") || tooltipTitle(timeEl) || "";
   const ms = Date.parse(String(raw).trim());
   return Number.isFinite(ms) ? ms : -Infinity;
 }
@@ -384,11 +381,14 @@ export function applyBeatmapScoreboardLeaderboardSort(scoreboardRoot) {
       tie: beatmapScoreboardRowSortTieScore(row, colMap),
     };
   });
+  // Not `a - b`: two missing keys (-Infinity) subtract to NaN, which sort()
+  // treats as equal and so skips the tie-break.
+  const cmp = (x, y) => (x === y ? 0 : x < y ? -1 : 1);
   const sortedVisible = keyed
     .sort((a, b) => {
-      const pc = desc ? b.primary - a.primary : a.primary - b.primary;
+      const pc = desc ? cmp(b.primary, a.primary) : cmp(a.primary, b.primary);
       if (pc !== 0) return pc;
-      return desc ? b.tie - a.tie : a.tie - b.tie;
+      return desc ? cmp(b.tie, a.tie) : cmp(a.tie, b.tie);
     })
     .map((k) => k.row);
 
