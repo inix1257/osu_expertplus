@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.3.7
+// @version      0.3.8
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -1538,7 +1538,8 @@
     scoreMergeKey: () => scoreMergeKey,
     sortModsForDisplay: () => sortModsForDisplay,
     speedChangeFromMod: () => speedChangeFromMod,
-    statsCells: () => statsCells
+    statsCells: () => statsCells,
+    tooltipTitle: () => tooltipTitle
   });
 
   // src/osu/ruleset.js
@@ -2596,6 +2597,12 @@
       accuracy = Math.floor(accN * 1e4) / 1e4;
     const perfectCombo = legacy ? score.legacy_perfect === true : scoreIndicatesPerfectCombo(score);
     return { total, accuracy, rank, perfectCombo, legacy };
+  }
+
+  // src/osu/tooltip.js
+  function tooltipTitle(el2) {
+    if (!el2) return null;
+    return el2.getAttribute("title") || el2.getAttribute("data-orig-title") || null;
   }
 
   // src/core/lifecycle.js
@@ -13149,14 +13156,10 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     const plain = td.getAttribute(SCOREBOARD_SORT_VALUE_ATTR);
     if (plain != null && Number.isFinite(Number(plain))) return Number(plain);
     const span = td.querySelector(
-      "a.beatmap-scoreboard-table__cell-content span[title], span.beatmap-scoreboard-table__cell-content span[title], span[title]"
+      "a.beatmap-scoreboard-table__cell-content span:is([title], [data-orig-title]), span.beatmap-scoreboard-table__cell-content span:is([title], [data-orig-title]), span:is([title], [data-orig-title])"
     );
     const clean = (raw) => String(raw || "").replace(/[x×%]/gi, "").replace(/\bpp\b/gi, "").trim();
-    for (const raw of [
-      span?.getAttribute("title"),
-      span?.textContent,
-      td.textContent
-    ]) {
+    for (const raw of [tooltipTitle(span), span?.textContent, td.textContent]) {
       const n = parseLocaleNumber(clean(raw));
       if (Number.isFinite(n)) return n;
     }
@@ -13166,7 +13169,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     if (!(td instanceof HTMLTableCellElement)) return -Infinity;
     const timeEl = td.querySelector("time");
     if (!(timeEl instanceof HTMLTimeElement)) return -Infinity;
-    const raw = timeEl.getAttribute("datetime") || timeEl.getAttribute("title") || timeEl.dateTime || "";
+    const raw = timeEl.getAttribute("datetime") || tooltipTitle(timeEl) || "";
     const ms = Date.parse(String(raw).trim());
     return Number.isFinite(ms) ? ms : -Infinity;
   }
@@ -13235,10 +13238,11 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         tie: beatmapScoreboardRowSortTieScore(row, colMap)
       };
     });
+    const cmp = (x, y) => x === y ? 0 : x < y ? -1 : 1;
     const sortedVisible = keyed.sort((a, b) => {
-      const pc = desc ? b.primary - a.primary : a.primary - b.primary;
+      const pc = desc ? cmp(b.primary, a.primary) : cmp(a.primary, b.primary);
       if (pc !== 0) return pc;
-      return desc ? b.tie - a.tie : a.tie - b.tie;
+      return desc ? cmp(b.tie, a.tie) : cmp(a.tie, b.tie);
     }).map((k) => k.row);
     const desired = [...sortedVisible, ...hidden];
     let same = true;
@@ -13315,14 +13319,14 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
         const td = row.cells?.[colMap.pp];
         if (!td) continue;
         const span = td.querySelector(
-          "a.beatmap-scoreboard-table__cell-content > span[title], span.beatmap-scoreboard-table__cell-content > span[title]"
+          "a.beatmap-scoreboard-table__cell-content > span:is([title], [data-orig-title]), span.beatmap-scoreboard-table__cell-content > span:is([title], [data-orig-title])"
         );
         if (!(span instanceof HTMLSpanElement)) continue;
         const textNode = Array.from(span.childNodes).find(
           (n2) => n2.nodeType === Node.TEXT_NODE
         );
         if (!textNode) continue;
-        const full = span.getAttribute("title");
+        const full = tooltipTitle(span);
         const n = parseLocaleNumber(full || "");
         if (!Number.isFinite(n)) continue;
         if (showPpDecimals) {
@@ -13332,7 +13336,8 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
               String(textNode.textContent || "").trim()
             );
           }
-          textNode.textContent = formatDecimal(n);
+          const next = formatDecimal(n);
+          if (textNode.textContent !== next) textNode.textContent = next;
         } else if (span.hasAttribute(SCOREBOARD_PP_ORIGINAL_ATTR)) {
           textNode.textContent = span.getAttribute(SCOREBOARD_PP_ORIGINAL_ATTR) || textNode.textContent;
           span.removeAttribute(SCOREBOARD_PP_ORIGINAL_ATTR);
@@ -13426,9 +13431,13 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       ),
       (row) => [
         row.querySelector("[data-user-id]")?.getAttribute("data-user-id"),
+        // Hovering moves a title to `data-orig-title`; that must not count
+        // as a refill, or every hover re-ran the pass and the sort.
         ...Array.from(
-          row.querySelectorAll("[title]:not([class*='oep'])"),
-          (n) => n.getAttribute("title")
+          row.querySelectorAll(
+            "[title]:not([class*='oep']), [data-orig-title]:not([class*='oep'])"
+          ),
+          tooltipTitle
         )
       ].join("|")
     ).join("\n");
@@ -13781,7 +13790,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     const hitByName = rowHitValuesByName(row);
     const ppText = row.querySelector(".oep-beatmap-scoreboard-pp-value")?.textContent?.trim() ?? "";
     const timeEl = row.querySelector("time.js-tooltip-time");
-    const timeIso = timeEl?.getAttribute("datetime") || timeEl?.getAttribute("title") || "";
+    const timeIso = timeEl?.getAttribute("datetime") || tooltipTitle(timeEl) || "";
     const timeText = timeEl?.textContent?.trim() ?? "";
     const rowMods = row.querySelector(".mods");
     for (const { stat, valueEl, kind } of topItemStats(item)) {
@@ -17057,7 +17066,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     const extractNameFromNode = (node, fallbackId) => {
       if (!(node instanceof Element))
         return fallbackId ? `User ${fallbackId}` : "User";
-      const val = node.getAttribute("title") || node.getAttribute("aria-label") || node.getAttribute("data-tooltip") || node.getAttribute("alt") || node.textContent || "";
+      const val = tooltipTitle(node) || node.getAttribute("aria-label") || node.getAttribute("data-tooltip") || node.getAttribute("alt") || node.textContent || "";
       const cleaned = String(val).replace(/\s+/g, " ").trim();
       return cleaned || (fallbackId ? `User ${fallbackId}` : "User");
     };
@@ -21087,8 +21096,8 @@ ${lines.join("\n")}
   var PP_DECIMALS_ATTR = "data-oep-pp-original";
   var PP_RAW_ATTR = "data-oep-pp-raw";
   function applyPpDecimals(listEl) {
-    listEl.querySelectorAll(".play-detail__pp > span[title]").forEach((span) => {
-      const full = span.getAttribute("title");
+    listEl.querySelectorAll(".play-detail__pp > span:is([title], [data-orig-title])").forEach((span) => {
+      const full = tooltipTitle(span);
       if (!full) return;
       const textNode = Array.from(span.childNodes).find(
         (n2) => n2.nodeType === Node.TEXT_NODE
@@ -22816,7 +22825,7 @@ ${lines.join("\n")}
       if (m.type !== "characterData") return false;
       const span = m.target.parentElement;
       if (!(span instanceof HTMLSpanElement)) return false;
-      const titleAttr = span.getAttribute("title");
+      const titleAttr = tooltipTitle(span);
       if (!titleAttr || !span.parentElement?.matches(".play-detail__pp"))
         return false;
       const n = parseLocaleNumber2(titleAttr);
