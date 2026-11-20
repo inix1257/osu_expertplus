@@ -22,6 +22,7 @@ for (const key of [
 const {
   matchTagCategories,
   refreshMapperTagHighlights,
+  TAG_CATEGORIES,
   TAG_CAT_ATTR,
   TAG_POS_ATTR,
 } = await import("../../src/features/beatmapset/mapper-tag-highlight.js");
@@ -32,7 +33,7 @@ const brief = (words) =>
 test("phrases span adjacent words and the longest phrase wins", () => {
   assert.deepEqual(
     brief(["Featured", "Artist", "fa", "speedcore", "Japanese", "Pop"]),
-    ["fa/start", "fa/end", "fa/solo", null, "genre/start", "genre/end"],
+    ["fa/start", "fa/end", "fa/solo", null, "language/solo", "genre/solo"],
   );
   assert.deepEqual(brief(["drum", "and", "bass", "japanese"]), [
     "genre/start",
@@ -40,6 +41,74 @@ test("phrases span adjacent words and the longest phrase wins", () => {
     "genre/end",
     "language/solo",
   ]);
+});
+
+test("a language next to a genre stays two tags", () => {
+  assert.deepEqual(brief(["japanese", "pop", "japanese", "rock"]), [
+    "language/solo",
+    "genre/solo",
+    "language/solo",
+    "genre/solo",
+  ]);
+});
+
+test("no phrase joins words of different kinds", () => {
+  const catOf = new Map();
+  for (const c of TAG_CATEGORIES) for (const t of c.tags) catOf.set(t, c.id);
+  for (const c of TAG_CATEGORIES) {
+    for (const t of c.tags) {
+      for (const w of t.split(" ")) {
+        const own = catOf.get(w);
+        assert.ok(!own || own === c.id, `"${t}" joins ${own} word "${w}"`);
+      }
+    }
+  }
+});
+
+test("two-letter abbreviations need their long form nearby", () => {
+  assert.deepEqual(brief(["fa", "ed", "sheeran", "op", "mg"]), [
+    null,
+    null,
+    null,
+    null,
+    null,
+  ]);
+  assert.deepEqual(brief(["fa", "lapfox", "featured", "artist"]), [
+    "fa/solo",
+    null,
+    "fa/start",
+    "fa/end",
+  ]);
+  assert.deepEqual(brief(["anime", "op", "ed"]), [
+    "genre/solo",
+    "song/solo",
+    "song/solo",
+  ]);
+  assert.deepEqual(brief(["mpg", "mg"]), ["guild/solo", "guild/solo"]);
+});
+
+test("underscores, trailing dots and curly apostrophes are normalised", () => {
+  assert.deepEqual(
+    brief([
+      "Featured_Artist",
+      "fa",
+      "TV_Size",
+      "cut",
+      "ver.",
+      "Mappers’",
+      "Guild",
+    ]),
+    [
+      "fa/solo",
+      "fa/solo",
+      "song/solo",
+      "song/start",
+      "song/end",
+      "guild/start",
+      "guild/end",
+    ],
+  );
+  assert.deepEqual(brief([".", "_", ""]), [null, null, null]);
 });
 
 test("words of a phrase alone are not coloured", () => {

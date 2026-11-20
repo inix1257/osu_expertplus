@@ -49,13 +49,11 @@ export const TAG_CATEGORIES = Object.freeze([
       "pop",
       "j-pop",
       "jpop",
-      "japanese pop",
       "k-pop",
       "kpop",
       "rock",
       "j-rock",
       "jrock",
-      "japanese rock",
       "alternative rock",
       "math rock",
       "post rock",
@@ -130,11 +128,36 @@ const MAX_WORDS = Math.max(
 );
 const LABELS = new Map(TAG_CATEGORIES.map((c) => [c.id, c.label]));
 
-/** @param {string} word */
-const normalize = (word) => word.trim().toLowerCase();
+/**
+ * Two-letter abbreviations that also mean other things ("ed sheeran", "op" as
+ * overpowered); they count only when one of these phrases is in the tags too.
+ * @type {ReadonlyMap<string, string[]>}
+ */
+const NEEDS_CONTEXT = new Map([
+  ["fa", ["featured artist"]],
+  ["mg", ["mappers' guild", "mappers guild", "mpg"]],
+  ["op", ["opening", "ending", "anime", "tv size"]],
+  ["ed", ["opening", "ending", "anime", "tv size"]],
+]);
+
+/**
+ * `featured_artist` → `featured artist`, `ver.` → `ver`, curly → straight
+ * apostrophe (the trailing one of `mappers'` stays).
+ * @param {string} word
+ */
+const normalize = (word) =>
+  word
+    .replace(/[‘’]/g, "'")
+    .replace(/_+/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/[.,]+$/, "")
+    .replace(/\s+/g, " ");
 
 /**
  * Category and phrase position of each tag word; the longest phrase wins.
+ * Phrases only join words of one kind, so "japanese pop" stays language +
+ * genre.
  * @param {string[]} words  tags in page order
  * @returns {Array<{ cat: string, pos: "solo"|"start"|"mid"|"end" } | null>}
  */
@@ -142,22 +165,30 @@ export function matchTagCategories(words) {
   const norm = words.map(normalize);
   /** @type {Array<{ cat: string, pos: "solo"|"start"|"mid"|"end" } | null>} */
   const out = norm.map(() => null);
+  /** @type {Array<{ phrase: string, cat: string, i: number, n: number }>} */
+  const found = [];
   for (let i = 0; i < norm.length;) {
     let matched = 0;
     for (let n = Math.min(MAX_WORDS, norm.length - i); n >= 1; n--) {
-      const cat = PHRASES.get(norm.slice(i, i + n).join(" "));
+      const phrase = norm.slice(i, i + n).join(" ");
+      const cat = PHRASES.get(phrase);
       if (!cat) continue;
-      for (let k = 0; k < n; k++) {
-        out[i + k] = {
-          cat,
-          pos:
-            n === 1 ? "solo" : k === 0 ? "start" : k === n - 1 ? "end" : "mid",
-        };
-      }
+      found.push({ phrase, cat, i, n });
       matched = n;
       break;
     }
     i += matched || 1;
+  }
+  const phrases = new Set(found.map((f) => f.phrase));
+  for (const { phrase, cat, i, n } of found) {
+    const context = NEEDS_CONTEXT.get(phrase);
+    if (context && !context.some((p) => phrases.has(p))) continue;
+    for (let k = 0; k < n; k++) {
+      out[i + k] = {
+        cat,
+        pos: n === 1 ? "solo" : k === 0 ? "start" : k === n - 1 ? "end" : "mid",
+      };
+    }
   }
   return out;
 }
