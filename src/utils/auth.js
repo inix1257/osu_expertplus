@@ -22,6 +22,12 @@ OsuExpertPlus.auth = (() => {
   const FAILURE_TTL_MS = 5 * 60 * 1000;
   /** @type {{ error: Error, until: number, generation: number } | null} */
   let _failure = null;
+  /** Fired on window when a background token request fails or succeeds. */
+  const TOKEN_STATUS_EVENT = "oep-osu-api-token-status";
+
+  function emitTokenStatus() {
+    window.dispatchEvent(new Event(TOKEN_STATUS_EVENT));
+  }
 
   function getClientId() {
     return GM_getValue(KEY_CLIENT_ID, "");
@@ -155,6 +161,7 @@ OsuExpertPlus.auth = (() => {
         return getToken();
       }
       storeToken(t);
+      emitTokenStatus();
       return t.token;
     } catch (err) {
       if (generation === _generation) {
@@ -163,6 +170,7 @@ OsuExpertPlus.auth = (() => {
           until: Date.now() + FAILURE_TTL_MS,
           generation,
         };
+        emitTokenStatus();
       }
       throw err;
     }
@@ -223,6 +231,7 @@ OsuExpertPlus.auth = (() => {
   }
 
   return {
+    TOKEN_STATUS_EVENT,
     isConfigured,
     hasSecret,
     getClientId,

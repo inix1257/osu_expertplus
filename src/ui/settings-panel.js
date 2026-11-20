@@ -612,16 +612,26 @@ OsuExpertPlus.settingsPanel = (() => {
       statusEl.className = `osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--${type}`;
     }
 
-    if (auth.getStatus() === "error") {
-      setStatus(
-        "Saved credentials could not get a token. Check them and save again.",
-        "error",
-      );
-    } else if (auth.isConfigured()) {
-      setStatus("Credentials saved. API v2 active.", "ok");
-    } else {
-      setStatus("No credentials — using session fallback.");
+    function renderSavedStatus() {
+      if (auth.getStatus() === "error") {
+        setStatus(
+          "Saved credentials could not get a token. Check them and save again.",
+          "error",
+        );
+      } else if (auth.isConfigured()) {
+        setStatus("Credentials saved. API v2 active.", "ok");
+      } else {
+        setStatus("No credentials — using session fallback.");
+      }
     }
+    renderSavedStatus();
+
+    // The first token request usually runs after the panel is built, so a
+    // failure (e.g. a deleted OAuth app) has to update the status later.
+    window.addEventListener(auth.TOKEN_STATUS_EVENT, () => {
+      renderSavedStatus();
+      refreshFabOsuApiWarning();
+    });
 
     const saveBtn = el(
       "button",
