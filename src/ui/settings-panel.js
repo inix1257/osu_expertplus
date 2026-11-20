@@ -65,7 +65,15 @@ OsuExpertPlus.settingsPanel = (() => {
     const { anchor } = fabUi;
     if (!anchor) return;
     // Warn when credentials are missing or the last token request failed.
-    anchor.classList.toggle(FAB_NEEDS_API_CLASS, auth.getStatus() !== "ok");
+    const status = auth.getStatus();
+    anchor.classList.toggle(FAB_NEEDS_API_CLASS, status !== "ok");
+    const text = anchor.querySelector(".osu-expertplus-fab-api-warning__text");
+    if (text) {
+      text.textContent =
+        status === "error"
+          ? "osu! API credentials failed"
+          : "osu! API credentials not set";
+    }
     syncPanelAboveFab();
   }
 
@@ -607,21 +615,37 @@ OsuExpertPlus.settingsPanel = (() => {
         "osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--info",
     });
 
+    // Whether the status line shows the saved-credentials state (not the
+    // result of a Save/Clear click), so token events may refresh it.
+    let showsSavedStatus = false;
+
     function setStatus(msg, type = "info") {
+      showsSavedStatus = false;
       statusEl.textContent = msg;
       statusEl.className = `osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--${type}`;
     }
 
-    if (auth.getStatus() === "error") {
-      setStatus(
-        "Saved credentials could not get a token. Check them and save again.",
-        "error",
-      );
-    } else if (auth.isConfigured()) {
-      setStatus("Credentials saved. API v2 active.", "ok");
-    } else {
-      setStatus("No credentials — using session fallback.");
+    function renderSavedStatus() {
+      if (auth.getStatus() === "error") {
+        setStatus(
+          "Saved credentials could not get a token. Check them and save again.",
+          "error",
+        );
+      } else if (auth.isConfigured()) {
+        setStatus("Credentials saved. API v2 active.", "ok");
+      } else {
+        setStatus("No credentials — using session fallback.");
+      }
+      showsSavedStatus = true;
     }
+    renderSavedStatus();
+
+    // The first token request usually runs after the panel is built, so a
+    // failure (e.g. a deleted OAuth app) has to update the status later.
+    window.addEventListener(auth.TOKEN_STATUS_EVENT, () => {
+      if (showsSavedStatus) renderSavedStatus();
+      refreshFabOsuApiWarning();
+    });
 
     const saveBtn = el(
       "button",
