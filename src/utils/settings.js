@@ -173,6 +173,14 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
+      id: "beatmapDetail.mapperTagHighlight",
+      label: "Highlight common mapper tags",
+      description:
+        "On beatmapset pages, colours common mapper tags by kind (featured artist, Mappers' Guild, language, genre, song info) so the map-specific tags stand out.",
+      group: "Beatmap Page",
+      default: true,
+    },
+    {
       id: "beatmapDetail.pickerDiffNames",
       label: "Difficulty names in the difficulty selector",
       description:
@@ -422,6 +430,7 @@ OsuExpertPlus.settings = (() => {
     SCOREBOARD_PLAYER_LOOKUP: "beatmapDetail.scoreboardPlayerLookup",
     PICKER_DIFF_NAMES: "beatmapDetail.pickerDiffNames",
     TAG_COLLAPSE_BUTTONS: "beatmapDetail.tagCollapseButtons",
+    MAPPER_TAG_HIGHLIGHT: "beatmapDetail.mapperTagHighlight",
     SCOREBOARD_GLOBAL_RANK: "beatmapDetail.scoreboardGlobalRank",
     NAV_RECENT_NOTIFICATION: "header.navRecentNotification",
   });

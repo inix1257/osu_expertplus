@@ -125,6 +125,41 @@ export const BEATMAPSET_CSS = `
     min-width: 0;
   }
 
+  /* Common mapper tags (mapper-tag-highlight.js). Solid colours so the
+     stretched padding of a phrase's first word can overlap the next word. */
+  .beatmapset-info__link[data-oep-tag-cat] {
+    --oep-tag-h: 0;
+    background: hsl(var(--oep-tag-h) 32% 27%);
+    color: hsl(var(--oep-tag-h) 80% 82%);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .beatmapset-info__link[data-oep-tag-cat]:hover {
+    background: hsl(var(--oep-tag-h) 36% 34%);
+    color: #fff;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="start"],
+  .beatmapset-info__link[data-oep-tag-pos="mid"] {
+    padding-right: 0.35em;
+    margin-right: -0.35em;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="start"] {
+    border-radius: 4px 0 0 4px;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="mid"] {
+    border-radius: 0;
+    padding-left: 0;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="end"] {
+    border-radius: 0 4px 4px 0;
+    padding-left: 0;
+  }
+  .beatmapset-info__link[data-oep-tag-cat="fa"] { --oep-tag-h: 333; }
+  .beatmapset-info__link[data-oep-tag-cat="guild"] { --oep-tag-h: 270; }
+  .beatmapset-info__link[data-oep-tag-cat="language"] { --oep-tag-h: 205; }
+  .beatmapset-info__link[data-oep-tag-cat="genre"] { --oep-tag-h: 140; }
+  .beatmapset-info__link[data-oep-tag-cat="song"] { --oep-tag-h: 40; }
+
   /* User Tags / Mapper Tags collapse toggles (tag-collapse.js). */
   .beatmapset-info__row.${ROOT_CLASS}__tag-row {
     display: flex;
