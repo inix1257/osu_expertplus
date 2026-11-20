@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.3.8
+// @version      0.3.9
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -3978,6 +3978,10 @@
     let _generation = 0;
     const FAILURE_TTL_MS = 5 * 60 * 1e3;
     let _failure = null;
+    const TOKEN_STATUS_EVENT = "oep-osu-api-token-status";
+    function emitTokenStatus() {
+      window.dispatchEvent(new Event(TOKEN_STATUS_EVENT));
+    }
     function getClientId() {
       return GM_getValue(KEY_CLIENT_ID, "");
     }
@@ -4066,6 +4070,7 @@
           return getToken();
         }
         storeToken(t);
+        emitTokenStatus();
         return t.token;
       } catch (err) {
         if (generation === _generation) {
@@ -4074,6 +4079,7 @@
             until: Date.now() + FAILURE_TTL_MS,
             generation
           };
+          emitTokenStatus();
         }
         throw err;
       }
@@ -4106,6 +4112,7 @@
       return token ? `Bearer ${token}` : null;
     }
     return {
+      TOKEN_STATUS_EVENT,
       isConfigured,
       hasSecret,
       getClientId,
@@ -25251,7 +25258,12 @@ ${lines.join("\n")}
     function refreshFabOsuApiWarning() {
       const { anchor } = fabUi;
       if (!anchor) return;
-      anchor.classList.toggle(FAB_NEEDS_API_CLASS, auth.getStatus() !== "ok");
+      const status = auth.getStatus();
+      anchor.classList.toggle(FAB_NEEDS_API_CLASS, status !== "ok");
+      const text = anchor.querySelector(".osu-expertplus-fab-api-warning__text");
+      if (text) {
+        text.textContent = status === "error" ? "osu! API credentials failed" : "osu! API credentials not set";
+      }
       syncPanelAboveFab();
     }
     function credentialSectionTitle(kind, filled) {
@@ -25776,20 +25788,30 @@ ${lines.join("\n")}
       const statusEl = el2("div", {
         class: "osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--info"
       });
+      let showsSavedStatus = false;
       function setStatus2(msg, type = "info") {
+        showsSavedStatus = false;
         statusEl.textContent = msg;
         statusEl.className = `osu-expertplus-panel__creds-status osu-expertplus-panel__creds-status--${type}`;
       }
-      if (auth.getStatus() === "error") {
-        setStatus2(
-          "Saved credentials could not get a token. Check them and save again.",
-          "error"
-        );
-      } else if (auth.isConfigured()) {
-        setStatus2("Credentials saved. API v2 active.", "ok");
-      } else {
-        setStatus2("No credentials — using session fallback.");
+      function renderSavedStatus() {
+        if (auth.getStatus() === "error") {
+          setStatus2(
+            "Saved credentials could not get a token. Check them and save again.",
+            "error"
+          );
+        } else if (auth.isConfigured()) {
+          setStatus2("Credentials saved. API v2 active.", "ok");
+        } else {
+          setStatus2("No credentials — using session fallback.");
+        }
+        showsSavedStatus = true;
       }
+      renderSavedStatus();
+      window.addEventListener(auth.TOKEN_STATUS_EVENT, () => {
+        if (showsSavedStatus) renderSavedStatus();
+        refreshFabOsuApiWarning();
+      });
       const saveBtn = el2(
         "button",
         {
