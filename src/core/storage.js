@@ -98,6 +98,13 @@ export const KEYS = Object.freeze({
     owner: "features/profile/sections.js",
     purpose: "Collapsed profile sections",
   },
+  BEATMAPSET_TAGS_COLLAPSED: {
+    key: "oep.beatmapset.tagsCollapsed",
+    store: "gm",
+    format: "json",
+    owner: "features/beatmapset/tag-collapse.js",
+    purpose: "Collapsed User Tags / Mapper Tags rows ({ user, mapper })",
+  },
   LISTING_PREFERRED_MODE: {
     key: "beatmapsetsListing.preferredMode",
     store: "gm",

@@ -125,6 +125,54 @@ export const BEATMAPSET_CSS = `
     min-width: 0;
   }
 
+  /* User Tags / Mapper Tags collapse toggles (tag-collapse.js). */
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row > h3.beatmapset-info__header {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row > div:not([class]) {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row--collapsed > div:not([class]) {
+    display: none;
+  }
+  .${ROOT_CLASS}__tag-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin: 0 0 0 6px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: hsl(var(--hsl-c2, 333 60% 70%));
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0.7;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .${ROOT_CLASS}__tag-toggle:hover {
+    opacity: 1;
+    background: hsl(var(--hsl-b5, 333 18% 28%) / 0.6);
+  }
+  .${ROOT_CLASS}__tag-toggle:focus-visible {
+    outline: 2px solid hsl(var(--hsl-c2, 333 60% 70%));
+    outline-offset: 1px;
+    opacity: 1;
+  }
+
   .${ROOT_CLASS}__modal-portal {
     position: fixed;
     inset: 0;

@@ -165,6 +165,14 @@ OsuExpertPlus.settings = (() => {
       default: true,
     },
     {
+      id: "beatmapDetail.tagCollapseButtons",
+      label: "Collapse buttons for user and mapper tags",
+      description:
+        "On beatmapset pages, adds a button beside the User Tags and Mapper Tags headings to collapse or expand each list. The choice is remembered.",
+      group: "Beatmap Page",
+      default: true,
+    },
+    {
       id: "beatmapDetail.pickerDiffNames",
       label: "Difficulty names in the difficulty selector",
       description:
@@ -413,6 +421,7 @@ OsuExpertPlus.settings = (() => {
       "beatmapDetail.scoreboardHideCustomRateScores",
     SCOREBOARD_PLAYER_LOOKUP: "beatmapDetail.scoreboardPlayerLookup",
     PICKER_DIFF_NAMES: "beatmapDetail.pickerDiffNames",
+    TAG_COLLAPSE_BUTTONS: "beatmapDetail.tagCollapseButtons",
     SCOREBOARD_GLOBAL_RANK: "beatmapDetail.scoreboardGlobalRank",
     NAV_RECENT_NOTIFICATION: "header.navRecentNotification",
   });
