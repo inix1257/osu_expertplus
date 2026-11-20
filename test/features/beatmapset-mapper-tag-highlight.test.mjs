@@ -52,6 +52,15 @@ test("a language next to a genre stays two tags", () => {
   ]);
 });
 
+test("sources are not genres; vocaloid is song info", () => {
+  assert.deepEqual(brief(["touhou", "visual", "novel", "vocaloid"]), [
+    null,
+    null,
+    null,
+    "song/solo",
+  ]);
+});
+
 test("no phrase joins words of different kinds", () => {
   const catOf = new Map();
   for (const c of TAG_CATEGORIES) for (const t of c.tags) catOf.set(t, c.id);
