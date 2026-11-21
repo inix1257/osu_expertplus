@@ -125,6 +125,89 @@ export const BEATMAPSET_CSS = `
     min-width: 0;
   }
 
+  /* Common mapper tags (mapper-tag-highlight.js). Solid colours so the
+     stretched padding of a phrase's first word can overlap the next word. */
+  .beatmapset-info__link[data-oep-tag-cat] {
+    --oep-tag-h: 0;
+    background: hsl(var(--oep-tag-h) 32% 27%);
+    color: hsl(var(--oep-tag-h) 80% 82%);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .beatmapset-info__link[data-oep-tag-cat]:hover {
+    background: hsl(var(--oep-tag-h) 36% 34%);
+    color: #fff;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="start"],
+  .beatmapset-info__link[data-oep-tag-pos="mid"] {
+    padding-right: 0.35em;
+    margin-right: -0.35em;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="start"] {
+    border-radius: 4px 0 0 4px;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="mid"] {
+    border-radius: 0;
+    padding-left: 0;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="end"] {
+    border-radius: 0 4px 4px 0;
+    padding-left: 0;
+  }
+  .beatmapset-info__link[data-oep-tag-cat="fa"] { --oep-tag-h: 333; }
+  .beatmapset-info__link[data-oep-tag-cat="guild"] { --oep-tag-h: 270; }
+  .beatmapset-info__link[data-oep-tag-cat="language"] { --oep-tag-h: 205; }
+  .beatmapset-info__link[data-oep-tag-cat="genre"] { --oep-tag-h: 140; }
+  .beatmapset-info__link[data-oep-tag-cat="song"] { --oep-tag-h: 40; }
+
+  /* User Tags / Mapper Tags collapse toggles (tag-collapse.js). */
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row > h3.beatmapset-info__header {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row > div:not([class]) {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row--collapsed > div:not([class]) {
+    display: none;
+  }
+  .${ROOT_CLASS}__tag-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin: 0 0 0 6px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: hsl(var(--hsl-c2, 333 60% 70%));
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0.7;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .${ROOT_CLASS}__tag-toggle:hover {
+    opacity: 1;
+    background: hsl(var(--hsl-b5, 333 18% 28%) / 0.6);
+  }
+  .${ROOT_CLASS}__tag-toggle:focus-visible {
+    outline: 2px solid hsl(var(--hsl-c2, 333 60% 70%));
+    outline-offset: 1px;
+    opacity: 1;
+  }
+
   .${ROOT_CLASS}__modal-portal {
     position: fixed;
     inset: 0;

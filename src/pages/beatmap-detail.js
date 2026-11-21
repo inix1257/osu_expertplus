@@ -23,6 +23,8 @@ import {
   BEATMAPSET_CSS,
   BEATMAPSET_STYLE_ID,
 } from "../features/beatmapset/styles.js";
+import { startMapperTagHighlights } from "../features/beatmapset/mapper-tag-highlight.js";
+import { startTagCollapseToggles } from "../features/beatmapset/tag-collapse.js";
 import { remountOnEvent } from "../features/remount.js";
 import {
   CREDENTIALS_CHANGED_EVENT,
@@ -116,6 +118,14 @@ async function init(match, ctx = {}) {
     settings,
     IDS.METADATA_DESCRIPTION_MODAL_BUTTONS,
     () => startBeatmapsetInfoModals(header, pathRe),
+  );
+
+  mountSettingFeature(bag, settings, IDS.TAG_COLLAPSE_BUTTONS, () =>
+    startTagCollapseToggles(),
+  );
+
+  mountSettingFeature(bag, settings, IDS.MAPPER_TAG_HIGHLIGHT, () =>
+    startMapperTagHighlights(),
   );
 
   // The preview sits before the info column, which can render after the header.
