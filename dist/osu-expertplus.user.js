@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.3.9
+// @version      0.3.10
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -2705,6 +2705,13 @@
       owner: "features/profile/sections.js",
       purpose: "Collapsed profile sections"
     },
+    BEATMAPSET_TAGS_COLLAPSED: {
+      key: "oep.beatmapset.tagsCollapsed",
+      store: "gm",
+      format: "json",
+      owner: "features/beatmapset/tag-collapse.js",
+      purpose: "Collapsed User Tags / Mapper Tags rows ({ user, mapper })"
+    },
     LISTING_PREFERRED_MODE: {
       key: "beatmapsetsListing.preferredMode",
       store: "gm",
@@ -4741,6 +4748,20 @@
         default: true
       },
       {
+        id: "beatmapDetail.tagCollapseButtons",
+        label: "Collapse buttons for user and mapper tags",
+        description: "On beatmapset pages, adds a button beside the User Tags and Mapper Tags headings to collapse or expand each list. The choice is remembered.",
+        group: "Beatmap Page",
+        default: true
+      },
+      {
+        id: "beatmapDetail.mapperTagHighlight",
+        label: "Highlight common mapper tags",
+        description: "On beatmapset pages, colours common mapper tags by kind (featured artist, Mappers' Guild, language, genre, song info) so the map-specific tags stand out.",
+        group: "Beatmap Page",
+        default: true
+      },
+      {
         id: "beatmapDetail.pickerDiffNames",
         label: "Difficulty names in the difficulty selector",
         description: "On beatmapset pages, shows each difficulty’s name and nomod star rating next to its icon in the difficulty selector.",
@@ -4939,6 +4960,8 @@
       SCOREBOARD_HIDE_CUSTOM_RATE_SCORES: "beatmapDetail.scoreboardHideCustomRateScores",
       SCOREBOARD_PLAYER_LOOKUP: "beatmapDetail.scoreboardPlayerLookup",
       PICKER_DIFF_NAMES: "beatmapDetail.pickerDiffNames",
+      TAG_COLLAPSE_BUTTONS: "beatmapDetail.tagCollapseButtons",
+      MAPPER_TAG_HIGHLIGHT: "beatmapDetail.mapperTagHighlight",
       SCOREBOARD_GLOBAL_RANK: "beatmapDetail.scoreboardGlobalRank",
       NAV_RECENT_NOTIFICATION: "header.navRecentNotification"
     });
@@ -10908,6 +10931,89 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     min-width: 0;
   }
 
+  /* Common mapper tags (mapper-tag-highlight.js). Solid colours so the
+     stretched padding of a phrase's first word can overlap the next word. */
+  .beatmapset-info__link[data-oep-tag-cat] {
+    --oep-tag-h: 0;
+    background: hsl(var(--oep-tag-h) 32% 27%);
+    color: hsl(var(--oep-tag-h) 80% 82%);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .beatmapset-info__link[data-oep-tag-cat]:hover {
+    background: hsl(var(--oep-tag-h) 36% 34%);
+    color: #fff;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="start"],
+  .beatmapset-info__link[data-oep-tag-pos="mid"] {
+    padding-right: 0.35em;
+    margin-right: -0.35em;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="start"] {
+    border-radius: 4px 0 0 4px;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="mid"] {
+    border-radius: 0;
+    padding-left: 0;
+  }
+  .beatmapset-info__link[data-oep-tag-pos="end"] {
+    border-radius: 0 4px 4px 0;
+    padding-left: 0;
+  }
+  .beatmapset-info__link[data-oep-tag-cat="fa"] { --oep-tag-h: 333; }
+  .beatmapset-info__link[data-oep-tag-cat="guild"] { --oep-tag-h: 270; }
+  .beatmapset-info__link[data-oep-tag-cat="language"] { --oep-tag-h: 205; }
+  .beatmapset-info__link[data-oep-tag-cat="genre"] { --oep-tag-h: 140; }
+  .beatmapset-info__link[data-oep-tag-cat="song"] { --oep-tag-h: 40; }
+
+  /* User Tags / Mapper Tags collapse toggles (tag-collapse.js). */
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row > h3.beatmapset-info__header {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row > div:not([class]) {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+  .beatmapset-info__row.${ROOT_CLASS}__tag-row--collapsed > div:not([class]) {
+    display: none;
+  }
+  .${ROOT_CLASS}__tag-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin: 0 0 0 6px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: hsl(var(--hsl-c2, 333 60% 70%));
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0.7;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .${ROOT_CLASS}__tag-toggle:hover {
+    opacity: 1;
+    background: hsl(var(--hsl-b5, 333 18% 28%) / 0.6);
+  }
+  .${ROOT_CLASS}__tag-toggle:focus-visible {
+    outline: 2px solid hsl(var(--hsl-c2, 333 60% 70%));
+    outline-offset: 1px;
+    opacity: 1;
+  }
+
   .${ROOT_CLASS}__modal-portal {
     position: fixed;
     inset: 0;
@@ -11853,6 +11959,310 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
     color: #fff;
   }
 `;
+
+  // src/features/beatmapset/tag-collapse.js
+  var TAG_ROW_CLASS = `${ROOT_CLASS}__tag-row`;
+  var TAG_ROW_COLLAPSED_CLASS = `${TAG_ROW_CLASS}--collapsed`;
+  var TAG_TOGGLE_ATTR = "data-oep-tag-collapse";
+  var ROW_SEL = ".beatmapset-info .beatmapset-info__row";
+  var SEARCH_OPERATOR_RE = /^[a-z_]+\s*(?:[=:<>])/i;
+  var NAMES = { user: "user tags", mapper: "mapper tags" };
+  function classifyTagRow(row) {
+    if (!row.querySelector(":scope > h3.beatmapset-info__header")) return null;
+    const links = row.querySelectorAll(":scope > div > a.beatmapset-info__link");
+    if (!links.length) return null;
+    const queries = [];
+    for (const a of links) {
+      let url;
+      try {
+        url = new URL(a.getAttribute("href") || "", location.href);
+      } catch (_) {
+        return null;
+      }
+      if (!/^\/beatmapsets\/?$/.test(url.pathname)) return null;
+      const q = (url.searchParams.get("q") || "").trim();
+      if (!q) return null;
+      queries.push(q);
+    }
+    if (queries.every((q) => /^tag\s*=/i.test(q))) return "user";
+    if (queries.every((q) => !SEARCH_OPERATOR_RE.test(q))) return "mapper";
+    return null;
+  }
+  function readState() {
+    const v = getJSON(KEYS.BEATMAPSET_TAGS_COLLAPSED, {});
+    return v && typeof v === "object" ? v : {};
+  }
+  function applyState(row, btn, kind, collapsed) {
+    row.classList.toggle(TAG_ROW_COLLAPSED_CLASS, collapsed);
+    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    btn.title = `${collapsed ? "Show" : "Hide"} ${NAMES[kind]}`;
+    const icon = btn.querySelector("i");
+    if (icon) {
+      icon.className = collapsed ? "fas fa-chevron-down" : "fas fa-chevron-up";
+    }
+  }
+  function mountToggle(row, kind) {
+    const heading = row.querySelector(":scope > h3.beatmapset-info__header");
+    if (!heading) return;
+    let btn = row.querySelector(`:scope > [${TAG_TOGGLE_ATTR}]`);
+    if (!(btn instanceof HTMLButtonElement)) {
+      btn = el(
+        "button",
+        {
+          type: "button",
+          class: `${ROOT_CLASS}__tag-toggle`,
+          [TAG_TOGGLE_ATTR]: kind
+        },
+        el("i", { class: "fas fa-chevron-up", "aria-hidden": "true" })
+      );
+      btn.addEventListener("click", () => {
+        const k = (
+          /** @type {"user"|"mapper"} */
+          btn.getAttribute(TAG_TOGGLE_ATTR)
+        );
+        const next = !row.classList.contains(TAG_ROW_COLLAPSED_CLASS);
+        const state2 = readState();
+        state2[k] = next;
+        setJSON(KEYS.BEATMAPSET_TAGS_COLLAPSED, state2);
+        applyState(row, btn, k, next);
+      });
+    }
+    btn.setAttribute(TAG_TOGGLE_ATTR, kind);
+    if (heading.nextElementSibling !== btn) heading.after(btn);
+    row.classList.add(TAG_ROW_CLASS);
+    applyState(row, btn, kind, readState()[kind] === true);
+  }
+  function unmountToggle(row) {
+    row.querySelector(`:scope > [${TAG_TOGGLE_ATTR}]`)?.remove();
+    row.classList.remove(TAG_ROW_CLASS, TAG_ROW_COLLAPSED_CLASS);
+  }
+  function refreshTagCollapseToggles() {
+    for (const row of document.querySelectorAll(ROW_SEL)) {
+      if (!(row instanceof HTMLElement)) continue;
+      const kind = classifyTagRow(row);
+      if (kind) mountToggle(row, kind);
+      else if (row.classList.contains(TAG_ROW_CLASS)) unmountToggle(row);
+    }
+  }
+  function startTagCollapseToggles() {
+    const ac = new AbortController();
+    refreshTagCollapseToggles();
+    observe.subscribe(
+      {
+        // Rows come and go, and switching difficulties swaps the user tag links.
+        selector: ".beatmapset-info__row, .beatmapset-info__link",
+        schedule: "raf",
+        signal: ac.signal,
+        label: "beatmapset/tag-collapse"
+      },
+      () => refreshTagCollapseToggles()
+    );
+    return () => {
+      ac.abort();
+      for (const row of document.querySelectorAll(`.${TAG_ROW_CLASS}`)) {
+        if (row instanceof HTMLElement) unmountToggle(row);
+      }
+    };
+  }
+
+  // src/features/beatmapset/mapper-tag-highlight.js
+  var TAG_CAT_ATTR = "data-oep-tag-cat";
+  var TAG_POS_ATTR = "data-oep-tag-pos";
+  var TAG_CATEGORIES = Object.freeze([
+    {
+      id: "fa",
+      label: "Featured Artist",
+      tags: ["featured artist", "fa"]
+    },
+    {
+      id: "guild",
+      label: "Mappers' Guild",
+      tags: ["mappers' guild", "mappers guild", "mpg", "mg"]
+    },
+    {
+      id: "language",
+      label: "Language",
+      tags: [
+        "japanese",
+        "english",
+        "korean",
+        "chinese",
+        "russian",
+        "german",
+        "french",
+        "spanish",
+        "instrumental"
+      ]
+    },
+    {
+      id: "genre",
+      label: "Genre",
+      tags: [
+        "pop",
+        "j-pop",
+        "jpop",
+        "k-pop",
+        "kpop",
+        "rock",
+        "j-rock",
+        "jrock",
+        "alternative rock",
+        "math rock",
+        "post rock",
+        "post-rock",
+        "progressive rock",
+        "indie rock",
+        "punk rock",
+        "alternative",
+        "indie",
+        "electronic",
+        "edm",
+        "hardcore",
+        "metal",
+        "drum and bass",
+        "dnb",
+        "dubstep",
+        "trance",
+        "house",
+        "hip hop",
+        "hip-hop",
+        "rap",
+        "folk",
+        "jazz",
+        "classical",
+        "orchestral",
+        "artcore",
+        "video game",
+        "videogame",
+        "vgm",
+        "anime",
+        "original soundtrack",
+        "soundtrack",
+        "ost"
+      ]
+    },
+    {
+      id: "song",
+      label: "Song info",
+      tags: [
+        "female vocals",
+        "female vocal",
+        "female vocalist",
+        "male vocals",
+        "male vocal",
+        "male vocalist",
+        "vocals",
+        "vocalist",
+        "vocaloid",
+        "opening",
+        "op",
+        "ending",
+        "ed",
+        "tv size",
+        "short version",
+        "full version",
+        "cut ver",
+        "remix",
+        "cover"
+      ]
+    }
+  ]);
+  var PHRASES = /* @__PURE__ */ new Map();
+  for (const cat of TAG_CATEGORIES) {
+    for (const tag of cat.tags) PHRASES.set(tag, cat.id);
+  }
+  var MAX_WORDS = Math.max(
+    ...[...PHRASES.keys()].map((p) => p.split(" ").length)
+  );
+  var LABELS = new Map(TAG_CATEGORIES.map((c) => [c.id, c.label]));
+  var NEEDS_CONTEXT = /* @__PURE__ */ new Map([
+    ["fa", ["featured artist"]],
+    ["mg", ["mappers' guild", "mappers guild", "mpg"]],
+    ["op", ["opening", "ending", "anime", "tv size"]],
+    ["ed", ["opening", "ending", "anime", "tv size"]]
+  ]);
+  var normalize = (word) => word.replace(/[‘’]/g, "'").replace(/_+/g, " ").trim().toLowerCase().replace(/[.,]+$/, "").replace(/\s+/g, " ");
+  function matchTagCategories(words) {
+    const norm = words.map(normalize);
+    const out = norm.map(() => null);
+    const found = [];
+    for (let i = 0; i < norm.length; ) {
+      let matched = 0;
+      for (let n = Math.min(MAX_WORDS, norm.length - i); n >= 1; n--) {
+        const phrase = norm.slice(i, i + n).join(" ");
+        const cat = PHRASES.get(phrase);
+        if (!cat) continue;
+        found.push({ phrase, cat, i, n });
+        matched = n;
+        break;
+      }
+      i += matched || 1;
+    }
+    const phrases = new Set(found.map((f) => f.phrase));
+    for (const { phrase, cat, i, n } of found) {
+      const context = NEEDS_CONTEXT.get(phrase);
+      if (context && !context.some((p) => phrases.has(p))) continue;
+      for (let k = 0; k < n; k++) {
+        out[i + k] = {
+          cat,
+          pos: n === 1 ? "solo" : k === 0 ? "start" : k === n - 1 ? "end" : "mid"
+        };
+      }
+    }
+    return out;
+  }
+  function clearLink(link) {
+    if (!link.hasAttribute(TAG_CAT_ATTR)) return;
+    link.removeAttribute(TAG_CAT_ATTR);
+    link.removeAttribute(TAG_POS_ATTR);
+    link.removeAttribute("title");
+  }
+  function refreshMapperTagHighlights() {
+    for (const row of document.querySelectorAll(
+      ".beatmapset-info .beatmapset-info__row"
+    )) {
+      if (classifyTagRow(row) !== "mapper") continue;
+      const links = [
+        ...row.querySelectorAll(":scope > div > a.beatmapset-info__link")
+      ];
+      const matches = matchTagCategories(links.map((a) => a.textContent || ""));
+      links.forEach((link, i) => {
+        const m = matches[i];
+        if (!m) {
+          clearLink(link);
+          return;
+        }
+        if (link.getAttribute(TAG_CAT_ATTR) !== m.cat) {
+          link.setAttribute(TAG_CAT_ATTR, m.cat);
+        }
+        if (link.getAttribute(TAG_POS_ATTR) !== m.pos) {
+          link.setAttribute(TAG_POS_ATTR, m.pos);
+        }
+        const label = LABELS.get(m.cat) || "";
+        if (link.getAttribute("title") !== label)
+          link.setAttribute("title", label);
+      });
+    }
+  }
+  function startMapperTagHighlights() {
+    const ac = new AbortController();
+    refreshMapperTagHighlights();
+    observe.subscribe(
+      {
+        selector: ".beatmapset-info__row, .beatmapset-info__link",
+        schedule: "raf",
+        signal: ac.signal,
+        label: "beatmapset/mapper-tag-highlight"
+      },
+      () => refreshMapperTagHighlights()
+    );
+    return () => {
+      ac.abort();
+      for (const link of document.querySelectorAll(`[${TAG_CAT_ATTR}]`)) {
+        clearLink(link);
+      }
+    };
+  }
 
   // src/features/remount.js
   function remountOnEvent(target, type, mount) {
@@ -16255,6 +16665,18 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
       settings2,
       IDS.METADATA_DESCRIPTION_MODAL_BUTTONS,
       () => startBeatmapsetInfoModals(header, pathRe)
+    );
+    mountSettingFeature(
+      bag,
+      settings2,
+      IDS.TAG_COLLAPSE_BUTTONS,
+      () => startTagCollapseToggles()
+    );
+    mountSettingFeature(
+      bag,
+      settings2,
+      IDS.MAPPER_TAG_HIGHLIGHT,
+      () => startMapperTagHighlights()
     );
     try {
       await waitForElement2(".beatmapset-info", {
