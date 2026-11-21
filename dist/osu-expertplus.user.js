@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         osu! Expert+
 // @namespace    https://github.com/inix1257/osu_expertplus
-// @version      0.3.10
+// @version      0.3.11
 // @description  Adds extra QoL features to osu.ppy.sh
 // @author       inix1257
 // @homepageURL  https://github.com/inix1257/osu_expertplus
@@ -11965,7 +11965,7 @@ window.dispatchEvent(new Event(${JSON.stringify(READY_EVENT)}));
   var TAG_ROW_COLLAPSED_CLASS = `${TAG_ROW_CLASS}--collapsed`;
   var TAG_TOGGLE_ATTR = "data-oep-tag-collapse";
   var ROW_SEL = ".beatmapset-info .beatmapset-info__row";
-  var SEARCH_OPERATOR_RE = /^[a-z_]+\s*(?:[=:<>])/i;
+  var SEARCH_OPERATOR_RE = /^(?:stars?|ar|dr|hp|cs|od|bpm|length|keys?|divisor|status|creator|difficulty|artist|title|source|tag|featured_artist|ranked|created|updated|played)\s*(?:[=:<>])/i;
   var NAMES = { user: "user tags", mapper: "mapper tags" };
   function classifyTagRow(row) {
     if (!row.querySelector(":scope > h3.beatmapset-info__header")) return null;
