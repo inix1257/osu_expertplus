@@ -16,8 +16,13 @@ export const TAG_ROW_COLLAPSED_CLASS = `${TAG_ROW_CLASS}--collapsed`;
 export const TAG_TOGGLE_ATTR = "data-oep-tag-collapse";
 
 const ROW_SEL = ".beatmapset-info .beatmapset-info__row";
-/** A search with a field operator (`tag=`, `source=`, `stars>`, ...). */
-const SEARCH_OPERATOR_RE = /^[a-z_]+\s*(?:[=:<>])/i;
+/**
+ * A search with one of osu-web's field operators (`tag=`, `source=`,
+ * `stars>`, ...). Only known fields count, so mapper tags such as `re:zero`
+ * still read as plain tags.
+ */
+const SEARCH_OPERATOR_RE =
+  /^(?:stars?|ar|dr|hp|cs|od|bpm|length|keys?|divisor|status|creator|difficulty|artist|title|source|tag|featured_artist|ranked|created|updated|played)\s*(?:[=:<>])/i;
 
 /** @type {Record<"user"|"mapper", string>} */
 const NAMES = { user: "user tags", mapper: "mapper tags" };

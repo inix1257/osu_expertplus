@@ -61,6 +61,15 @@ test("rows are told apart by their links, not the heading text", () => {
   ]);
 });
 
+test("mapper tags that look like search operators keep the row a mapper row", () => {
+  window.document.body.innerHTML = `
+    <div class="beatmapset-info">
+      ${row("Mapper Tags", `${SEARCH}re%3Azero`, `${SEARCH}a%3Db`, `${SEARCH}starry-`)}
+      ${row("Source", `${SEARCH}source%3D%22%22Re%3AZero%22%22`)}
+    </div>`;
+  assert.deepEqual(rows().map(classifyTagRow), ["mapper", null]);
+});
+
 test("each toggle collapses its own row and the state is remembered", () => {
   gmStore.clear();
   window.document.body.innerHTML = page();
